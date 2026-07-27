@@ -1,5 +1,32 @@
 # Rendre les quotas visibles
 
+## Où on en est (28/07/2026)
+
+Tranches 1, 2 et 3 faites : la charge utile est modélisée, l'événement est
+normalisé, stocké par instance, joint à la frontière du client et poussé sans
+attendre le prochain sondage, et la jauge s'affiche sur la carte du compte.
+
+Deux corrections de conception en cours de route, toutes deux invisibles de
+l'extérieur puisque le champ existait déjà :
+
+- la jointure était faite au moment du sondage, donc figée jusqu'au sondage
+  suivant (cinq minutes) et jamais pendant le tour qui l'avait produite ;
+- elle était faite en amont du cache disque, donc un chiffre de la veille
+  revenait au démarrage en se présentant comme courant.
+
+Elle se fait maintenant une seule fois, en sortie (`rateLimitProjection.ts`),
+le magasin faisant seule autorité — ce qui supprime aussi les mêmes trois
+lignes dans cinq fichiers de drivers, autant de conflits en moins à chaque
+synchro.
+
+**Ce qui n'est PAS prouvé** : aucun tour réel n'a encore allumé la jauge. Le
+parseur est confirmé contre la déclaration du SDK
+(`SDKRateLimitInfo`, `@anthropic-ai/claude-agent-sdk` 0.3.170, lue le 28/07) et
+l'identité du compte contre `ProviderService.ts:302`, qui tamponne chaque
+événement avant publication. Reste à lancer l'app et à faire un vrai tour.
+
+Reste la tranche 4 (alerter, puis basculer de compte).
+
 ## Constat
 
 `ClaudeAdapter` reçoit du SDK Claude Code un `rate_limit_event` et le
