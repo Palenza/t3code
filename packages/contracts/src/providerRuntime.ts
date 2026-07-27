@@ -534,8 +534,52 @@ const AccountUpdatedPayload = Schema.Struct({
 });
 export type AccountUpdatedPayload = typeof AccountUpdatedPayload.Type;
 
+/**
+ * Subscription rate-limit status, as reported by the Claude Agent SDK.
+ *
+ * Mirrors `SDKRateLimitInfo` from @anthropic-ai/claude-agent-sdk. Two traps
+ * worth knowing, both of which bite anyone modelling this from the REST
+ * `/api/oauth/usage` response instead of from the SDK:
+ *
+ *   - `resetsAt` is a NUMBER here, not the ISO-8601 string the REST API
+ *     returns. Its unit (seconds vs milliseconds) is not documented by the
+ *     SDK; consumers must not assume one. Left unbranded on purpose so the
+ *     ambiguity stays visible rather than being frozen into a wrong type.
+ *   - Each event carries exactly ONE window, named by `rateLimitType` — not
+ *     the full set. Consumers accumulate per type.
+ *
+ * `status` is a closed union: it drives UI severity, and an unrecognised
+ * value there would be meaningless. `rateLimitType` and
+ * `overageDisabledReason` are deliberately left as strings: the provider can
+ * add values at any time, and a new one must degrade to "ignore this event",
+ * never break decoding for the whole pipeline.
+ */
+const RateLimitStatus = Schema.Literals(["allowed", "allowed_warning", "rejected"]);
+
+export const AccountRateLimitInfo = Schema.Struct({
+  status: RateLimitStatus,
+  resetsAt: Schema.optional(Schema.Number),
+  rateLimitType: Schema.optional(TrimmedNonEmptyStringSchema),
+  utilization: Schema.optional(Schema.Number),
+  overageStatus: Schema.optional(RateLimitStatus),
+  overageResetsAt: Schema.optional(Schema.Number),
+  overageDisabledReason: Schema.optional(TrimmedNonEmptyStringSchema),
+  isUsingOverage: Schema.optional(Schema.Boolean),
+  overageInUse: Schema.optional(Schema.Boolean),
+  surpassedThreshold: Schema.optional(Schema.Number),
+});
+export type AccountRateLimitInfo = typeof AccountRateLimitInfo.Type;
+
+/**
+ * Adapters forward the provider's whole rate-limit message, so the useful
+ * payload sits one level down. Claude nests it under `rate_limit_info`;
+ * other providers may not, hence the optional field plus the passthrough
+ * record for anything we have not modelled yet.
+ */
 const AccountRateLimitsUpdatedPayload = Schema.Struct({
-  rateLimits: Schema.Unknown,
+  rateLimits: Schema.Struct({
+    rate_limit_info: Schema.optional(AccountRateLimitInfo),
+  }),
 });
 export type AccountRateLimitsUpdatedPayload = typeof AccountRateLimitsUpdatedPayload.Type;
 
