@@ -571,15 +571,37 @@ export const AccountRateLimitInfo = Schema.Struct({
 export type AccountRateLimitInfo = typeof AccountRateLimitInfo.Type;
 
 /**
- * Adapters forward the provider's whole rate-limit message, so the useful
- * payload sits one level down. Claude nests it under `rate_limit_info`;
- * other providers may not, hence the optional field plus the passthrough
- * record for anything we have not modelled yet.
+ * Adapters forward the provider's whole rate-limit message verbatim, and the
+ * two emitters put genuinely different shapes under the same `rateLimits`
+ * key:
+ *
+ *   Claude (`ClaudeAdapter.ts`) → `SDKRateLimitEvent`
+ *                                 `{ type, rate_limit_info, uuid, session_id }`
+ *   Codex  (`CodexAdapter.ts`)  → `V2AccountRateLimitsUpdatedNotification`
+ *                                 `{ rateLimits: { credits, planType,
+ *                                    primary, secondary, … } }`
+ *
+ * Hence a union rather than one struct. Modelling only the Claude shape with
+ * an optional `rate_limit_info` looks harmless and is not: every Codex event
+ * would decode to `{}` and lose its entire payload without a single error —
+ * a silent data loss that no typecheck reports.
+ *
+ * The trailing record member is the same guarantee for whoever emits this
+ * event next: an unmodelled shape is carried through intact instead of being
+ * emptied. Absence must mean "the provider sent nothing", never "we failed to
+ * describe what it sent".
+ *
+ * The Codex member stays a loose record on purpose: its authoritative schema
+ * is generated in `@t3tools/effect-codex-app-server`, and duplicating it here
+ * would leave two definitions to drift apart. Consumers that need those
+ * fields should decode against the generated schema.
  */
 const AccountRateLimitsUpdatedPayload = Schema.Struct({
-  rateLimits: Schema.Struct({
-    rate_limit_info: Schema.optional(AccountRateLimitInfo),
-  }),
+  rateLimits: Schema.Union([
+    Schema.Struct({ rate_limit_info: AccountRateLimitInfo }),
+    Schema.Struct({ rateLimits: UnknownRecordSchema }),
+    UnknownRecordSchema,
+  ]),
 });
 export type AccountRateLimitsUpdatedPayload = typeof AccountRateLimitsUpdatedPayload.Type;
 

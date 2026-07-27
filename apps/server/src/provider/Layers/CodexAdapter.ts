@@ -1125,16 +1125,22 @@ function mapToRuntimeEvents(
   }
 
   if (event.method === "account/rateLimits/updated") {
-    if (!readPayload(EffectCodexSchema.V2AccountRateLimitsUpdatedNotification, event.payload)) {
+    // Use the value `readPayload` decoded rather than re-reading the raw
+    // `event.payload`: the decoded one carries the notification's type, and
+    // the old `?? {}` fallback was unreachable — validation had already
+    // succeeded by then — while silently widening the payload to `{}`.
+    const rateLimits = readPayload(
+      EffectCodexSchema.V2AccountRateLimitsUpdatedNotification,
+      event.payload,
+    );
+    if (!rateLimits) {
       return [];
     }
     return [
       {
         type: "account.rate-limits.updated",
         ...runtimeEventBase(event, canonicalThreadId),
-        payload: {
-          rateLimits: event.payload ?? {},
-        },
+        payload: { rateLimits },
       },
     ];
   }
