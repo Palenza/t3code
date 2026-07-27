@@ -390,6 +390,34 @@ describe("releaseManagedTunnelOnShutdown", () => {
     }).pipe(provideReleaseHarness({ store, applyConfigCalls, requests }));
   });
 
+  it.effect("keeps a runtime config that a fast restart replaced mid-release", () => {
+    const { store, values } = makeMemorySecretStore(managedLinkSecrets);
+    const applyConfigCalls: Array<unknown> = [];
+    const requests: Array<HttpClientRequest.HttpClientRequest> = [];
+    const freshConfig = new TextEncoder().encode("fresh-runtime-config");
+
+    return Effect.gen(function* () {
+      const released = yield* releaseManagedTunnelOnShutdown();
+
+      expect(released).toBe(true);
+      // The finalizer only drops the config it released; the one written by
+      // the restarted process while the DELETE was in flight stays.
+      expect(values.get(CLOUD_ENDPOINT_RUNTIME_CONFIG)).toBe(freshConfig);
+    }).pipe(
+      provideReleaseHarness({
+        store,
+        applyConfigCalls,
+        requests,
+        respond: () => {
+          // A restarted process reconciled and stored a fresh connector config
+          // while this shutdown's release request was in flight.
+          values.set(CLOUD_ENDPOINT_RUNTIME_CONFIG, freshConfig);
+          return Response.json({ ok: true });
+        },
+      }),
+    );
+  });
+
   it.effect("keeps the stored connector token when the relay skipped the release", () => {
     // ok:false means a concurrent provision owns the recorded tunnel, so the
     // stored runtime config (possibly freshly written by that provision) must

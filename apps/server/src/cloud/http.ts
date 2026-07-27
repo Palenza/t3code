@@ -680,7 +680,16 @@ export const releaseManagedTunnelOnShutdown = Effect.fn(
   // next start waits for the link reconcile instead of respawning the relay
   // client with a dead token. Kept when the release request fails: the tunnel
   // still exists, so the stored token keeps working across the restart.
-  yield* dependencies.secrets.remove(CLOUD_ENDPOINT_RUNTIME_CONFIG);
+  // Only dropped while it is still the config this shutdown released — a fast
+  // restart may already have reconciled and stored a fresh config for its
+  // replacement tunnel, and that one must survive this finalizer.
+  const storedConfig = yield* dependencies.secrets.get(CLOUD_ENDPOINT_RUNTIME_CONFIG);
+  if (
+    Option.isSome(storedConfig) &&
+    bytesToString(storedConfig.value) === bytesToString(runtimeConfig.value)
+  ) {
+    yield* dependencies.secrets.remove(CLOUD_ENDPOINT_RUNTIME_CONFIG);
+  }
   return true;
 });
 
