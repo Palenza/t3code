@@ -1,0 +1,175 @@
+# Synchronisation avec l'amont (pingdotgg/t3code)
+#
+# STRATÉGIE — deux branches, jamais une seule :
+#
+#   main      ne porte QUE le README, ce workflow et les réglages CI.
+#             Elle fusionne donc toujours proprement → 100 % automatique.
+#
+#   travail   porte nos features. Elle touche les mêmes fichiers qu'eux
+#             (composer, réglages, contrats, routes générées) → un humain
+#             tranche les conflits, une fois, dans une PR dédiée.
+#
+# Mesuré sur 283 forks le 27/07/2026 : 41 % ont du code en plus, mais
+# seuls 17 restent à jour. Ceux qui décrochent ont pourtant du travail
+# réel (gedcode : 596 commits ajoutés, 650 de retard). Ce qui les tue
+# n'est pas le volume, c'est l'absence de rendez-vous automatique.
+
+name: Sync upstream
+
+on:
+  schedule:
+    - cron: "0 5 * * *" # tous les jours ; sans mouvement amont, le job s'arrête tôt
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: sync-upstream
+  cancel-in-progress: false
+
+env:
+  UPSTREAM: https://github.com/pingdotgg/t3code.git
+  BRANCHE_TRAVAIL: travail
+  JOURNAL: docs/JOURNAL-CONFLITS.md
+
+jobs:
+  sync:
+    name: Amont → main, puis PR vers la branche de travail
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configurer Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Récupérer l'amont
+        run: |
+          git remote add upstream "$UPSTREAM"
+          git fetch upstream main
+
+      # AMÉLIORATION 1 — ne rien faire s'ils n'ont pas bougé.
+      # Sinon on ouvre des PR vides tous les jours et le signal s'use.
+      - name: L'amont a-t-il bougé ?
+        id: bouge
+        run: |
+          RETARD=$(git rev-list --count HEAD..upstream/main)
+          echo "retard=$RETARD" >> "$GITHUB_OUTPUT"
+          echo "L'amont a $RETARD commit(s) d'avance." >> "$GITHUB_STEP_SUMMARY"
+          # `if` et non `[ … ] && …` : le shell tourne en `bash -e`, et un test
+          # faux en DERNIÈRE commande fait échouer l'étape. Le piège est vicieux :
+          # vert quand il n'y a rien à faire, rouge dès qu'il y a du travail.
+          # Prouvé en conditions réelles le 27/07/2026 (run 30276983321).
+          if [ "$RETARD" -eq 0 ]; then
+            echo "Rien à faire." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Fusionner l'amont dans main
+        if: steps.bouge.outputs.retard != '0'
+        run: git merge upstream/main --no-edit
+
+      - uses: voidzero-dev/setup-vp@v1
+        if: steps.bouge.outputs.retard != '0'
+        with:
+          node-version-file: package.json
+          cache: true
+          run-install: true
+
+      - name: Vérifications sur main
+        if: steps.bouge.outputs.retard != '0'
+        run: |
+          vp check
+          vp run typecheck
+
+      - name: Pousser main
+        if: steps.bouge.outputs.retard != '0'
+        run: git push origin main
+
+      # AMÉLIORATION 2 — on tente la fusion À BLANC pour SAVOIR, tout de
+      # suite, si ça casse et OÙ. Leur version ouvre une PR sans regarder :
+      # on découvre les conflits en la lisant, parfois des jours plus tard.
+      - name: Fusion à blanc dans la branche de travail
+        if: steps.bouge.outputs.retard != '0'
+        id: blanc
+        run: |
+          git checkout -B essai "origin/${BRANCHE_TRAVAIL}"
+          if git merge main --no-commit --no-ff 2>/dev/null; then
+            echo "conflits=" >> "$GITHUB_OUTPUT"
+            echo "propre=oui" >> "$GITHUB_OUTPUT"
+            echo "✅ Fusion propre — aucun conflit." >> "$GITHUB_STEP_SUMMARY"
+          else
+            LISTE=$(git diff --name-only --diff-filter=U | tr '\n' ' ')
+            echo "conflits=$LISTE" >> "$GITHUB_OUTPUT"
+            echo "propre=non" >> "$GITHUB_OUTPUT"
+            {
+              echo "### ⚠️ Conflits à trancher à la main"
+              echo ""
+              for f in $LISTE; do echo "- \`$f\`"; done
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+          git merge --abort 2>/dev/null || true
+          git checkout main
+
+      # AMÉLIORATION 3 — le JOURNAL DES CONFLITS.
+      # Chaque fichier qui a mordu est consigné avec sa date. Au bout de
+      # quelques semaines on sait lesquels de NOS changements coûtent cher,
+      # et on peut décider de les redessiner ou de les abandonner.
+      # C'est la seule façon de piloter le coût d'un fork au lieu de le subir.
+      - name: Consigner les conflits
+        if: steps.bouge.outputs.retard != '0' && steps.blanc.outputs.propre == 'non'
+        run: |
+          mkdir -p "$(dirname "$JOURNAL")"
+          [ -f "$JOURNAL" ] || printf '# Journal des conflits de synchronisation\n\n| Date | Fichier |\n|---|---|\n' > "$JOURNAL"
+          for f in ${{ steps.blanc.outputs.conflits }}; do
+            printf '| %s | `%s` |\n' "$(date -u +%Y-%m-%d)" "$f" >> "$JOURNAL"
+          done
+          git add "$JOURNAL"
+          git commit -m "chore(sync): conflits du $(date -u +%Y-%m-%d)" || exit 0
+          git push origin main
+
+      - name: Ouvrir ou mettre à jour la PR
+        if: steps.bouge.outputs.retard != '0'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ "${{ steps.blanc.outputs.propre }}" = "oui" ]; then
+            CORPS="Fusion **sans conflit**. Relire les tests, puis fusionner."
+          else
+            CORPS=$(printf 'Conflits à trancher :\n'; for f in ${{ steps.blanc.outputs.conflits }}; do printf -- '- `%s`\n' "$f"; done)
+          fi
+          # `--repo` est OBLIGATOIRE ici. Sur un fork, `gh pr` vise le dépôt
+          # PARENT par défaut : sans ce drapeau le robot tente d'ouvrir une PR
+          # chez l'amont et se fait refuser
+          # (« Resource not accessible by integration »).
+          # Prouvé en conditions réelles le 27/07/2026 (run 30277068981).
+          EXISTE=$(gh pr list --repo "$GITHUB_REPOSITORY" \
+            --base "$BRANCHE_TRAVAIL" --head main --state open --json number --jq '.[0].number')
+          if [ -n "$EXISTE" ]; then
+            gh pr edit "$EXISTE" --repo "$GITHUB_REPOSITORY" --body "$CORPS"
+          else
+            gh pr create --repo "$GITHUB_REPOSITORY" \
+              --base "$BRANCHE_TRAVAIL" --head main \
+              --title "Sync amont → $BRANCHE_TRAVAIL" --body "$CORPS"
+          fi
+
+      # AMÉLIORATION 4 — bruit obligatoire quand un humain doit intervenir.
+      # Une PR silencieuse qui dort trois semaines, c'est un fork mort.
+      - name: Alerter si intervention humaine requise
+        if: steps.bouge.outputs.retard != '0' && steps.blanc.outputs.propre == 'non'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh issue create --repo "$GITHUB_REPOSITORY" \
+            --title "Sync amont bloquée — conflits du $(date -u +%Y-%m-%d)" \
+            --body "$(printf 'Fichiers en conflit :\n'; for f in ${{ steps.blanc.outputs.conflits }}; do printf -- '- `%s`\n' "$f"; done; printf '\nVoir %s pour l historique.\n' "$JOURNAL")" \
+            --label sync || true
