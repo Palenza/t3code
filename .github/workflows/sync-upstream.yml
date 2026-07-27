@@ -13,6 +13,19 @@
 # seuls 17 restent à jour. Ceux qui décrochent ont pourtant du travail
 # réel (gedcode : 596 commits ajoutés, 650 de retard). Ce qui les tue
 # n'est pas le volume, c'est l'absence de rendez-vous automatique.
+#
+# CIBLE — le dernier tag `nightly`, PAS la tête de leur `main` (28/07/2026).
+#
+# Un nightly est un état qui a passé leur CI de release ; la tête de `main`
+# est le commit brut d'il y a dix minutes, parfois cassé, parfois révoqué
+# une heure plus tard. On ne perd rien en fraîcheur : mesuré le 28/07, le
+# dernier nightly (`v0.0.29-nightly.20260727.925`) avait deux commits de
+# retard sur la tête, et il en sort un par heure environ.
+#
+# Le tag est retenu par DATE DE CRÉATION, jamais par tri de chaîne : les
+# noms mêlent version, date et numéro de build, et un tri lexical fait
+# passer `.9` après `.925`. Et il doit être un ancêtre de leur `main` —
+# sinon c'est une branche latérale et on ne fusionne rien.
 
 name: Sync upstream
 
@@ -56,14 +69,37 @@ jobs:
       - name: Récupérer l'amont
         run: |
           git remote add upstream "$UPSTREAM"
-          git fetch upstream main
+          # `main` sert au contrôle d'ancêtre ; les nightly sont des TAGS et
+          # un `fetch <branche>` n'en rapatrie aucun, d'où `--tags`.
+          git fetch upstream main --tags
+
+      - name: Choisir le nightly le plus récent
+        id: cible
+        run: |
+          TAG=$(git for-each-ref --sort=-creatordate --count=1 \
+            --format='%(refname:short)' 'refs/tags/v*-nightly.*')
+          if [ -z "$TAG" ]; then
+            echo "::error::Aucun tag nightly chez l'amont — ont-ils changé de nommage ?"
+            echo "### ❌ Aucun tag nightly trouvé" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          # Un nightly doit être un état de LEUR ligne principale. S'il vient
+          # d'ailleurs, on ne fusionne rien : rater une nuit coûte moins cher
+          # qu'injecter une branche latérale dans le fork.
+          if ! git merge-base --is-ancestor "$TAG" upstream/main; then
+            echo "::error::$TAG n'est pas un ancêtre de upstream/main — cible refusée."
+            echo "### ❌ \`$TAG\` n'est pas sur leur main" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Cible : \`$TAG\`" >> "$GITHUB_STEP_SUMMARY"
 
       # AMÉLIORATION 1 — ne rien faire s'ils n'ont pas bougé.
       # Sinon on ouvre des PR vides tous les jours et le signal s'use.
       - name: L'amont a-t-il bougé ?
         id: bouge
         run: |
-          RETARD=$(git rev-list --count HEAD..upstream/main)
+          RETARD=$(git rev-list --count "HEAD..${{ steps.cible.outputs.tag }}")
           echo "retard=$RETARD" >> "$GITHUB_OUTPUT"
           echo "L'amont a $RETARD commit(s) d'avance." >> "$GITHUB_STEP_SUMMARY"
           # `if` et non `[ … ] && …` : le shell tourne en `bash -e`, et un test
@@ -76,7 +112,10 @@ jobs:
 
       - name: Fusionner l'amont dans main
         if: steps.bouge.outputs.retard != '0'
-        run: git merge upstream/main --no-edit
+        # Le tag, jamais `upstream/main` : le message de fusion nomme alors la
+        # version exacte qu'on embarque, et l'historique du fork se lit comme
+        # une suite de builds identifiés plutôt que de « merge du jour ».
+        run: git merge "${{ steps.cible.outputs.tag }}" --no-edit
 
       - uses: voidzero-dev/setup-vp@v1
         if: steps.bouge.outputs.retard != '0'
@@ -129,9 +168,9 @@ jobs:
         if: steps.bouge.outputs.retard != '0' && steps.blanc.outputs.propre == 'non'
         run: |
           mkdir -p "$(dirname "$JOURNAL")"
-          [ -f "$JOURNAL" ] || printf '# Journal des conflits de synchronisation\n\n| Date | Fichier |\n|---|---|\n' > "$JOURNAL"
+          [ -f "$JOURNAL" ] || printf '# Journal des conflits de synchronisation\n\n| Date | Version amont | Fichier |\n|---|---|---|\n' > "$JOURNAL"
           for f in ${{ steps.blanc.outputs.conflits }}; do
-            printf '| %s | `%s` |\n' "$(date -u +%Y-%m-%d)" "$f" >> "$JOURNAL"
+            printf '| %s | `%s` | `%s` |\n' "$(date -u +%Y-%m-%d)" "${{ steps.cible.outputs.tag }}" "$f" >> "$JOURNAL"
           done
           git add "$JOURNAL"
           git commit -m "chore(sync): conflits du $(date -u +%Y-%m-%d)" || exit 0
@@ -142,10 +181,11 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          CIBLE="Cible : \`${{ steps.cible.outputs.tag }}\` (${{ steps.bouge.outputs.retard }} commit(s))."
           if [ "${{ steps.blanc.outputs.propre }}" = "oui" ]; then
-            CORPS="Fusion **sans conflit**. Relire les tests, puis fusionner."
+            CORPS=$(printf '%s\n\nFusion **sans conflit**. Relire les tests, puis fusionner.\n' "$CIBLE")
           else
-            CORPS=$(printf 'Conflits à trancher :\n'; for f in ${{ steps.blanc.outputs.conflits }}; do printf -- '- `%s`\n' "$f"; done)
+            CORPS=$(printf '%s\n\nConflits à trancher :\n' "$CIBLE"; for f in ${{ steps.blanc.outputs.conflits }}; do printf -- '- `%s`\n' "$f"; done)
           fi
           # `--repo` est OBLIGATOIRE ici. Sur un fork, `gh pr` vise le dépôt
           # PARENT par défaut : sans ce drapeau le robot tente d'ouvrir une PR
@@ -169,7 +209,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          CORPS=$(printf 'Fichiers en conflit :\n'
+          CORPS=$(printf 'Cible : `%s`\n\nFichiers en conflit :\n' "${{ steps.cible.outputs.tag }}"
             for f in ${{ steps.blanc.outputs.conflits }}; do printf -- '- `%s`\n' "$f"; done
             printf '\nVoir %s pour l historique.\n' "$JOURNAL")
           # Surtout PAS de `|| true` ici. Les issues sont DÉSACTIVÉES par défaut
