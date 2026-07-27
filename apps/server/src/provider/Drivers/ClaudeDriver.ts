@@ -42,6 +42,7 @@ import {
 } from "../ProviderDriver.ts";
 import type { ServerProviderDraft } from "../providerSnapshot.ts";
 import { mergeProviderInstanceEnvironment } from "../ProviderInstanceEnvironment.ts";
+import { getRateLimits } from "../rateLimitStore.ts";
 import {
   enrichProviderSnapshotWithVersionAdvisory,
   makePackageManagedProviderMaintenanceResolver,
@@ -91,21 +92,36 @@ export type ClaudeDriverEnv =
   | ServerConfig
   | ServerSettingsService;
 
-const withInstanceIdentity =
+/**
+ * Exported for tests: the rate-limit read below is otherwise unreachable, and
+ * a wiring that nothing exercises is a wiring that can be deleted in silence.
+ */
+export const withInstanceIdentity =
   (input: {
     readonly instanceId: ProviderInstance["instanceId"];
     readonly displayName: string | undefined;
     readonly accentColor: string | undefined;
     readonly continuationGroupKey: string;
   }) =>
-  (snapshot: ServerProviderDraft): ServerProvider => ({
-    ...snapshot,
-    instanceId: input.instanceId,
-    driver: DRIVER_KIND,
-    ...(input.displayName ? { displayName: input.displayName } : {}),
-    ...(input.accentColor ? { accentColor: input.accentColor } : {}),
-    continuation: { groupKey: input.continuationGroupKey },
-  });
+  (snapshot: ServerProviderDraft): ServerProvider => {
+    // Read at assembly time rather than carried through the probe: the probe
+    // answers "is this provider installed and authenticated", which runs on
+    // its own schedule, while usage arrives from the event stream during a
+    // turn. Joining them here keeps each on its own clock.
+    //
+    // Absent until the provider has reported at least once — omitted rather
+    // than defaulted, so "nothing reported yet" never renders as 0%.
+    const rateLimits = getRateLimits(input.instanceId);
+    return {
+      ...snapshot,
+      instanceId: input.instanceId,
+      driver: DRIVER_KIND,
+      ...(input.displayName ? { displayName: input.displayName } : {}),
+      ...(input.accentColor ? { accentColor: input.accentColor } : {}),
+      continuation: { groupKey: input.continuationGroupKey },
+      ...(rateLimits ? { rateLimits } : {}),
+    };
+  };
 
 export const ClaudeDriver: ProviderDriver<ClaudeSettings, ClaudeDriverEnv> = {
   driverKind: DRIVER_KIND,
