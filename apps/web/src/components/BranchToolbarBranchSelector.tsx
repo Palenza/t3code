@@ -591,7 +591,7 @@ export function BranchToolbarBranchSelector({
 
   // PR pill shown next to the branch selector when the active branch has one.
   const branchPr = resolveThreadPr({
-    threadBranch: resolvedActiveBranch,
+    threadBranch: activeThreadBranch,
     gitStatus: branchStatusQuery.data ?? null,
   });
   const branchPrStatus = prStatusIndicator(branchPr, branchStatusQuery.data?.sourceControlProvider);
