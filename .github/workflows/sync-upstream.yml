@@ -115,7 +115,37 @@ jobs:
         # Le tag, jamais `upstream/main` : le message de fusion nomme alors la
         # version exacte qu'on embarque, et l'historique du fork se lit comme
         # une suite de builds identifiés plutôt que de « merge du jour ».
-        run: git merge "${{ steps.cible.outputs.tag }}" --no-edit
+        run: |
+          git merge "${{ steps.cible.outputs.tag }}" --no-edit --no-ff
+
+          # GITHUB_TOKEN NE PEUT PAS pousser un commit qui touche
+          # `.github/workflows/**`. Ce n'est pas un réglage qu'on a raté :
+          # aucune clé du bloc `permissions:` ne l'autorise, c'est une limite
+          # dure de GitHub (il faudrait un PAT portant le scope `workflow`).
+          # L'amont modifie ses workflows régulièrement, donc SANS ce garde
+          # la synchro casse un jour sur deux, après avoir tout fusionné et
+          # tout vérifié — le pire endroit pour échouer.
+          # Constaté en conditions réelles le 28/07/2026 (run 30313999385,
+          # leur `release.yml` touché) : « refusing to allow a GitHub App to
+          # create or update workflow ... without `workflows` permission ».
+          #
+          # On garde donc LES NÔTRES. Les neuf workflows hérités de l'amont
+          # sont désactivés dans ce fork depuis le premier jour : leurs mises
+          # à jour ne nous servent à rien, et les ignorer coûte moins cher
+          # qu'un secret à faire tourner. Jamais en silence pour autant — la
+          # liste part dans le résumé du run.
+          if ! git diff --quiet HEAD^ HEAD -- .github/workflows; then
+            LISTE=$(git diff --name-only HEAD^ HEAD -- .github/workflows | tr '\n' ' ')
+            git checkout HEAD^ -- .github/workflows
+            git commit -q --amend --no-edit
+            echo "::warning::Workflows amont ignorés (non poussables par GITHUB_TOKEN) : $LISTE"
+            {
+              echo "### ⚠️ Workflows de l'amont ignorés"
+              echo ""
+              echo "Non poussables par \`GITHUB_TOKEN\` ; les nôtres sont conservés :"
+              for f in $LISTE; do echo "- \`$f\`"; done
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       - uses: voidzero-dev/setup-vp@v1
         if: steps.bouge.outputs.retard != '0'
