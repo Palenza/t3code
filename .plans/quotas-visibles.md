@@ -19,11 +19,34 @@ le magasin faisant seule autorité — ce qui supprime aussi les mêmes trois
 lignes dans cinq fichiers de drivers, autant de conflits en moins à chaque
 synchro.
 
-**Ce qui n'est PAS prouvé** : aucun tour réel n'a encore allumé la jauge. Le
-parseur est confirmé contre la déclaration du SDK
-(`SDKRateLimitInfo`, `@anthropic-ai/claude-agent-sdk` 0.3.170, lue le 28/07) et
-l'identité du compte contre `ProviderService.ts:302`, qui tamponne chaque
-événement avant publication. Reste à lancer l'app et à faire un vrai tour.
+**PROUVÉ EN VRAI le 28/07** : app lancée, compte Claude Max, deux tours réels.
+La carte du compte affiche « 5-hour limit · resets in about 4 h · measured just
+now ». L'heure est vraie : `resetsAt` = 1785211800 lu en secondes donne
+2026-07-28T04:10 UTC ; lu en millisecondes il tomberait en 1970, et le garde de
+plausibilité le rejetterait.
+
+**Ce que la preuve live a retourné — le point le plus important de ce plan :**
+
+Claude n'envoie **AUCUN pourcentage**. Charge utile réelle :
+
+```
+rate_limit_info: { status, resetsAt, rateLimitType,
+                   overageStatus, overageDisabledReason, isUsingOverage }
+```
+
+`grep -c utilization` = **0** sur tout le journal du tour. Le premier parseur
+exigeait ce champ et jetait donc chaque événement, en silence, avec une panne
+indiscernable de « ce fournisseur n'a jamais rien rapporté ». Le SDK type
+`utilization?: number` : « optionnel » avait été lu comme « toujours là ». Une
+déclaration de type dit ce qui PEUT arriver, pas ce qui arrive.
+
+Le pourcentage vérifié le 27/07 contre `api.anthropic.com/api/oauth/usage`
+existe bel et bien — mais **il vient de cet endpoint, pas de l'événement du
+SDK**. Deux sources différentes, confondues.
+
+**Donc, pour un vrai pourcentage** (tranche 4 ou avant), il faudra lire
+l'endpoint OAuth d'usage. Ce n'est pas un affichage en plus : c'est une source
+en plus, avec son jeton, son coût réseau et sa cadence. À décider explicitement.
 
 Reste la tranche 4 (alerter, puis basculer de compte).
 
