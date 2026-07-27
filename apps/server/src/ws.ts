@@ -82,6 +82,8 @@ import {
 } from "./observability/RpcInstrumentation.ts";
 import * as ProviderRegistry from "./provider/Services/ProviderRegistry.ts";
 import * as ProviderMaintenanceRunner from "./provider/providerMaintenanceRunner.ts";
+import { makeProviderStatusStream } from "./provider/providerStatusStream.ts";
+import { withCurrentRateLimits } from "./provider/rateLimitProjection.ts";
 import * as ServerSelfUpdate from "./cloud/selfUpdate.ts";
 import * as ServerLifecycleEvents from "./serverLifecycleEvents.ts";
 import * as ServerRuntimeStartup from "./serverRuntimeStartup.ts";
@@ -1072,7 +1074,10 @@ const makeWsRpcLayer = (
 
       const loadServerConfig = Effect.gen(function* () {
         const keybindingsConfig = yield* keybindings.loadConfigState;
-        const providers = yield* providerRegistry.getProviders;
+        // Joined here, not in the drivers: the registry's snapshots are cached
+        // on disk and a quota baked into one would come back stale at boot.
+        // See `provider/rateLimitProjection.ts`.
+        const providers = withCurrentRateLimits(yield* providerRegistry.getProviders);
         const settings = ServerSettings.redactServerSettingsForClient(
           yield* serverSettings.getSettings,
         );
@@ -2003,14 +2008,11 @@ const makeWsRpcLayer = (
                   },
                 })),
               );
-              const providerStatuses = providerRegistry.streamChanges.pipe(
-                Stream.map((providers) => ({
-                  version: 1 as const,
-                  type: "providerStatuses" as const,
-                  payload: { providers },
-                })),
-                Stream.debounce(Duration.millis(PROVIDER_STATUS_DEBOUNCE_MS)),
-              );
+              const providerStatuses = makeProviderStatusStream({
+                registryChanges: providerRegistry.streamChanges,
+                getProviders: providerRegistry.getProviders,
+                debounce: Duration.millis(PROVIDER_STATUS_DEBOUNCE_MS),
+              });
               const settingsUpdates = serverSettings.streamChanges.pipe(
                 Stream.map((settings) => ServerSettings.redactServerSettingsForClient(settings)),
                 Stream.map((settings) => ({

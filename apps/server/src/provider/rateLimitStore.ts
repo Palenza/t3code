@@ -17,6 +17,39 @@ import { applyRateLimitEvent } from "./rateLimitSnapshot.ts";
 const byInstance = new Map<ProviderInstanceId, ServerProviderRateLimits>();
 
 /**
+ * Notified when a stored snapshot actually changes.
+ *
+ * The reason this exists at all: without it, a new reading sits in this map
+ * until the provider registry happens to re-probe — up to five minutes, and
+ * never during the turn that produced it. The gauge would be a number that
+ * moves only when the user is not looking.
+ *
+ * A bare tick, carrying nothing. Subscribers re-read the store themselves, so
+ * a burst of events cannot deliver them in a different order than it was
+ * written in.
+ */
+const listeners = new Set<() => void>();
+
+export const subscribeRateLimitChanges = (listener: () => void): (() => void) => {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+};
+
+const notify = (): void => {
+  for (const listener of listeners) {
+    // One subscriber throwing must not silence the others, nor bubble into the
+    // event pipeline that is merely passing through.
+    try {
+      listener();
+    } catch {
+      // Intentionally swallowed: a broken subscriber is its own problem.
+    }
+  }
+};
+
+/**
  * Folds one runtime event into the store. Safe to call for every event —
  * anything that is not a rate-limit update is ignored.
  *
@@ -53,6 +86,7 @@ export const recordRateLimitEvent = (event: {
   }
 
   byInstance.set(instanceId, next);
+  notify();
   return next;
 };
 
@@ -60,7 +94,12 @@ export const getRateLimits = (
   instanceId: ProviderInstanceId,
 ): ServerProviderRateLimits | undefined => byInstance.get(instanceId);
 
-/** Test seam. Never called in production paths. */
+/**
+ * Test seam. Never called in production paths.
+ *
+ * Leaves subscribers in place on purpose: a subscription belongs to the
+ * connection that opened it, not to the contents of the store.
+ */
 export const resetRateLimitStore = (): void => {
   byInstance.clear();
 };
