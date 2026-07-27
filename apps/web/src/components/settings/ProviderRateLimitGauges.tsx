@@ -49,27 +49,38 @@ export function ProviderRateLimitGauges(props: {
               {gauge.resetLabel ? (
                 <span className="text-muted-foreground/50">{gauge.resetLabel}</span>
               ) : null}
-              <span className={cn("font-medium tabular-nums", TONE_TEXT[gauge.tone])}>
-                {gauge.percentLabel}
-              </span>
+              {/* Percentage when there is one, the provider's own word when
+                  there is not. Claude currently sends no figure at all, so the
+                  no-bar row below is the normal case, not the exception. */}
+              {gauge.percentLabel ? (
+                <span className={cn("font-medium tabular-nums", TONE_TEXT[gauge.tone])}>
+                  {gauge.percentLabel}
+                </span>
+              ) : gauge.severityLabel ? (
+                <span className={cn("font-medium", TONE_TEXT[gauge.tone])}>
+                  {gauge.severityLabel}
+                </span>
+              ) : null}
             </span>
           </div>
-          <div
-            className="h-1.5 w-full overflow-hidden rounded-full bg-muted/60"
-            role="progressbar"
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-valuenow={Math.round(gauge.barPercent)}
-            aria-label={`${gauge.label} used`}
-          >
+          {gauge.barPercent === null ? null : (
             <div
-              className={cn(
-                "h-full rounded-full transition-[width] duration-500 ease-out motion-reduce:transition-none",
-                TONE_BAR[gauge.tone],
-              )}
-              style={{ width: `${gauge.barPercent}%` }}
-            />
-          </div>
+              className="h-1.5 w-full overflow-hidden rounded-full bg-muted/60"
+              role="progressbar"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={Math.round(gauge.barPercent)}
+              aria-label={`${gauge.label} used`}
+            >
+              <div
+                className={cn(
+                  "h-full rounded-full transition-[width] duration-500 ease-out motion-reduce:transition-none",
+                  TONE_BAR[gauge.tone],
+                )}
+                style={{ width: `${gauge.barPercent}%` }}
+              />
+            </div>
+          )}
         </div>
       ))}
       {/* The age is not decoration: a stale 12% and a fresh 12% are different

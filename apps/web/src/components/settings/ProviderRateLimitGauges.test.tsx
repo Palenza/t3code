@@ -9,7 +9,9 @@ const NOW = Date.parse("2026-07-27T15:00:00.000Z");
 const rateLimits = (
   windows: ReadonlyArray<{
     readonly kind: string;
-    readonly utilization: number;
+    /** Optional, like the contract: Claude sends windows with no figure. */
+    readonly utilization?: number;
+    readonly severity?: "allowed" | "allowed_warning" | "rejected";
     readonly resetsAtEpoch?: number;
   }>,
 ): ServerProvider["rateLimits"] => ({ observedAt: "2026-07-27T14:55:00.000Z", windows }) as never;
@@ -39,6 +41,24 @@ describe("ProviderRateLimitGauges", () => {
     expect(markup).toContain("resets in about 2 h");
     expect(markup).toContain("measured 5 min ago");
     expect(markup).toContain('aria-valuenow="82"');
+  });
+
+  it("renders a bar-less row when the provider sends no percentage", () => {
+    // The shape a live Claude turn actually produces (28/07/2026). No bar to
+    // draw, but "resets in about 2 h" is real and worth the row.
+    const markup = renderToStaticMarkup(
+      <ProviderRateLimitGauges
+        rateLimits={rateLimits([
+          { kind: "five_hour", severity: "allowed", resetsAtEpoch: NOW / 1000 + 7200 },
+        ])}
+        now={NOW}
+      />,
+    );
+
+    expect(markup).toContain("5-hour limit");
+    expect(markup).toContain("resets in about 2 h");
+    expect(markup).not.toContain("progressbar");
+    expect(markup).not.toContain("%<");
   });
 
   it("keeps the bar inside its track when the account is over", () => {

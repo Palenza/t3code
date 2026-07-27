@@ -32,6 +32,50 @@ describe("rateLimitWindowsFromPayload", () => {
     ]);
   });
 
+  it("reads the payload a real Claude turn actually sent", () => {
+    // Captured verbatim on 28/07/2026 from a Max subscription, in
+    // `~/.t3/dev/logs/provider/<thread>.log`. NO `utilization` anywhere — the
+    // field the first version of this parser required. It returned `[]`, the
+    // event was dropped, and the account rendered as "never reported".
+    //
+    // This test is the one that would have caught it. It is written from a
+    // recorded payload rather than from the SDK's type declaration on purpose:
+    // the declaration says `utilization?: number`, and "optional" is exactly
+    // the part that was read as "always there".
+    const windows = rateLimitWindowsFromPayload({
+      rateLimits: {
+        type: "rate_limit_event",
+        rate_limit_info: {
+          status: "allowed",
+          resetsAt: 1_785_211_800,
+          rateLimitType: "five_hour",
+          overageStatus: "rejected",
+          overageDisabledReason: "org_level_disabled",
+          isUsingOverage: false,
+        },
+        uuid: "9a21a2d7-e0a7-47a9-80cc-03908fce60cf",
+        session_id: "509f05b6-b2d2-4c71-965a-a1d6de686423",
+      },
+    });
+
+    expect(windows).toEqual([
+      {
+        kind: "five_hour",
+        severity: "allowed",
+        resetsAtEpoch: 1_785_211_800,
+      },
+    ]);
+  });
+
+  it("drops an event that identifies nothing at all", () => {
+    // No window name, no figure, no reset: there is nothing to render, and a
+    // nameless empty row would only add furniture.
+    expect(rateLimitWindowsFromPayload({ rateLimits: { rate_limit_info: {} } })).toEqual([]);
+    expect(
+      rateLimitWindowsFromPayload({ rateLimits: { rate_limit_info: { status: "allowed" } } }),
+    ).toEqual([]);
+  });
+
   it("keeps a zero utilization", () => {
     // A fresh account reports 0. A falsy check here would silently drop it and
     // the account would look unmonitored rather than unused.

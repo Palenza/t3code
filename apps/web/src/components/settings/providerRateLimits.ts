@@ -80,7 +80,9 @@ export type RateLimitTone = "normal" | "warning" | "critical";
 
 /**
  * Severity, when the provider states one, outranks the percentage: a provider
- * saying "rejected" knows something the number alone does not.
+ * saying "rejected" knows something the number alone does not. And often the
+ * severity is ALL there is — Claude sent no percentage at all on a real turn
+ * (28/07/2026), so the thresholds below are the fallback, not the main path.
  */
 export const resolveTone = (window: ServerProviderRateLimitWindow): RateLimitTone => {
   if (window.severity === "rejected") {
@@ -89,10 +91,33 @@ export const resolveTone = (window: ServerProviderRateLimitWindow): RateLimitTon
   if (window.severity === "allowed_warning") {
     return "warning";
   }
+  if (window.utilization === undefined) {
+    return "normal";
+  }
   if (window.utilization >= CRITICAL_AT) {
     return "critical";
   }
   return window.utilization >= WARNING_AT ? "warning" : "normal";
+};
+
+/**
+ * What the provider says about the window when it gives no number.
+ *
+ * `allowed` returns null on purpose: "you are allowed to keep working" is the
+ * normal state and putting a word on it would add a line of noise to every
+ * account, every refresh.
+ */
+export const formatSeverityLabel = (
+  severity: ServerProviderRateLimitWindow["severity"],
+): string | null => {
+  switch (severity) {
+    case "rejected":
+      return "limit reached";
+    case "allowed_warning":
+      return "close to the limit";
+    default:
+      return null;
+  }
 };
 
 const formatAge = (ageMs: number): string => {
@@ -138,12 +163,19 @@ const formatReset = (input: {
 export interface RateLimitGauge {
   readonly kind: string;
   readonly label: string;
-  /** As reported, never clamped — a provider saying 103% is saying something. */
-  readonly percentLabel: string;
-  /** Clamped to 0–100, because a bar cannot be 103% long. */
-  readonly barPercent: number;
+  /**
+   * As reported, never clamped — a provider saying 103% is saying something.
+   * `null` when the provider sent no percentage, which is the common case on
+   * Claude: there is then no bar to draw and no number to show, only the
+   * window, its state and when it comes back.
+   */
+  readonly percentLabel: string | null;
+  /** Clamped to 0–100, because a bar cannot be 103% long. Null with no figure. */
+  readonly barPercent: number | null;
   readonly tone: RateLimitTone;
   readonly resetLabel: string | null;
+  /** Shown only when it carries information — see `formatSeverityLabel`. */
+  readonly severityLabel: string | null;
 }
 
 export interface RateLimitPresentation {
@@ -172,15 +204,33 @@ export const presentProviderRateLimits = (input: {
     return null;
   }
 
+  const gauges = rateLimits.windows
+    .map((window): RateLimitGauge => {
+      const utilization = window.utilization;
+      return {
+        kind: window.kind,
+        label: formatWindowLabel(window.kind),
+        percentLabel: utilization === undefined ? null : `${Math.round(utilization)}%`,
+        barPercent: utilization === undefined ? null : Math.max(0, Math.min(100, utilization)),
+        tone: resolveTone(window),
+        resetLabel: formatReset({ resetsAtEpoch: window.resetsAtEpoch, now: input.now }),
+        severityLabel: formatSeverityLabel(window.severity),
+      };
+    })
+    // A row naming a window and saying nothing else about it is a line of
+    // furniture. Kept only when it carries a figure, a reset time, or a state
+    // worth reading.
+    .filter(
+      (gauge) =>
+        gauge.percentLabel !== null || gauge.resetLabel !== null || gauge.severityLabel !== null,
+    );
+
+  if (gauges.length === 0) {
+    return null;
+  }
+
   return {
-    gauges: rateLimits.windows.map((window) => ({
-      kind: window.kind,
-      label: formatWindowLabel(window.kind),
-      percentLabel: `${Math.round(window.utilization)}%`,
-      barPercent: Math.max(0, Math.min(100, window.utilization)),
-      tone: resolveTone(window),
-      resetLabel: formatReset({ resetsAtEpoch: window.resetsAtEpoch, now: input.now }),
-    })),
+    gauges,
     observedLabel: `measured ${formatAge(Math.max(0, ageMs))}`,
   };
 };

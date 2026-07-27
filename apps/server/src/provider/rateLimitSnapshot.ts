@@ -44,11 +44,23 @@ const asSeverity = (value: unknown): ServerProviderRateLimitWindow["severity"] =
 };
 
 /**
- * Claude: `{ rate_limit_info: { status, rateLimitType, utilization, resetsAt } }`.
+ * Claude: `{ rate_limit_info: { status, rateLimitType, utilization?, resetsAt? } }`.
  *
- * `utilization` is checked against undefined rather than falsiness: 0 is the
- * value a fresh account reports, and treating it as missing would turn "you
- * have used nothing" into "we know nothing".
+ * The percentage is OPTIONAL, and pretending otherwise cost this feature a
+ * day. Verbatim from a real turn on a Max subscription (28/07/2026):
+ *
+ *   { status: "allowed", resetsAt: 1785211800, rateLimitType: "five_hour",
+ *     overageStatus: "rejected", overageDisabledReason: "org_level_disabled",
+ *     isUsingOverage: false }
+ *
+ * No `utilization` anywhere. An earlier version returned `[]` in that case,
+ * so every event was dropped and the account rendered nothing at all — the
+ * failure looked exactly like "the provider never reported".
+ *
+ * So a window is kept as soon as the provider says something identifiable
+ * about it. `utilization` is still checked against undefined rather than
+ * falsiness: 0 is what a fresh account reports, and treating it as missing
+ * would turn "you have used nothing" into "we know nothing".
  */
 const windowsFromClaude = (rateLimits: UnknownRecord): ServerProviderRateLimitWindow[] => {
   const info = rateLimits.rate_limit_info;
@@ -56,20 +68,24 @@ const windowsFromClaude = (rateLimits: UnknownRecord): ServerProviderRateLimitWi
     return [];
   }
 
+  const kind = asNonEmptyString(info.rateLimitType);
   const utilization = asFiniteNumber(info.utilization);
-  if (utilization === undefined) {
-    return [];
-  }
-
   const resetsAtEpoch = asFiniteNumber(info.resetsAt);
   const severity = asSeverity(info.status);
+
+  // Nothing identifiable at all — not even which window this is about. A
+  // nameless entry carrying no figure and no reset would render as a row that
+  // says nothing.
+  if (kind === undefined && utilization === undefined && resetsAtEpoch === undefined) {
+    return [];
+  }
 
   return [
     {
       // Falls back to a generic label instead of dropping the window: an
       // unnamed limit at 90% is still worth showing.
-      kind: asNonEmptyString(info.rateLimitType) ?? "limit",
-      utilization,
+      kind: kind ?? "limit",
+      ...(utilization !== undefined ? { utilization } : {}),
       ...(severity !== undefined ? { severity } : {}),
       ...(resetsAtEpoch !== undefined ? { resetsAtEpoch } : {}),
     },

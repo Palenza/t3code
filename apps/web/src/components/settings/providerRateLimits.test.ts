@@ -14,7 +14,8 @@ const rateLimits = (input: {
   readonly observedAt?: string;
   readonly windows: ReadonlyArray<{
     readonly kind: string;
-    readonly utilization: number;
+    /** Optional, like the contract: Claude sends windows with no figure. */
+    readonly utilization?: number;
     readonly severity?: "allowed" | "allowed_warning" | "rejected";
     readonly resetsAtEpoch?: number;
   }>;
@@ -57,6 +58,46 @@ describe("presentProviderRateLimits", () => {
     });
 
     expect(presented).toBeNull();
+  });
+
+  it("renders the window Claude actually reports — reset time, no percentage", () => {
+    // The real payload carries `status` + `resetsAt` + `rateLimitType` and no
+    // figure (verified on a live turn, 28/07/2026). Showing "resets in about
+    // 2 h" is the whole value here; inventing a percentage to fill the bar
+    // would be the one thing worse than showing nothing.
+    const presented = presentProviderRateLimits({
+      rateLimits: rateLimits({
+        windows: [{ kind: "five_hour", severity: "allowed", resetsAtEpoch: NOW / 1000 + 2 * 3600 }],
+      }),
+      now: NOW,
+    });
+
+    expect(presented?.gauges[0]?.percentLabel).toBeNull();
+    expect(presented?.gauges[0]?.barPercent).toBeNull();
+    expect(presented?.gauges[0]?.resetLabel).toBe("resets in about 2 h");
+    expect(presented?.gauges[0]?.severityLabel).toBeNull();
+    expect(presented?.gauges[0]?.tone).toBe("normal");
+  });
+
+  it("says the limit is reached when that is all the provider tells us", () => {
+    const presented = presentProviderRateLimits({
+      rateLimits: rateLimits({ windows: [{ kind: "five_hour", severity: "rejected" }] }),
+      now: NOW,
+    });
+
+    expect(presented?.gauges[0]?.severityLabel).toBe("limit reached");
+    expect(presented?.gauges[0]?.tone).toBe("critical");
+  });
+
+  it("drops a window that says nothing beyond its own name", () => {
+    // Neither figure, nor reset, nor a state worth reading: a row of
+    // furniture. The card should look untouched instead.
+    expect(
+      presentProviderRateLimits({
+        rateLimits: rateLimits({ windows: [{ kind: "five_hour", severity: "allowed" }] }),
+        now: NOW,
+      }),
+    ).toBeNull();
   });
 
   it("reports an overage instead of flattening it to 100%", () => {

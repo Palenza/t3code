@@ -168,7 +168,16 @@ export const ServerProviderRateLimitWindow = Schema.Struct({
   // 0–100 as reported. Deliberately not clamped here: a provider returning
   // 103% is telling us something real, and flattening it to 100 at ingestion
   // would hide it. Clamp at render time instead.
-  utilization: Schema.Number,
+  //
+  // OPTIONAL, and this was learned the hard way. The Claude Agent SDK types
+  // it `utilization?: number`, and a real turn on a Max subscription
+  // (28/07/2026) sent NO percentage at all — only `status`, `resetsAt` and
+  // `rateLimitType`. A required field here meant the whole event was dropped
+  // and the account showed nothing, which is how a "the data is already
+  // there" feature ends up displaying an empty screen. A window without a
+  // percentage is still worth carrying: "your five-hour window resets in two
+  // hours" is a fact, and it is the only one the provider gave us.
+  utilization: Schema.optional(Schema.Number),
   severity: Schema.optional(Schema.Literals(["allowed", "allowed_warning", "rejected"])),
   // Left as the provider's own number, NOT converted to a date.
   //

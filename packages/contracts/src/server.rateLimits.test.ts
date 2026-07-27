@@ -62,6 +62,21 @@ describe("ServerProviderRateLimits", () => {
     expect(() => decode({ windows: [{ kind: "five_hour", utilization: 12 }] })).toThrow();
   });
 
+  it("accepts a window with no percentage at all", () => {
+    // This is the SHAPE CLAUDE ACTUALLY SENDS. Verified on a real turn
+    // (28/07/2026): `status`, `resetsAt`, `rateLimitType`, and no
+    // `utilization`. Requiring the percentage here made the whole event
+    // undecodable upstream, and the account displayed nothing — a feature
+    // failing exactly like a provider that never reports.
+    const limits = decode({
+      observedAt: "2026-07-27T15:00:00.000Z",
+      windows: [{ kind: "five_hour", severity: "allowed", resetsAtEpoch: 1_785_211_800 }],
+    });
+
+    expect(limits.windows[0]?.utilization).toBeUndefined();
+    expect(limits.windows[0]?.resetsAtEpoch).toBe(1_785_211_800);
+  });
+
   it("keeps resetsAtEpoch as the provider's raw number", () => {
     // Not converted to a date on purpose: the SDK documents no unit for it,
     // and seconds vs milliseconds differ by a factor of 1000. Freezing a guess
