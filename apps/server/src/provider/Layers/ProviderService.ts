@@ -55,6 +55,7 @@ import * as ProviderEventLoggers from "./ProviderEventLoggers.ts";
 import * as AnalyticsService from "../../telemetry/AnalyticsService.ts";
 import * as McpProviderSession from "../../mcp/McpProviderSession.ts";
 import * as McpSessionRegistry from "../../mcp/McpSessionRegistry.ts";
+import { recordRateLimitEvent } from "../rateLimitStore.ts";
 const isModelSelection = Schema.is(ModelSelection);
 
 /**
@@ -233,6 +234,16 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
         canonicalEventLogger
           ? canonicalEventLogger.write(canonicalEvent, canonicalEvent.threadId)
           : Effect.void,
+      ),
+      // Fold subscription usage into the per-instance store as it flows past.
+      // Placed here rather than in a PubSub subscriber so the snapshot is
+      // already current by the time any consumer reacts to the same event.
+      // Ignores everything that is not a rate-limit update; see
+      // `rateLimitStore.ts`.
+      Effect.tap((canonicalEvent) =>
+        Effect.sync(() => {
+          recordRateLimitEvent(canonicalEvent);
+        }),
       ),
       Effect.flatMap((canonicalEvent) => PubSub.publish(runtimeEventPubSub, canonicalEvent)),
       Effect.asVoid,
