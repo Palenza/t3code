@@ -154,6 +154,46 @@ export const ServerProviderUpdateState = Schema.Struct({
 });
 export type ServerProviderUpdateState = typeof ServerProviderUpdateState.Type;
 
+/**
+ * One usage window reported by a provider — Claude's `five_hour`, Codex's
+ * `primary`/`secondary`, and whatever comes next.
+ *
+ * `kind` is an open string on purpose: providers add windows without warning,
+ * and an unrecognised one must still be rendered ("some limit at 82%") rather
+ * than dropped. Only `severity` is closed, because it drives colour and an
+ * unknown value there could not be shown.
+ */
+export const ServerProviderRateLimitWindow = Schema.Struct({
+  kind: TrimmedNonEmptyString,
+  // 0–100 as reported. Deliberately not clamped here: a provider returning
+  // 103% is telling us something real, and flattening it to 100 at ingestion
+  // would hide it. Clamp at render time instead.
+  utilization: Schema.Number,
+  severity: Schema.optional(Schema.Literals(["allowed", "allowed_warning", "rejected"])),
+  // Left as the provider's own number, NOT converted to a date.
+  //
+  // The Claude Agent SDK types this `resetsAt?: number` and documents no unit;
+  // seconds and milliseconds are both plausible and differ by a factor of
+  // 1000. Guessing here would bake a wrong instant into every consumer and
+  // look authoritative. Consumers must decide, and say so, until a real event
+  // settles it.
+  resetsAtEpoch: Schema.optional(Schema.Number),
+});
+export type ServerProviderRateLimitWindow = typeof ServerProviderRateLimitWindow.Type;
+
+/**
+ * Subscription usage for one provider instance.
+ *
+ * `observedAt` is not decoration: a quota snapshot is only meaningful with its
+ * age. Anything rendering this must be able to say "as of 14:32", because a
+ * stale 12% and a fresh 12% are not the same claim.
+ */
+export const ServerProviderRateLimits = Schema.Struct({
+  observedAt: IsoDateTime,
+  windows: Schema.Array(ServerProviderRateLimitWindow),
+});
+export type ServerProviderRateLimits = typeof ServerProviderRateLimits.Type;
+
 export const ServerProvider = Schema.Struct({
   // Routing key for the configured instance this snapshot represents. This
   // is the only stable identity consumers may use for provider routing.
@@ -190,6 +230,15 @@ export const ServerProvider = Schema.Struct({
   skills: Schema.Array(ServerProviderSkill).pipe(Schema.withDecodingDefault(Effect.succeed([]))),
   versionAdvisory: Schema.optionalKey(ServerProviderVersionAdvisory),
   updateState: Schema.optionalKey(ServerProviderUpdateState),
+  // Last subscription usage reported by this instance, from
+  // `account.rate-limits.updated`. Per instance and not per thread: a quota
+  // belongs to an account, and the same account backs every thread it runs.
+  // Modelling it on a thread would put a duplicate — and a redundant line of
+  // chat noise — in each one.
+  //
+  // Optional because it only ever appears after the provider has reported at
+  // least once. Absent means "nothing reported yet", never "no limit".
+  rateLimits: Schema.optionalKey(ServerProviderRateLimits),
 });
 export type ServerProvider = typeof ServerProvider.Type;
 
