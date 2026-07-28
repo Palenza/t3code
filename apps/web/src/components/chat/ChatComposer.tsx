@@ -88,6 +88,7 @@ import {
   shouldUseCompactComposerFooter,
 } from "../composerFooterLayout";
 import { type ComposerPromptEditorHandle, ComposerPromptEditor } from "../ComposerPromptEditor";
+import { ComposerAttachButton } from "./ComposerAttachButton";
 import { ProviderModelPicker } from "./ProviderModelPicker";
 import { type ComposerCommandItem, ComposerCommandMenu } from "./ComposerCommandMenu";
 import { ComposerPendingApprovalActions } from "./ComposerPendingApprovalActions";
@@ -418,6 +419,7 @@ const ComposerFooterPrimaryActions = memo(function ComposerFooterPrimaryActions(
   compact: boolean;
   activeContextWindow: ReturnType<typeof deriveLatestContextWindowSnapshot>;
   activeThreadProviderDisplayName: string | null;
+  activeThreadRateLimits: ServerProvider["rateLimits"];
   isPreparingWorktree: boolean;
   pendingAction: {
     questionIndex: number;
@@ -444,6 +446,7 @@ const ComposerFooterPrimaryActions = memo(function ComposerFooterPrimaryActions(
         <ContextWindowMeter
           usage={props.activeContextWindow}
           providerDisplayName={props.activeThreadProviderDisplayName}
+          rateLimits={props.activeThreadRateLimits}
         />
       ) : null}
       {props.isPreparingWorktree ? (
@@ -960,6 +963,13 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       return getProviderDisplayName(providerStatuses, entry.driver);
     }
     return formatProviderDisplayName(activeThreadModelSelection.instanceId);
+  }, [providerStatuses, activeThreadModelSelection]);
+  // The context-window meter also surfaces the ACTIVE account's plan limits:
+  // the figure the user needs when deciding whether to fire the next turn.
+  const activeThreadRateLimits = useMemo(() => {
+    if (!activeThreadModelSelection) return undefined;
+    return providerStatuses.find((p) => p.instanceId === activeThreadModelSelection.instanceId)
+      ?.rateLimits;
   }, [providerStatuses, activeThreadModelSelection]);
 
   // ------------------------------------------------------------------
@@ -3312,6 +3322,10 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
               )}
             >
               <div className="-m-1 flex min-w-0 flex-1 items-center gap-1 overflow-x-auto p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                <ComposerAttachButton
+                  disabled={activeThreadId === null}
+                  onFiles={addComposerImages}
+                />
                 {showTopModelPicker ? null : renderProviderModelPicker(isComposerFooterCompact)}
 
                 {isComposerFooterCompact ? (
@@ -3369,8 +3383,14 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                   compact={isComposerPrimaryActionsCompact}
                   activeContextWindow={activeContextWindow}
                   activeThreadProviderDisplayName={activeThreadProviderDisplayName}
+                  activeThreadRateLimits={activeThreadRateLimits}
                   pendingAction={pendingPrimaryAction}
-                  isRunning={phase === "running"}
+                  // The stop button must appear the instant a turn is on its
+                  // way — local dispatch in flight or session still spawning —
+                  // not once the provider finally reports "running" (~10 s on
+                  // a cold spawn). The interrupt handler queues the stop until
+                  // the server can honour it.
+                  isRunning={phase === "running" || phase === "connecting" || isSendBusy}
                   showPlanFollowUpPrompt={pendingUserInputs.length === 0 && showPlanFollowUpPrompt}
                   promptHasText={prompt.trim().length > 0}
                   isSendBusy={isSendBusy}

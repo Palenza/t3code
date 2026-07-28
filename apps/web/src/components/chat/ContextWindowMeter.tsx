@@ -1,6 +1,10 @@
+import type { ServerProvider } from "@t3tools/contracts";
+
 import { cn } from "~/lib/utils";
 import { type ContextWindowSnapshot, formatContextWindowTokens } from "~/lib/contextWindow";
 import { Popover, PopoverPopup, PopoverTrigger } from "../ui/popover";
+import { ProviderRateLimitGauges } from "../settings/ProviderRateLimitGauges";
+import { presentProviderRateLimits } from "../settings/providerRateLimits";
 
 function formatPercentage(value: number | null): string | null {
   if (value === null || !Number.isFinite(value)) {
@@ -15,8 +19,14 @@ function formatPercentage(value: number | null): string | null {
 export function ContextWindowMeter(props: {
   usage: ContextWindowSnapshot;
   providerDisplayName?: string | null;
+  /** The active account's subscription usage, shown alongside the context window. */
+  rateLimits?: ServerProvider["rateLimits"];
 }) {
-  const { usage, providerDisplayName } = props;
+  const { usage, providerDisplayName, rateLimits } = props;
+  // Gate the whole section on the same judgement the gauges make: a header
+  // above "nothing worth showing" would read as "all limits at zero".
+  const hasRateLimits =
+    rateLimits !== undefined && presentProviderRateLimits({ rateLimits, now: Date.now() }) !== null;
   const usedPercentage = formatPercentage(usage.usedPercentage);
   const normalizedPercentage = Math.max(0, Math.min(100, usage.usedPercentage ?? 0));
   const radius = 9.75;
@@ -130,6 +140,12 @@ export function ContextWindowMeter(props: {
           {usage.compactsAutomatically ? (
             <div className="mt-1 text-pretty text-[11px] font-medium text-muted-foreground/70">
               {providerDisplayName ?? "It"} automatically compacts its context when needed.
+            </div>
+          ) : null}
+          {hasRateLimits ? (
+            <div className="mt-1 border-t border-border/60 pt-2">
+              <div className="font-medium text-muted-foreground text-xs">Plan usage limits</div>
+              <ProviderRateLimitGauges rateLimits={rateLimits} />
             </div>
           ) : null}
         </div>

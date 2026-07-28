@@ -4933,8 +4933,37 @@ function ChatViewContent(props: ChatViewProps) {
     }
   };
 
+  // A stop pressed while the turn is still dispatching or the session still
+  // spawning cannot be honoured by the server yet: remember it and fire the
+  // interrupt the moment the session reports "running". Cleared when the turn
+  // ends on its own or the user switches thread — a stale stop must never
+  // kill the NEXT turn.
+  const pendingInterruptRef = useRef(false);
+
+  useEffect(() => {
+    pendingInterruptRef.current = false;
+  }, [activeThreadId]);
+
+  useEffect(() => {
+    if (!pendingInterruptRef.current) return;
+    if (phase === "ready" || phase === "disconnected") {
+      pendingInterruptRef.current = false;
+      return;
+    }
+    if (phase !== "running" || !activeThread) return;
+    pendingInterruptRef.current = false;
+    void interruptThreadTurn({
+      environmentId,
+      input: buildThreadTurnInterruptInput(activeThread),
+    });
+  }, [phase, activeThread, environmentId, interruptThreadTurn]);
+
   const onInterrupt = async () => {
     if (!activeThread) return;
+    if (phase !== "running") {
+      pendingInterruptRef.current = true;
+      return;
+    }
     const result = await interruptThreadTurn({
       environmentId,
       input: buildThreadTurnInterruptInput(activeThread),
