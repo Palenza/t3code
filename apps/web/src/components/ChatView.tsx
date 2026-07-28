@@ -139,6 +139,7 @@ import {
   usePreviewMiniPlayerStore,
 } from "../previewMiniPlayerStore";
 import { RightPanelTabs } from "./RightPanelTabs";
+import { ThreadTasksPanel, deriveTaskPanelSections } from "./chat/ThreadTasksPanel";
 import { DiffWorkerPoolProvider } from "./DiffWorkerPoolProvider";
 import { BranchToolbar } from "./BranchToolbar";
 import { resolveShortcutCommand, shortcutLabelForCommand } from "../keybindings";
@@ -3017,6 +3018,14 @@ function ChatViewContent(props: ChatViewProps) {
     useRightPanelStore.getState().close(activeThreadRef);
     dismissPlanSidebarForCurrentTurn();
   }, [activeThreadRef, dismissPlanSidebarForCurrentTurn]);
+  const toggleTasksPanel = useCallback(() => {
+    if (!activeThreadRef) return;
+    useRightPanelStore.getState().toggle(activeThreadRef, "tasks");
+  }, [activeThreadRef]);
+  const runningTasksCount = useMemo(
+    () => deriveTaskPanelSections(activeThread?.activities ?? []).running.length,
+    [activeThread?.activities],
+  );
   const createBrowserSurface = useCallback(() => {
     if (!activeThreadRef) return;
     void addBrowserSurface({ threadRef: activeThreadRef, openPreview });
@@ -5711,8 +5720,12 @@ function ChatViewContent(props: ChatViewProps) {
       rightPanelAvailable={activeProject !== null}
       rightPanelOpen={rightPanelOpen}
       rightPanelShortcutLabel={shortcutLabelForCommand(keybindings, "rightPanel.toggle")}
+      tasksAvailable={activeProject !== null}
+      tasksOpen={rightPanelOpen && activeRightPanelSurface?.kind === "tasks"}
+      tasksRunningCount={runningTasksCount}
       onToggleTerminal={toggleTerminalVisibility}
       onToggleRightPanel={toggleRightPanel}
+      onToggleTasks={toggleTasksPanel}
     />
   );
   const panelLayoutControls = (
@@ -5764,6 +5777,8 @@ function ChatViewContent(props: ChatViewProps) {
           initialGitScope={initialDiffPanelGitScope}
         />
       </Suspense>
+    ) : activeRightPanelSurface?.kind === "tasks" ? (
+      <ThreadTasksPanel activities={activeThread?.activities ?? []} />
     ) : activeRightPanelSurface?.kind === "plan" ? (
       <PlanSidebar
         activePlan={activePlan}
