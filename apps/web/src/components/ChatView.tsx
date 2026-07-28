@@ -238,6 +238,7 @@ import {
 import { ThreadErrorBanner } from "./chat/ThreadErrorBanner";
 import { resolveThreadPr } from "./ThreadStatusIndicators";
 import { ComposerBannerStack, type ComposerBannerStackItem } from "./chat/ComposerBannerStack";
+import { resolveQuotaAlert } from "./chat/quotaAlert";
 import {
   DRAFT_HERO_TRANSITION_ANIMATION_ID,
   DRAFT_HERO_TRANSITION_DURATION_MS,
@@ -4125,13 +4126,44 @@ function ChatViewContent(props: ChatViewProps) {
     }
     void handleSwitchCheckoutToThread();
   }, [gitStatusQuery.data?.hasWorkingTreeChanges, handleSwitchCheckoutToThread]);
+  // The account's own limit, surfaced where the work happens. A settings page
+  // nobody has open at the moment it matters is not a warning system.
+  //
+  // `resolveQuotaAlert` returns null far more often than not — see the
+  // thresholds there. Silence is the feature; a banner people learn to close
+  // unread would take the one that matters down with it.
+  const [dismissedQuotaAlertId, setDismissedQuotaAlertId] = useState<string | null>(null);
+  const quotaAlert = useMemo(
+    () => resolveQuotaAlert({ provider: activeProviderStatus, now: Date.now() }),
+    [activeProviderStatus],
+  );
+  const quotaAlertItems = useMemo<ComposerBannerStackItem[]>(() => {
+    if (quotaAlert === null || quotaAlert.id === dismissedQuotaAlertId) {
+      return [];
+    }
+    return [
+      {
+        id: quotaAlert.id,
+        variant: quotaAlert.level === "critical" ? "error" : "warning",
+        icon: <TriangleAlertIcon />,
+        title: quotaAlert.title,
+        description: quotaAlert.description,
+        dismissLabel: "Dismiss quota warning",
+        // Dismissing silences THIS level only: the id carries it, so the same
+        // window coming back worse speaks again.
+        onDismiss: () => setDismissedQuotaAlertId(quotaAlert.id),
+      },
+    ];
+  }, [dismissedQuotaAlertId, quotaAlert]);
+
   const composerBannerItems = useMemo<ComposerBannerStackItem[]>(() => {
     const parkedThreadItems = parkedThreadBannerItem === null ? [] : [parkedThreadBannerItem];
     if (!localCheckoutBranchMismatch || !showBranchMismatchBanner || !activeBranchMismatchKey) {
-      return [...systemComposerBannerItems, ...parkedThreadItems];
+      return [...systemComposerBannerItems, ...quotaAlertItems, ...parkedThreadItems];
     }
     return [
       ...systemComposerBannerItems,
+      ...quotaAlertItems,
       {
         id: `branch-mismatch:${activeBranchMismatchKey}`,
         variant: "info",
