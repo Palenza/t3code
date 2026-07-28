@@ -97,6 +97,26 @@ puis, dans Réglages → Providers → +, ajouter une instance Claude dont le
 `homePath` est ce dossier. Le bouton apparaît dès qu'un second compte connecté
 existe.
 
+## Tranche 4c — relais AUTOMATIQUE : FAIT (28/07, sur GO explicite d'Enzo)
+
+Le « Proposé, jamais fait dans le dos » de 4b est levé par décision fondateur
+du 28/07 (« le compte qui n'a pas le timeout prend le relais immédiatement »).
+Au niveau CRITIQUE seulement (≥ 90 % ou refus du fournisseur), la cible de
+`resolveQuotaSwitchTarget` prend le relais sans clic — avec un toast qui dit
+exactement ce qui a bougé, jamais en silence.
+
+Deux chemins, selon l'état du fil :
+- fil PAS ENCORE démarré → il part sur l'autre compte (chemin de sélection
+  ordinaire, mêmes gardes que le bouton) ;
+- fil DÉJÀ démarré → il reste sur son compte (sa transcription vit dans le
+  dossier de CE compte ; la garde de continuation refuse de toute façon) et
+  la sélection persistante fait partir les NOUVEAUX fils sur la cible.
+
+Pas de ping-pong possible : la cible n'est jamais un compte lui-même au mur ;
+tous au mur → cible nulle, on ne bouge pas. Un relais par identité d'alerte
+(l'id porte compte+fenêtre+niveau) : la même fenêtre redevenue critique après
+un reset relaie à nouveau. Décision pure `shouldAutoRelay` + 3 tests.
+
 ### Pourquoi PAS CLIProxyAPI / CPAMC
 
 Vérifié sur `CLIProxyAPI@cade44b` (28/07) :

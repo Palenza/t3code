@@ -238,7 +238,7 @@ import {
 import { ThreadErrorBanner } from "./chat/ThreadErrorBanner";
 import { resolveThreadPr } from "./ThreadStatusIndicators";
 import { ComposerBannerStack, type ComposerBannerStackItem } from "./chat/ComposerBannerStack";
-import { resolveQuotaAlert, resolveQuotaSwitchTarget } from "./chat/quotaAlert";
+import { resolveQuotaAlert, resolveQuotaSwitchTarget, shouldAutoRelay } from "./chat/quotaAlert";
 import {
   DRAFT_HERO_TRANSITION_ANIMATION_ID,
   DRAFT_HERO_TRANSITION_DURATION_MS,
@@ -5538,6 +5538,63 @@ function ChatViewContent(props: ChatViewProps) {
   useEffect(() => {
     providerModelSelectRef.current = onProviderModelSelect;
   }, [onProviderModelSelect]);
+  // Automatic relay (founder decision, 28/07/2026): at the CRITICAL level the
+  // other subscription takes over without a click — and never silently, a
+  // toast says exactly what moved. A thread that has already started stays on
+  // its account (its transcript lives in that account's config directory, and
+  // the continuation guard above would refuse anyway): there, the relay sets
+  // the sticky selection so the NEXT thread starts on the target account.
+  const autoRelayedAlertIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (
+      !shouldAutoRelay({
+        alert: quotaAlert,
+        target: quotaSwitchTarget,
+        lastRelayedAlertId: autoRelayedAlertIdRef.current,
+      }) ||
+      quotaAlert === null ||
+      quotaSwitchTarget === null
+    ) {
+      return;
+    }
+    autoRelayedAlertIdRef.current = quotaAlert.id;
+    const targetName = quotaSwitchTarget.displayName?.trim() || quotaSwitchTarget.instanceId;
+    const currentModel = activeThread?.modelSelection?.model ?? "";
+    if (activeThread && activeThread.session === null) {
+      providerModelSelectRef.current?.(quotaSwitchTarget.instanceId, currentModel);
+      toastManager.add({
+        type: "warning",
+        title: `Auto relay — running on ${targetName}`,
+        description: `${quotaAlert.title}. The next turn runs on the other subscription.`,
+      });
+      return;
+    }
+    const resolvedModel = resolveAppModelSelectionForInstance(
+      quotaSwitchTarget.instanceId,
+      settings,
+      providerStatuses,
+      currentModel,
+    );
+    if (!resolvedModel) {
+      return;
+    }
+    setStickyComposerModelSelection({
+      instanceId: quotaSwitchTarget.instanceId,
+      model: resolvedModel,
+    });
+    toastManager.add({
+      type: "warning",
+      title: `Auto relay — new threads start on ${targetName}`,
+      description: `${quotaAlert.title}. This thread stays on its account; new threads start on the other subscription.`,
+    });
+  }, [
+    quotaAlert,
+    quotaSwitchTarget,
+    activeThread,
+    providerStatuses,
+    settings,
+    setStickyComposerModelSelection,
+  ]);
 
   const onEnvModeChange = useCallback(
     (mode: DraftThreadEnvMode) => {

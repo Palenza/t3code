@@ -1,7 +1,7 @@
 import type { ServerProvider } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
-import { resolveQuotaAlert, resolveQuotaSwitchTarget } from "./quotaAlert";
+import { resolveQuotaAlert, resolveQuotaSwitchTarget, shouldAutoRelay } from "./quotaAlert";
 
 const NOW = Date.parse("2026-07-28T00:00:00.000Z");
 
@@ -266,5 +266,42 @@ describe("resolveQuotaSwitchTarget", () => {
       resolveQuotaSwitchTarget({ providers: [exhausted], active: exhausted, now: NOW }),
     ).toBeNull();
     expect(resolveQuotaSwitchTarget({ providers: [], active: null, now: NOW })).toBeNull();
+  });
+});
+
+describe("shouldAutoRelay", () => {
+  const target = account({ instanceId: "claude-idle" });
+  const critical = {
+    id: "quota:claude-default:five_hour:critical",
+    level: "critical",
+    title: "Claude — 5-hour limit at 95%",
+    description: "",
+  } as const;
+  const warning = {
+    ...critical,
+    id: "quota:claude-default:five_hour:warning",
+    level: "warning",
+  } as const;
+
+  it("relays only at the critical level", () => {
+    expect(shouldAutoRelay({ alert: critical, target, lastRelayedAlertId: null })).toBe(true);
+    // A warning is advice; moving someone's subscription on advice is not
+    // a relay, it is a surprise.
+    expect(shouldAutoRelay({ alert: warning, target, lastRelayedAlertId: null })).toBe(false);
+    expect(shouldAutoRelay({ alert: null, target, lastRelayedAlertId: null })).toBe(false);
+  });
+
+  it("never relays without somewhere to relay to", () => {
+    expect(shouldAutoRelay({ alert: critical, target: null, lastRelayedAlertId: null })).toBe(
+      false,
+    );
+  });
+
+  it("fires once per alert identity, and again for a new one", () => {
+    expect(shouldAutoRelay({ alert: critical, target, lastRelayedAlertId: critical.id })).toBe(
+      false,
+    );
+    const weekly = { ...critical, id: "quota:claude-default:seven_day:critical" } as const;
+    expect(shouldAutoRelay({ alert: weekly, target, lastRelayedAlertId: critical.id })).toBe(true);
   });
 });

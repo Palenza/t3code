@@ -140,6 +140,33 @@ export const resolveQuotaSwitchTarget = (input: {
   return ranked[0]?.provider ?? null;
 };
 
+/**
+ * Automatic relay — founder decision, 28/07/2026. At the CRITICAL level the
+ * account chosen by `resolveQuotaSwitchTarget` takes over without a click:
+ * a wall you have to notice and answer by hand is a wall that stops the work
+ * at 3am.
+ *
+ * Pure decision only; the wiring (and the LOUD announcement — a relay is
+ * never silent) lives with the caller.
+ *
+ * Fires once per alert id. The id carries the account, window and level, so
+ * dismissing or surviving one relay never silences the next window — and the
+ * same window coming back critical after a reset speaks (and relays) again.
+ *
+ * No ping-pong is possible by construction: `resolveQuotaSwitchTarget` never
+ * returns an account that is itself rejected or past the critical line, so
+ * when every account is at the wall the target is null and nothing moves.
+ */
+export const shouldAutoRelay = (input: {
+  readonly alert: QuotaAlert | null;
+  readonly target: ServerProvider | null;
+  readonly lastRelayedAlertId: string | null;
+}): boolean =>
+  input.alert !== null &&
+  input.alert.level === "critical" &&
+  input.target !== null &&
+  input.alert.id !== input.lastRelayedAlertId;
+
 export const resolveQuotaAlert = (input: {
   readonly provider: ServerProvider | null;
   readonly now: number;
