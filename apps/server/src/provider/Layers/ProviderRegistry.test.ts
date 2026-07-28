@@ -2148,12 +2148,134 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsModule.layerTest(), Te
             claudeCapabilities(),
           );
           assert.strictEqual(status.status, "ready");
+          // Both the version probe and the `auth status` cross-check must run
+          // inside the instance environment, never the server's own.
+          assert.deepStrictEqual(
+            recorded.commands.map((command) => command.args.join(" ")),
+            ["--version", "auth status"],
+          );
           assert.deepStrictEqual(
             recorded.commands.map((command) => command.env?.CLAUDE_CONFIG_DIR),
-            [claudeConfigDir],
+            [claudeConfigDir, claudeConfigDir],
           );
         }).pipe(Effect.provide(recorded.layer));
       });
+
+      it.effect(
+        "reports unauthenticated when the capability probe has no account evidence and `auth status` says logged out",
+        () =>
+          Effect.gen(function* () {
+            // A fresh CLAUDE_CONFIG_DIR initializes the SDK just fine, so the
+            // capability probe succeeds with an empty account. That success must
+            // never be read as proof of auth: `claude auth status` is the judge.
+            const status = yield* checkClaudeProviderStatus(
+              defaultClaudeSettings,
+              claudeCapabilities(),
+            );
+            assert.strictEqual(status.status, "error");
+            assert.strictEqual(status.installed, true);
+            assert.strictEqual(status.auth.status, "unauthenticated");
+            assert.strictEqual(
+              status.message,
+              "Claude Agent CLI is not logged in for this instance. Run `claude /login` with this instance's CLAUDE_CONFIG_DIR to authenticate.",
+            );
+          }).pipe(
+            Effect.provide(
+              mockSpawnerLayer((args) => {
+                const joined = args.join(" ");
+                if (joined === "--version") return { stdout: "1.0.0\n", stderr: "", code: 0 };
+                if (joined === "auth status")
+                  return {
+                    stdout: '{"loggedIn":false,"authMethod":"none","apiProvider":"firstParty"}\n',
+                    stderr: "",
+                    code: 0,
+                  };
+                throw new Error(`Unexpected args: ${joined}`);
+              }),
+            ),
+          ),
+      );
+
+      it.effect(
+        "enriches auth from `auth status` when the capability probe has no account evidence",
+        () =>
+          Effect.gen(function* () {
+            const status = yield* checkClaudeProviderStatus(
+              defaultClaudeSettings,
+              claudeCapabilities(),
+            );
+            assert.strictEqual(status.status, "ready");
+            assert.strictEqual(status.auth.status, "authenticated");
+            assert.strictEqual(status.auth.email, "claude@example.com");
+            assert.strictEqual(status.auth.type, "max");
+            assert.strictEqual(status.auth.label, "Claude Max Subscription");
+          }).pipe(
+            Effect.provide(
+              mockSpawnerLayer((args) => {
+                const joined = args.join(" ");
+                if (joined === "--version") return { stdout: "1.0.0\n", stderr: "", code: 0 };
+                if (joined === "auth status")
+                  return {
+                    stdout:
+                      '{"loggedIn":true,"authMethod":"claude.ai","email":"claude@example.com","subscriptionType":"max"}\n',
+                    stderr: "",
+                    code: 0,
+                  };
+                throw new Error(`Unexpected args: ${joined}`);
+              }),
+            ),
+          ),
+      );
+
+      it.effect(
+        "keeps the probe verdict when `auth status` output is not parseable (older CLI)",
+        () =>
+          Effect.gen(function* () {
+            const status = yield* checkClaudeProviderStatus(
+              defaultClaudeSettings,
+              claudeCapabilities(),
+            );
+            assert.strictEqual(status.status, "ready");
+            assert.strictEqual(status.auth.status, "authenticated");
+          }).pipe(
+            Effect.provide(
+              mockSpawnerLayer((args) => {
+                const joined = args.join(" ");
+                if (joined === "--version") return { stdout: "1.0.0\n", stderr: "", code: 0 };
+                if (joined === "auth status")
+                  return {
+                    stdout: "",
+                    stderr: "Unknown command: auth\n",
+                    code: 1,
+                  };
+                throw new Error(`Unexpected args: ${joined}`);
+              }),
+            ),
+          ),
+      );
+
+      it.effect(
+        "skips the `auth status` cross-check when the capability probe already carries account evidence",
+        () =>
+          Effect.gen(function* () {
+            // The mock throws on any spawn other than `--version`: reaching the
+            // assertions proves the cross-check subprocess was never spawned.
+            const status = yield* checkClaudeProviderStatus(
+              defaultClaudeSettings,
+              claudeCapabilities({ subscriptionType: "maxplan" }),
+            );
+            assert.strictEqual(status.status, "ready");
+            assert.strictEqual(status.auth.status, "authenticated");
+          }).pipe(
+            Effect.provide(
+              mockSpawnerLayer((args) => {
+                const joined = args.join(" ");
+                if (joined === "--version") return { stdout: "1.0.0\n", stderr: "", code: 0 };
+                throw new Error(`Unexpected args: ${joined}`);
+              }),
+            ),
+          ),
+      );
 
       it.effect("includes probed claude slash commands in the provider snapshot", () =>
         Effect.gen(function* () {

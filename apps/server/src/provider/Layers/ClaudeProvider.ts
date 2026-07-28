@@ -29,10 +29,12 @@ import {
 } from "@anthropic-ai/claude-agent-sdk";
 
 import {
+  AUTH_PROBE_TIMEOUT_MS,
   buildBooleanOptionDescriptor,
   buildSelectOptionDescriptor,
   buildServerProvider,
   DEFAULT_TIMEOUT_MS,
+  extractAuthBoolean,
   isCommandMissingCause,
   parseGenericCliVersion,
   providerModelsFromSettings,
@@ -762,6 +764,48 @@ const probeClaudeCapabilities = (
   );
 };
 
+// ── `claude auth status` cross-check ────────────────────────────────
+
+type ClaudeAuthStatus = {
+  readonly loggedIn: boolean;
+  readonly email: string | undefined;
+  readonly subscriptionType: string | undefined;
+  readonly authMethod: string | undefined;
+};
+
+/**
+ * Parse the JSON output of `claude auth status`. Returns `undefined` when the
+ * output carries no recognizable logged-in flag (e.g. an older CLI without the
+ * subcommand), in which case the cross-check is inconclusive.
+ */
+export function parseClaudeAuthStatus(stdout: string): ClaudeAuthStatus | undefined {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(stdout);
+  } catch {
+    return undefined;
+  }
+  const loggedIn = extractAuthBoolean(parsed);
+  if (loggedIn === undefined || !parsed || typeof parsed !== "object") return undefined;
+  const record = parsed as {
+    readonly email?: unknown;
+    readonly authMethod?: unknown;
+    readonly subscriptionType?: unknown;
+    readonly account?: { readonly email?: unknown };
+  };
+  const email = typeof record.email === "string" ? record.email : record.account?.email;
+  return {
+    loggedIn,
+    email: typeof email === "string" ? nonEmptyProbeString(email) : undefined,
+    subscriptionType:
+      typeof record.subscriptionType === "string"
+        ? nonEmptyProbeString(record.subscriptionType)
+        : undefined,
+    authMethod:
+      typeof record.authMethod === "string" ? nonEmptyProbeString(record.authMethod) : undefined,
+  };
+}
+
 const runClaudeCommand = Effect.fn("runClaudeCommand")(function* (
   claudeSettings: ClaudeSettings,
   args: ReadonlyArray<string>,
@@ -927,6 +971,51 @@ export const checkClaudeProviderStatus = Effect.fn("checkClaudeProviderStatus")(
       subscriptionType: capabilities.subscriptionType,
       authMethod: capabilities.tokenSource,
     }) ?? apiProviderAuthMetadata(capabilities.apiProvider);
+
+  // The SDK capability probe initializes successfully even when the instance's
+  // CLAUDE_CONFIG_DIR has never been logged in, so a probe result with no
+  // account evidence (no email, no subscription, no token source, no API
+  // provider) proves nothing about auth. Cross-check with `claude auth status`
+  // in the instance environment; an explicit `loggedIn: false` wins.
+  let authStatus: ClaudeAuthStatus | undefined;
+  if (!capabilities.email && !authMetadata) {
+    const authStatusProbe = yield* runClaudeCommand(
+      claudeSettings,
+      ["auth", "status"],
+      resolvedEnvironment,
+    ).pipe(Effect.timeoutOption(AUTH_PROBE_TIMEOUT_MS), Effect.result);
+    if (Result.isSuccess(authStatusProbe) && Option.isSome(authStatusProbe.success)) {
+      authStatus = parseClaudeAuthStatus(authStatusProbe.success.value.stdout);
+    }
+    if (authStatus && !authStatus.loggedIn) {
+      return buildServerProvider({
+        presentation: CLAUDE_PRESENTATION,
+        enabled: claudeSettings.enabled,
+        checkedAt,
+        models,
+        slashCommands: dedupedSlashCommands,
+        skills,
+        probe: {
+          installed: true,
+          version: parsedVersion,
+          status: "error",
+          auth: { status: "unauthenticated" },
+          message:
+            "Claude Agent CLI is not logged in for this instance. Run `claude /login` with this instance's CLAUDE_CONFIG_DIR to authenticate.",
+        },
+      });
+    }
+  }
+
+  const resolvedAuthMetadata =
+    authMetadata ??
+    (authStatus?.loggedIn
+      ? claudeAuthMetadata({
+          subscriptionType: authStatus.subscriptionType,
+          authMethod: authStatus.authMethod,
+        })
+      : undefined);
+  const email = capabilities.email ?? (authStatus?.loggedIn ? authStatus.email : undefined);
   return buildServerProvider({
     presentation: CLAUDE_PRESENTATION,
     enabled: claudeSettings.enabled,
@@ -940,8 +1029,8 @@ export const checkClaudeProviderStatus = Effect.fn("checkClaudeProviderStatus")(
       status: "ready",
       auth: {
         status: "authenticated",
-        ...(capabilities.email ? { email: capabilities.email } : {}),
-        ...(authMetadata ? authMetadata : {}),
+        ...(email ? { email } : {}),
+        ...(resolvedAuthMetadata ? resolvedAuthMetadata : {}),
       },
       ...(versionUpgradeMessage ? { message: versionUpgradeMessage } : {}),
     },
