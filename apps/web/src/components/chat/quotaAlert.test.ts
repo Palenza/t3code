@@ -1,9 +1,35 @@
 import type { ServerProvider } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
-import { resolveQuotaAlert } from "./quotaAlert";
+import { resolveQuotaAlert, resolveQuotaSwitchTarget } from "./quotaAlert";
 
 const NOW = Date.parse("2026-07-28T00:00:00.000Z");
+
+const account = (input: {
+  readonly instanceId: string;
+  readonly displayName?: string;
+  readonly driver?: string;
+  readonly status?: string;
+  readonly authStatus?: string;
+  readonly enabled?: boolean;
+  readonly windows?: ReadonlyArray<Record<string, unknown>>;
+}): ServerProvider =>
+  ({
+    instanceId: input.instanceId,
+    driver: input.driver ?? "claudeAgent",
+    displayName: input.displayName ?? input.instanceId,
+    enabled: input.enabled ?? true,
+    installed: true,
+    status: input.status ?? "ready",
+    auth: { status: input.authStatus ?? "authenticated" },
+    checkedAt: "2026-07-28T00:00:00.000Z",
+    models: [],
+    slashCommands: [],
+    skills: [],
+    ...(input.windows
+      ? { rateLimits: { observedAt: "2026-07-28T00:00:00.000Z", windows: input.windows } }
+      : {}),
+  }) as never;
 
 const provider = (windows: ReadonlyArray<Record<string, unknown>>): ServerProvider =>
   ({
@@ -129,5 +155,116 @@ describe("resolveQuotaAlert", () => {
     } as ServerProvider;
 
     expect(resolveQuotaAlert({ provider: stale, now: NOW })).toBeNull();
+  });
+});
+
+describe("resolveQuotaSwitchTarget", () => {
+  const exhausted = account({
+    instanceId: "claude-a",
+    displayName: "Compte A",
+    windows: [{ kind: "five_hour", utilization: 97 }],
+  });
+
+  it("proposes the other account when this one is at the wall", () => {
+    const fresh = account({
+      instanceId: "claude-b",
+      displayName: "Compte B",
+      windows: [{ kind: "five_hour", utilization: 4 }],
+    });
+
+    const target = resolveQuotaSwitchTarget({
+      providers: [exhausted, fresh],
+      active: exhausted,
+      now: NOW,
+    });
+
+    expect(target?.instanceId).toBe("claude-b");
+  });
+
+  it("never sends someone from one wall into another", () => {
+    const alsoExhausted = account({
+      instanceId: "claude-b",
+      windows: [{ kind: "five_hour", utilization: 95 }],
+    });
+
+    expect(
+      resolveQuotaSwitchTarget({
+        providers: [exhausted, alsoExhausted],
+        active: exhausted,
+        now: NOW,
+      }),
+    ).toBeNull();
+  });
+
+  it("refuses to answer a Claude limit with a different model family", () => {
+    // Quietly moving the work to another provider would change the answer the
+    // user gets, without them asking for it.
+    const codex = account({ instanceId: "codex-default", driver: "codex" });
+
+    expect(
+      resolveQuotaSwitchTarget({ providers: [exhausted, codex], active: exhausted, now: NOW }),
+    ).toBeNull();
+  });
+
+  it("ignores accounts that cannot actually run a turn", () => {
+    const signedOut = account({ instanceId: "claude-b", authStatus: "unauthenticated" });
+    const off = account({ instanceId: "claude-c", enabled: false });
+    const broken = account({ instanceId: "claude-d", status: "error" });
+
+    expect(
+      resolveQuotaSwitchTarget({
+        providers: [exhausted, signedOut, off, broken],
+        active: exhausted,
+        now: NOW,
+      }),
+    ).toBeNull();
+  });
+
+  it("prefers an account it can see over one it knows nothing about", () => {
+    // "Never reported" is unknown, not free. It stays a candidate — it may be
+    // the only one — but it never outranks an account visibly comfortable.
+    const unknown = account({ instanceId: "claude-unknown" });
+    const comfortable = account({
+      instanceId: "claude-known",
+      windows: [{ kind: "five_hour", utilization: 20 }],
+    });
+
+    expect(
+      resolveQuotaSwitchTarget({
+        providers: [exhausted, unknown, comfortable],
+        active: exhausted,
+        now: NOW,
+      })?.instanceId,
+    ).toBe("claude-known");
+    expect(
+      resolveQuotaSwitchTarget({ providers: [exhausted, unknown], active: exhausted, now: NOW })
+        ?.instanceId,
+    ).toBe("claude-unknown");
+  });
+
+  it("takes the roomiest of several", () => {
+    const busy = account({
+      instanceId: "claude-busy",
+      windows: [{ kind: "five_hour", utilization: 70 }],
+    });
+    const idle = account({
+      instanceId: "claude-idle",
+      windows: [{ kind: "five_hour", utilization: 3 }],
+    });
+
+    expect(
+      resolveQuotaSwitchTarget({
+        providers: [exhausted, busy, idle],
+        active: exhausted,
+        now: NOW,
+      })?.instanceId,
+    ).toBe("claude-idle");
+  });
+
+  it("has nothing to propose when there is only one account", () => {
+    expect(
+      resolveQuotaSwitchTarget({ providers: [exhausted], active: exhausted, now: NOW }),
+    ).toBeNull();
+    expect(resolveQuotaSwitchTarget({ providers: [], active: null, now: NOW })).toBeNull();
   });
 });

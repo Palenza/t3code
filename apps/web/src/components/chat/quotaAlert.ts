@@ -68,6 +68,78 @@ const worstGauge = (gauges: ReadonlyArray<RateLimitGauge>): RateLimitGauge | und
   return worst;
 };
 
+/**
+ * The other account to send the next turn to, when there is one.
+ *
+ * WHAT THIS IS NOT: no token is read, written or swapped, and no client is
+ * impersonated. Each account is already a configured provider instance with
+ * its own `CLAUDE_CONFIG_DIR`, signed in the ordinary way with
+ * `claude auth login`. Switching means running the next turn on the other
+ * instance — the official CLI, pointed at the other subscription.
+ *
+ * Proxies that re-use Claude Code's own OAuth client id to serve arbitrary API
+ * traffic from a subscription solve this differently and put both accounts at
+ * risk. This does the same job with none of that.
+ */
+export const resolveQuotaSwitchTarget = (input: {
+  readonly providers: ReadonlyArray<ServerProvider>;
+  readonly active: ServerProvider | null;
+  readonly now: number;
+}): ServerProvider | null => {
+  const active = input.active;
+  if (!active) {
+    return null;
+  }
+
+  const candidates = input.providers
+    .filter(
+      (provider) =>
+        // Same driver: a Claude limit is answered by another Claude account,
+        // never by silently moving the work to a different model family.
+        provider.driver === active.driver &&
+        provider.instanceId !== active.instanceId &&
+        provider.enabled &&
+        provider.installed &&
+        provider.status === "ready" &&
+        provider.auth.status === "authenticated",
+    )
+    .map((provider) => {
+      const presented = presentProviderRateLimits({
+        rateLimits: provider.rateLimits,
+        now: input.now,
+      });
+      const gauge = presented === null ? undefined : worstGauge(presented.gauges);
+      return {
+        provider,
+        // `null` means "this account has not reported yet" — unknown, which is
+        // not the same as free. It is still a candidate, but it never outranks
+        // an account we can see is comfortable.
+        worst:
+          gauge === undefined
+            ? null
+            : (gauge.barPercent ?? (gauge.percentLabel === null ? 100 : 0)),
+        rejected: gauge?.severityLabel === "limit reached",
+      };
+    })
+    // Sending someone from one wall into another is worse than saying nothing.
+    .filter((candidate) => !candidate.rejected && (candidate.worst ?? 0) < CRITICAL_AT);
+
+  if (candidates.length === 0) {
+    return null;
+  }
+
+  // Known-and-comfortable first, unknown after. Preferring an account whose
+  // state we can see keeps the suggestion honest.
+  const ranked = [...candidates].sort((left, right) => {
+    if (left.worst === null && right.worst === null) return 0;
+    if (left.worst === null) return 1;
+    if (right.worst === null) return -1;
+    return left.worst - right.worst;
+  });
+
+  return ranked[0]?.provider ?? null;
+};
+
 export const resolveQuotaAlert = (input: {
   readonly provider: ServerProvider | null;
   readonly now: number;

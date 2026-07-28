@@ -238,7 +238,7 @@ import {
 import { ThreadErrorBanner } from "./chat/ThreadErrorBanner";
 import { resolveThreadPr } from "./ThreadStatusIndicators";
 import { ComposerBannerStack, type ComposerBannerStackItem } from "./chat/ComposerBannerStack";
-import { resolveQuotaAlert } from "./chat/quotaAlert";
+import { resolveQuotaAlert, resolveQuotaSwitchTarget } from "./chat/quotaAlert";
 import {
   DRAFT_HERO_TRANSITION_ANIMATION_ID,
   DRAFT_HERO_TRANSITION_DURATION_MS,
@@ -4137,10 +4137,33 @@ function ChatViewContent(props: ChatViewProps) {
     () => resolveQuotaAlert({ provider: activeProviderStatus, now: Date.now() }),
     [activeProviderStatus],
   );
+  // `onProviderModelSelect` is declared several hundred lines below in this
+  // component; reaching it through a ref costs one indirection and avoids
+  // moving upstream code around, which would be paid again at every sync.
+  const providerModelSelectRef = useRef<
+    ((instanceId: ProviderInstanceId, model: string) => void) | null
+  >(null);
+
+  // The other subscription, when there is one that can actually take over.
+  // Nothing is done with credentials here: each account is already a provider
+  // instance signed in the ordinary way, and switching runs the next turn on
+  // that instance instead.
+  const quotaSwitchTarget = useMemo(
+    () =>
+      quotaAlert === null
+        ? null
+        : resolveQuotaSwitchTarget({
+            providers: providerStatuses,
+            active: activeProviderStatus,
+            now: Date.now(),
+          }),
+    [activeProviderStatus, providerStatuses, quotaAlert],
+  );
   const quotaAlertItems = useMemo<ComposerBannerStackItem[]>(() => {
     if (quotaAlert === null || quotaAlert.id === dismissedQuotaAlertId) {
       return [];
     }
+    const targetName = quotaSwitchTarget?.displayName?.trim() || quotaSwitchTarget?.instanceId;
     return [
       {
         id: quotaAlert.id,
@@ -4148,13 +4171,33 @@ function ChatViewContent(props: ChatViewProps) {
         icon: <TriangleAlertIcon />,
         title: quotaAlert.title,
         description: quotaAlert.description,
+        // Offered, never done behind their back. Switching account changes
+        // which subscription pays for the next turn, and that is the user's
+        // call — the button also goes through the ordinary selection path, so
+        // a turn already running is protected by the same guard as the model
+        // picker.
+        actions:
+          quotaSwitchTarget && targetName ? (
+            <Button
+              size="xs"
+              variant="outline"
+              onClick={() => {
+                providerModelSelectRef.current?.(
+                  quotaSwitchTarget.instanceId,
+                  activeThread?.modelSelection?.model ?? "",
+                );
+              }}
+            >
+              Run on {targetName}
+            </Button>
+          ) : undefined,
         dismissLabel: "Dismiss quota warning",
         // Dismissing silences THIS level only: the id carries it, so the same
         // window coming back worse speaks again.
         onDismiss: () => setDismissedQuotaAlertId(quotaAlert.id),
       },
     ];
-  }, [dismissedQuotaAlertId, quotaAlert]);
+  }, [activeThread, dismissedQuotaAlertId, quotaAlert, quotaSwitchTarget]);
 
   const composerBannerItems = useMemo<ComposerBannerStackItem[]>(() => {
     const parkedThreadItems = parkedThreadBannerItem === null ? [] : [parkedThreadBannerItem];
@@ -5492,6 +5535,10 @@ function ChatViewContent(props: ChatViewProps) {
       settings,
     ],
   );
+  useEffect(() => {
+    providerModelSelectRef.current = onProviderModelSelect;
+  }, [onProviderModelSelect]);
+
   const onEnvModeChange = useCallback(
     (mode: DraftThreadEnvMode) => {
       if (canOverrideServerThreadEnvMode) {
