@@ -67,8 +67,33 @@ Trois décisions à ne pas défaire :
 retard alors que le trousseau est à jour (constaté). D'où l'ordre trousseau
 d'abord, et le contrôle d'expiration.
 
-Reste la tranche 4 (alerter avant le mur, puis basculer de compte) — désormais
-possible : il y a enfin un chiffre à comparer à un seuil.
+## Tranche 4a — alerter avant le mur : FAIT (28/07)
+
+Bandeau au-dessus du composer, là où on travaille. Seuils 75 % (avertir) et
+90 % (fort), plus tout refus du fournisseur. `apps/web/src/components/chat/
+quotaAlert.ts`.
+
+Le difficile n'est pas le seuil, c'est **le silence** : un bandeau qui sort à
+40 % apprend à fermer les bandeaux sans les lire. L'identité du bandeau porte
+le NIVEAU — fermer à 76 % ne rend pas muet à 95 %.
+
+Prouvé à l'écran avec des chiffres réels (seuil abaissé le temps de la capture,
+puis remis).
+
+## Tranche 4b — bascule automatique de compte : NON FAITE, et à décider
+
+Ce n'est pas la suite naturelle de 4a, c'est un autre métier : **écrire** dans
+le trousseau macOS pour échanger le jeton d'un compte à l'autre. Un bug là ne
+fait pas afficher un mauvais chiffre, il **déconnecte le compte**.
+
+À trancher avant d'écrire une ligne :
+- où vit le second jeu de credentials (second `CLAUDE_CONFIG_DIR` plutôt que le
+  trousseau, probablement — ça évite d'écrire dans le trousseau) ;
+- la bascule se fait **entre deux tours**, jamais au milieu : un `claude` en
+  cours garde son jeton en mémoire ;
+- que se passe-t-il si les deux comptes sont au mur.
+
+Cf. [[deux-abonnements-max-bascule]] pour la méthode `cc-compte`.
 
 ## Constat
 
