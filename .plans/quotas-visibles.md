@@ -44,11 +44,31 @@ Le pourcentage vérifié le 27/07 contre `api.anthropic.com/api/oauth/usage`
 existe bel et bien — mais **il vient de cet endpoint, pas de l'événement du
 SDK**. Deux sources différentes, confondues.
 
-**Donc, pour un vrai pourcentage** (tranche 4 ou avant), il faudra lire
-l'endpoint OAuth d'usage. Ce n'est pas un affichage en plus : c'est une source
-en plus, avec son jeton, son coût réseau et sa cadence. À décider explicitement.
+**Fait le 28/07 : la source du pourcentage est branchée.** L'API de compte
+(`/api/oauth/usage`) est interrogée quand l'événement dit que l'usage a bougé —
+pas par minuterie : c'est l'instant où le chiffre devient périmé ET où
+quelqu'un regarde. Rendu réel, prouvé dans l'app : « 5-hour limit · resets in
+about 4 h · 16 % » et « Weekly limit · resets in about 13 h · 14 % ».
 
-Reste la tranche 4 (alerter, puis basculer de compte).
+Trois décisions à ne pas défaire :
+
+- **Attribution par construction** : la source du credential vient du
+  `CLAUDE_CONFIG_DIR` de l'instance (défaut → trousseau macOS, puis fichier).
+  Aucun chemin ne permet à une instance de lire le credential d'une autre.
+  Corollaire : l'appel est monté dans le driver, seul endroit où le compte est
+  connu, et passé à l'adaptateur déjà câblé.
+- **Fusion par champ** : l'événement détient la sévérité, l'API le
+  pourcentage ; un remplacement en bloc ferait osciller la jauge entre les deux
+  moitiés de la vérité.
+- **Un 401 est bruyant et ne touche pas au stock** : on a cessé de savoir, on
+  ne fige pas un chiffre qui aurait l'air courant.
+
+⚠️ La copie fichier du credential sous `~/.claude` peut avoir des jours de
+retard alors que le trousseau est à jour (constaté). D'où l'ordre trousseau
+d'abord, et le contrôle d'expiration.
+
+Reste la tranche 4 (alerter avant le mur, puis basculer de compte) — désormais
+possible : il y a enfin un chiffre à comparer à un seuil.
 
 ## Constat
 
