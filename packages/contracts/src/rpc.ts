@@ -145,6 +145,19 @@ import {
   SourceControlRepositoryInfo,
   SourceControlRepositoryLookupInput,
 } from "./sourceControl.ts";
+import {
+  TranscriptionAudioChunkInput,
+  TranscriptionError,
+  TranscriptionStartInput,
+  TranscriptionStopInput,
+  TranscriptionUpdate,
+} from "./transcription.ts";
+import {
+  ServerVoiceModelError,
+  ServerVoiceModelSnapshot,
+  ServerVoiceModelStateEvent,
+  ServerVoiceModelTarget,
+} from "./voice-models.ts";
 import { VcsError } from "./vcs.ts";
 
 export const WS_METHODS = {
@@ -228,6 +241,17 @@ export const WS_METHODS = {
   sourceControlCloneRepository: "sourceControl.cloneRepository",
   sourceControlPublishRepository: "sourceControl.publishRepository",
 
+  // Transcription methods
+  transcriptionStart: "transcription.start",
+  transcriptionSendAudio: "transcription.sendAudio",
+  transcriptionStop: "transcription.stop",
+  voiceModelsGetState: "voiceModels.getState",
+  voiceModelsDownload: "voiceModels.download",
+  voiceModelsPauseDownload: "voiceModels.pauseDownload",
+  voiceModelsCancelDownload: "voiceModels.cancelDownload",
+  voiceModelsRemove: "voiceModels.remove",
+  voiceModelsSelect: "voiceModels.select",
+
   // Streaming subscriptions
   subscribeVcsStatus: "subscribeVcsStatus",
   subscribeTerminalEvents: "subscribeTerminalEvents",
@@ -237,6 +261,7 @@ export const WS_METHODS = {
   subscribeServerConfig: "subscribeServerConfig",
   subscribeServerLifecycle: "subscribeServerLifecycle",
   subscribeAuthAccess: "subscribeAuthAccess",
+  subscribeVoiceModelState: "subscribeVoiceModelState",
 } as const;
 
 export const WsServerUpsertKeybindingRpc = Rpc.make(WS_METHODS.serverUpsertKeybinding, {
@@ -698,6 +723,71 @@ export const WsSubscribeAuthAccessRpc = Rpc.make(WS_METHODS.subscribeAuthAccess,
   stream: true,
 });
 
+export const WsTranscriptionStartRpc = Rpc.make(WS_METHODS.transcriptionStart, {
+  payload: TranscriptionStartInput,
+  success: TranscriptionUpdate,
+  error: Schema.Union([TranscriptionError, EnvironmentAuthorizationError]),
+  stream: true,
+});
+
+export const WsTranscriptionSendAudioRpc = Rpc.make(WS_METHODS.transcriptionSendAudio, {
+  payload: TranscriptionAudioChunkInput,
+  error: Schema.Union([TranscriptionError, EnvironmentAuthorizationError]),
+});
+
+export const WsTranscriptionStopRpc = Rpc.make(WS_METHODS.transcriptionStop, {
+  payload: TranscriptionStopInput,
+  error: Schema.Union([TranscriptionError, EnvironmentAuthorizationError]),
+});
+
+const ServerVoiceModelRpcError = Schema.Union([
+  ServerVoiceModelError,
+  EnvironmentAuthorizationError,
+]);
+
+export const WsVoiceModelsGetStateRpc = Rpc.make(WS_METHODS.voiceModelsGetState, {
+  payload: Schema.Struct({}),
+  success: ServerVoiceModelSnapshot,
+  error: ServerVoiceModelRpcError,
+});
+
+export const WsVoiceModelsDownloadRpc = Rpc.make(WS_METHODS.voiceModelsDownload, {
+  payload: ServerVoiceModelTarget,
+  success: ServerVoiceModelSnapshot,
+  error: ServerVoiceModelRpcError,
+});
+
+export const WsVoiceModelsPauseDownloadRpc = Rpc.make(WS_METHODS.voiceModelsPauseDownload, {
+  payload: ServerVoiceModelTarget,
+  success: ServerVoiceModelSnapshot,
+  error: ServerVoiceModelRpcError,
+});
+
+export const WsVoiceModelsCancelDownloadRpc = Rpc.make(WS_METHODS.voiceModelsCancelDownload, {
+  payload: ServerVoiceModelTarget,
+  success: ServerVoiceModelSnapshot,
+  error: ServerVoiceModelRpcError,
+});
+
+export const WsVoiceModelsRemoveRpc = Rpc.make(WS_METHODS.voiceModelsRemove, {
+  payload: ServerVoiceModelTarget,
+  success: ServerVoiceModelSnapshot,
+  error: ServerVoiceModelRpcError,
+});
+
+export const WsVoiceModelsSelectRpc = Rpc.make(WS_METHODS.voiceModelsSelect, {
+  payload: ServerVoiceModelTarget,
+  success: ServerVoiceModelSnapshot,
+  error: ServerVoiceModelRpcError,
+});
+
+export const WsSubscribeVoiceModelStateRpc = Rpc.make(WS_METHODS.subscribeVoiceModelState, {
+  payload: Schema.Struct({}),
+  success: ServerVoiceModelStateEvent,
+  error: ServerVoiceModelRpcError,
+  stream: true,
+});
+
 export const WsRpcGroup = RpcGroup.make(
   WsServerProbeRpc,
   WsServerGetConfigRpc,
@@ -745,6 +835,16 @@ export const WsRpcGroup = RpcGroup.make(
   WsTerminalClearRpc,
   WsTerminalRestartRpc,
   WsTerminalCloseRpc,
+  WsTranscriptionStartRpc,
+  WsTranscriptionSendAudioRpc,
+  WsTranscriptionStopRpc,
+  WsVoiceModelsGetStateRpc,
+  WsVoiceModelsDownloadRpc,
+  WsVoiceModelsPauseDownloadRpc,
+  WsVoiceModelsCancelDownloadRpc,
+  WsVoiceModelsRemoveRpc,
+  WsVoiceModelsSelectRpc,
+  WsSubscribeVoiceModelStateRpc,
   WsSubscribeTerminalEventsRpc,
   WsSubscribeTerminalMetadataRpc,
   WsPreviewOpenRpc,

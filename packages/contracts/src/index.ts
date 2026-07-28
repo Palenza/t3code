@@ -26,4 +26,7 @@ export * from "./assets.ts";
 export * from "./review.ts";
 export * from "./preview.ts";
 export * from "./previewAutomation.ts";
+export * from "./transcription.ts";
+export * from "./voice-local.ts";
+export * from "./voice-models.ts";
 export * from "./rpc.ts";

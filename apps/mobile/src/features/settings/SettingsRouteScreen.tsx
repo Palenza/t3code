@@ -127,6 +127,7 @@ function LocalSettingsRouteScreen() {
             value={`${environmentCount}`}
             target="SettingsEnvironments"
           />
+          <SettingsRow icon="waveform" label="Voice" target="SettingsVoice" />
         </SettingsSection>
 
         <GeneralSettingsSection />
@@ -480,6 +481,7 @@ function ConfiguredSettingsRouteScreen() {
             value={`${environmentCount}`}
             target="SettingsEnvironments"
           />
+          <SettingsRow icon="waveform" label="Voice" target="SettingsVoice" />
           <SettingsSwitchRow
             icon="bell.badge"
             label="Device Notifications"

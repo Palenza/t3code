@@ -181,6 +181,49 @@ export function isRetryableDevelopmentRendererLoadFailure(input: {
   );
 }
 
+function mediaRequestIncludesAudio(details: Electron.PermissionRequest): boolean {
+  const mediaDetails = details as Electron.MediaAccessPermissionRequest;
+  return (
+    mediaDetails.mediaTypes !== undefined &&
+    mediaDetails.mediaTypes.length > 0 &&
+    mediaDetails.mediaTypes.every((mediaType) => mediaType === "audio")
+  );
+}
+
+function mediaCheckIncludesAudio(details: Electron.PermissionCheckHandlerHandlerDetails): boolean {
+  return details.mediaType === "audio";
+}
+
+// `navigator.clipboard` read/write is gated behind these permissions in Electron.
+// Because we install permission handlers (for microphone access), we become
+// responsible for every permission decision, so we must explicitly re-allow
+// clipboard access for the renderer or copy-to-clipboard silently fails app-wide.
+function isClipboardPermission(permission: string): boolean {
+  return permission === "clipboard-read" || permission === "clipboard-sanitized-write";
+}
+
+function isAllowedRendererOrigin(input: {
+  readonly applicationUrl: string;
+  readonly requestOrigin: string;
+}): boolean {
+  if (input.requestOrigin.length === 0) return false;
+  return isSameOriginRendererNavigation({
+    applicationUrl: input.applicationUrl,
+    navigationUrl: input.requestOrigin,
+  });
+}
+
+async function requestMicrophonePermission(platform: NodeJS.Platform): Promise<boolean> {
+  if (platform !== "darwin") return true;
+
+  const status = Electron.systemPreferences.getMediaAccessStatus("microphone");
+  if (status === "granted") return true;
+  if (status === "not-determined") {
+    return Electron.systemPreferences.askForMediaAccess("microphone");
+  }
+  return false;
+}
+
 function getWindowTitleBarOptions(
   shouldUseDarkColors: boolean,
   platform: NodeJS.Platform,
@@ -443,6 +486,61 @@ export const make = Effect.gen(function* () {
       webPreferences.nodeIntegrationInSubFrames = false;
       webPreferences.contextIsolation = false;
     });
+
+    window.webContents.session.setPermissionCheckHandler(
+      (_webContents, permission, origin, details) => {
+        if (isClipboardPermission(permission)) {
+          return isAllowedRendererOrigin({ applicationUrl, requestOrigin: origin });
+        }
+        if (permission !== "media") return false;
+        if (!mediaCheckIncludesAudio(details)) return false;
+        if (!isAllowedRendererOrigin({ applicationUrl, requestOrigin: origin })) return false;
+        if (environment.platform !== "darwin") return true;
+        // `not-determined` must pass the check so getUserMedia can reach the
+        // request handler, which calls `askForMediaAccess` to show the macOS
+        // prompt. Returning false here for `not-determined` rejects the request
+        // before it can ever prompt, leaving the status stuck forever.
+        const microphoneStatus = Electron.systemPreferences.getMediaAccessStatus("microphone");
+        return microphoneStatus === "granted" || microphoneStatus === "not-determined";
+      },
+    );
+    window.webContents.session.setPermissionRequestHandler(
+      (_webContents, permission, callback, details) => {
+        if (isClipboardPermission(permission)) {
+          callback(
+            isAllowedRendererOrigin({
+              applicationUrl,
+              requestOrigin: window.webContents.getURL(),
+            }),
+          );
+          return;
+        }
+        if (permission !== "media" || !mediaRequestIncludesAudio(details)) {
+          callback(false);
+          return;
+        }
+        const requestOrigin =
+          (details as Electron.MediaAccessPermissionRequest).securityOrigin ??
+          window.webContents.getURL();
+        if (!isAllowedRendererOrigin({ applicationUrl, requestOrigin })) {
+          callback(false);
+          return;
+        }
+
+        void requestMicrophonePermission(environment.platform)
+          .then((granted) => {
+            callback(granted);
+          })
+          .catch((cause: unknown) => {
+            callback(false);
+            void runPromise(
+              logWindowWarning("microphone permission request failed", {
+                cause: cause instanceof Error ? cause.message : String(cause),
+              }),
+            );
+          });
+      },
+    );
 
     window.webContents.on("context-menu", (event, params) => {
       event.preventDefault();

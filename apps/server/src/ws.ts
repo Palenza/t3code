@@ -57,6 +57,9 @@ import {
   type TerminalError,
   type TerminalEvent,
   type TerminalMetadataStreamEvent,
+  type TranscriptionError,
+  type TranscriptionUpdate,
+  ServerVoiceModelError,
   WS_METHODS,
   WsRpcGroup,
 } from "@t3tools/contracts";
@@ -89,6 +92,8 @@ import * as ServerLifecycleEvents from "./serverLifecycleEvents.ts";
 import * as ServerRuntimeStartup from "./serverRuntimeStartup.ts";
 import * as ServerSettings from "./serverSettings.ts";
 import * as TerminalManager from "./terminal/Manager.ts";
+import * as TranscriptionService from "./transcription/TranscriptionService.ts";
+import * as ServerVoiceModelManager from "./transcription/ServerVoiceModelManager.ts";
 import * as PreviewAutomationBroker from "./mcp/PreviewAutomationBroker.ts";
 import * as PreviewManager from "./preview/Manager.ts";
 import { issueAssetUrl } from "./assets/AssetAccess.ts";
@@ -292,6 +297,7 @@ function isThreadDetailEvent(event: OrchestrationEvent): event is Extract<
 }
 
 const PROVIDER_STATUS_DEBOUNCE_MS = 200;
+const isServerVoiceModelError = Schema.is(ServerVoiceModelError);
 
 // When a resuming client's cursor is more than this many events behind the
 // current head, skip the per-event catch-up replay and send a fresh shell
@@ -354,6 +360,16 @@ const RPC_REQUIRED_SCOPE = new Map<string, AuthEnvironmentScope>([
   [WS_METHODS.terminalClear, AuthTerminalOperateScope],
   [WS_METHODS.terminalRestart, AuthTerminalOperateScope],
   [WS_METHODS.terminalClose, AuthTerminalOperateScope],
+  [WS_METHODS.transcriptionStart, AuthOrchestrationOperateScope],
+  [WS_METHODS.transcriptionSendAudio, AuthOrchestrationOperateScope],
+  [WS_METHODS.transcriptionStop, AuthOrchestrationOperateScope],
+  [WS_METHODS.voiceModelsGetState, AuthOrchestrationReadScope],
+  [WS_METHODS.voiceModelsDownload, AuthOrchestrationOperateScope],
+  [WS_METHODS.voiceModelsPauseDownload, AuthOrchestrationOperateScope],
+  [WS_METHODS.voiceModelsCancelDownload, AuthOrchestrationOperateScope],
+  [WS_METHODS.voiceModelsRemove, AuthOrchestrationOperateScope],
+  [WS_METHODS.voiceModelsSelect, AuthOrchestrationOperateScope],
+  [WS_METHODS.subscribeVoiceModelState, AuthOrchestrationReadScope],
   [WS_METHODS.subscribeTerminalEvents, AuthTerminalOperateScope],
   [WS_METHODS.subscribeTerminalMetadata, AuthTerminalOperateScope],
   [WS_METHODS.previewOpen, AuthOrchestrationOperateScope],
@@ -431,6 +447,8 @@ const makeWsRpcLayer = (
       const vcsProvisioning = yield* VcsProvisioningService.VcsProvisioningService;
       const vcsStatusBroadcaster = yield* VcsStatusBroadcaster.VcsStatusBroadcaster;
       const terminalManager = yield* TerminalManager.TerminalManager;
+      const transcription = yield* TranscriptionService.TranscriptionService;
+      const voiceModels = yield* ServerVoiceModelManager.ServerVoiceModelManager;
       const previewManager = yield* PreviewManager.PreviewManager;
       const portDiscovery = yield* PortScanner.PortDiscovery;
       const providerRegistry = yield* ProviderRegistry.ProviderRegistry;
@@ -482,6 +500,17 @@ const makeWsRpcLayer = (
         currentSession.scopes.includes(requiredScope)
           ? stream
           : Stream.fail(authorizationError(requiredScope));
+      const voiceModelEffect = <A>(operation: () => Promise<A>) =>
+        Effect.tryPromise({
+          try: operation,
+          catch: (cause) =>
+            isServerVoiceModelError(cause)
+              ? cause
+              : new ServerVoiceModelError({
+                  reason: "io",
+                  detail: cause instanceof Error ? cause.message : String(cause),
+                }),
+        });
       const requiredScopeForMethod = (method: string): AuthEnvironmentScope => {
         const requiredScope = RPC_REQUIRED_SCOPE.get(method);
         if (requiredScope === undefined) {
@@ -1911,6 +1940,92 @@ const makeWsRpcLayer = (
           observeRpcEffect(WS_METHODS.terminalClose, terminalManager.close(input), {
             "rpc.aggregate": "terminal",
           }),
+        [WS_METHODS.transcriptionStart]: (input) =>
+          observeRpcStream(
+            WS_METHODS.transcriptionStart,
+            Stream.callback<TranscriptionUpdate, TranscriptionError>((queue) =>
+              Effect.acquireRelease(
+                transcription.start(
+                  input,
+                  {
+                    publish: (update) => Queue.offer(queue, update).pipe(Effect.asVoid),
+                    fail: (error) => Queue.fail(queue, error).pipe(Effect.asVoid),
+                    end: Queue.end(queue).pipe(Effect.asVoid),
+                  },
+                  currentSessionId,
+                ),
+                (cleanup) => cleanup,
+              ),
+            ),
+            { "rpc.aggregate": "transcription" },
+          ),
+        [WS_METHODS.transcriptionSendAudio]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.transcriptionSendAudio,
+            transcription.sendAudio(input, currentSessionId),
+            {
+              "rpc.aggregate": "transcription",
+            },
+          ),
+        [WS_METHODS.transcriptionStop]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.transcriptionStop,
+            transcription.stop(input, currentSessionId),
+            {
+              "rpc.aggregate": "transcription",
+            },
+          ),
+        [WS_METHODS.voiceModelsGetState]: () =>
+          observeRpcEffect(
+            WS_METHODS.voiceModelsGetState,
+            voiceModelEffect(() => voiceModels.getSnapshot()),
+            { "rpc.aggregate": "voiceModels" },
+          ),
+        [WS_METHODS.voiceModelsDownload]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.voiceModelsDownload,
+            voiceModelEffect(() => voiceModels.download(input)),
+            { "rpc.aggregate": "voiceModels" },
+          ),
+        [WS_METHODS.voiceModelsPauseDownload]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.voiceModelsPauseDownload,
+            voiceModelEffect(() => voiceModels.pauseDownload(input)),
+            { "rpc.aggregate": "voiceModels" },
+          ),
+        [WS_METHODS.voiceModelsCancelDownload]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.voiceModelsCancelDownload,
+            voiceModelEffect(() => voiceModels.cancelDownload(input)),
+            { "rpc.aggregate": "voiceModels" },
+          ),
+        [WS_METHODS.voiceModelsRemove]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.voiceModelsRemove,
+            voiceModelEffect(() => voiceModels.removeModel(input)),
+            { "rpc.aggregate": "voiceModels" },
+          ),
+        [WS_METHODS.voiceModelsSelect]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.voiceModelsSelect,
+            voiceModelEffect(() => voiceModels.selectModel(input)),
+            { "rpc.aggregate": "voiceModels" },
+          ),
+        [WS_METHODS.subscribeVoiceModelState]: () =>
+          observeRpcStream(
+            WS_METHODS.subscribeVoiceModelState,
+            Stream.callback((queue) =>
+              Effect.gen(function* () {
+                const context = yield* Effect.context<never>();
+                const runSync = Effect.runSyncWith(context);
+                const unsubscribe = voiceModels.subscribe((event) => {
+                  runSync(Queue.offer(queue, event));
+                });
+                return yield* Effect.succeed(Effect.sync(unsubscribe));
+              }),
+            ),
+            { "rpc.aggregate": "voiceModels" },
+          ),
         [WS_METHODS.subscribeTerminalEvents]: (_input) =>
           observeRpcStream(
             WS_METHODS.subscribeTerminalEvents,
