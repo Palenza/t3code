@@ -80,7 +80,35 @@ le NIVEAU — fermer à 76 % ne rend pas muet à 95 %.
 Prouvé à l'écran avec des chiffres réels (seuil abaissé le temps de la capture,
 puis remis).
 
-## Tranche 4b — bascule automatique de compte : NON FAITE, et à décider
+## Tranche 4b — bascule de compte : FAITE, sans toucher aux jetons (28/07)
+
+Le bandeau propose « Run on <autre compte> ». Chaque compte est déjà une
+instance de provider avec son propre `CLAUDE_CONFIG_DIR` ; basculer = lancer le
+tour suivant sur cette instance, avec le CLI officiel. **Aucun jeton lu, écrit
+ou échangé ; aucun client usurpé.**
+
+Pour l'activer, un geste fondateur, une fois par compte :
+
+```
+CLAUDE_CONFIG_DIR=~/.claude-compte-a claude auth login
+```
+
+puis, dans Réglages → Providers → +, ajouter une instance Claude dont le
+`homePath` est ce dossier. Le bouton apparaît dès qu'un second compte connecté
+existe.
+
+### Pourquoi PAS CLIProxyAPI / CPAMC
+
+Vérifié sur `CLIProxyAPI@cade44b` (28/07) :
+`internal/auth/claude/anthropic_auth.go:27` → `ClientID` =
+`9d1c250a-e61b-44d9-88ed-5944d1962f5e` (l'identifiant client officiel de Claude
+Code), `AuthURL` = `claude.ai/oauth/authorize` (donc une connexion ABONNEMENT),
+et `claude_code_instructions.txt` embarqué pour que le trafic ressemble à
+Claude Code. C'est du trafic API arbitraire servi depuis un abonnement en se
+faisant passer pour le client officiel — même classe que le rail écarté en
+PR #277. Sur des clés API payantes, l'outil est sans problème.
+
+## Ancien cadrage 4b (avant la solution par instances)
 
 Ce n'est pas la suite naturelle de 4a, c'est un autre métier : **écrire** dans
 le trousseau macOS pour échanger le jeton d'un compte à l'autre. Un bug là ne
