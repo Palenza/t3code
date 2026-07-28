@@ -14,10 +14,11 @@ const STAGE_BACKDROP_VIEW_BOX = "0 0 8192 96";
 export function resolveSidebarStageBackdropVariant(
   stageLabel: string,
 ): SidebarStageBackdropVariant | null {
-  const normalized = stageLabel.trim().toLowerCase();
-  if (normalized === "nightly") return "nightly";
-  if (normalized === "dev") return "dev";
-  return null;
+  // Fork Palenza (28/07/2026) : le ciel étoilé Nightly est le visage de l'app
+  // sur TOUS les canaux — l'amont ne l'affiche que sur Nightly (blueprint en
+  // Dev, rien en Alpha), or notre build du quotidien est « Alpha ».
+  void stageLabel;
+  return "nightly";
 }
 
 export function useSidebarStageBackdropVariant(): SidebarStageBackdropVariant | null {
