@@ -1,6 +1,7 @@
-import { GitBranchIcon, HandshakeIcon, RefreshCwIcon } from "lucide-react";
+import { GitBranchIcon, HandshakeIcon, RefreshCwIcon, UsersIcon } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { cn } from "../../lib/utils";
 import { resolvePrimaryEnvironmentHttpUrl } from "../../environments/primary";
 import { Button } from "../ui/button";
 import { SettingsPageContainer, SettingsSection } from "./settingsLayout";
@@ -9,9 +10,22 @@ import {
   RAISON_INJOIGNABLE,
   TABLEAU_MUET_TITRE,
   presentTableauLocal,
+  type CompteClaudeVue,
   type ReseauAffiliationVue,
   type TableauLocalEtat,
 } from "./tableauLocal";
+
+const TONE_BAR: Record<CompteClaudeVue["limites"][number]["tone"], string> = {
+  normal: "bg-muted-foreground/60",
+  warning: "bg-warning",
+  critical: "bg-destructive",
+};
+
+const TONE_TEXT: Record<CompteClaudeVue["limites"][number]["tone"], string> = {
+  normal: "text-muted-foreground/80",
+  warning: "text-warning",
+  critical: "text-destructive",
+};
 
 const TABLEAU_PATH = "/api/tableau-local/etat";
 const FETCH_TIMEOUT_MS = 5_000;
@@ -45,6 +59,60 @@ function LigneEtat({ cle, valeur }: { cle: string; valeur: string }) {
     <div className="rounded-xl px-3 py-2 sm:px-4">
       <div className="text-[13px] font-medium tracking-[-0.005em] text-foreground">{cle}</div>
       <p className="max-w-xl text-[13px] leading-[1.45] text-muted-foreground/80">{valeur}</p>
+    </div>
+  );
+}
+
+function CompteBloc({ compte }: { compte: CompteClaudeVue }) {
+  return (
+    <div className="rounded-xl px-3 py-2 sm:px-4">
+      <div className="flex flex-wrap items-baseline gap-x-2">
+        <span className="text-[13px] font-medium tracking-[-0.005em] text-foreground">
+          {compte.label}
+        </span>
+        <span className="text-xs text-muted-foreground">{compte.email}</span>
+        {compte.actif ? (
+          <span className="rounded-full border border-border px-1.5 text-[10px] leading-4 text-muted-foreground">
+            actif
+          </span>
+        ) : null}
+      </div>
+      {compte.etat !== null ? (
+        <p className="max-w-xl text-[12px] leading-[1.45] text-warning">{compte.etat}</p>
+      ) : null}
+      <div className="mt-1.5 grid max-w-xl gap-1.5">
+        {compte.limites.map((limite) => (
+          <div key={limite.nom} className="grid gap-1">
+            <div className="flex items-baseline justify-between gap-2 text-[11px] leading-4">
+              <span className="text-muted-foreground/70">{limite.nom}</span>
+              <span className="flex shrink-0 items-baseline gap-1.5">
+                {limite.resetLabel ? (
+                  <span className="text-muted-foreground/50">{limite.resetLabel}</span>
+                ) : null}
+                <span className={cn("font-medium tabular-nums", TONE_TEXT[limite.tone])}>
+                  {limite.pctLabel}
+                </span>
+              </span>
+            </div>
+            <div
+              className="h-1.5 w-full overflow-hidden rounded-full bg-muted/60"
+              role="progressbar"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={Math.round(limite.barPct)}
+              aria-label={`${limite.nom} utilisé`}
+            >
+              <div
+                className={cn("h-full rounded-full", TONE_BAR[limite.tone])}
+                style={{ width: `${limite.barPct}%` }}
+              />
+            </div>
+          </div>
+        ))}
+      </div>
+      {compte.ageLabel !== null ? (
+        <p className="pt-1 text-[10px] leading-4 text-muted-foreground/50">{compte.ageLabel}</p>
+      ) : null}
     </div>
   );
 }
@@ -132,11 +200,22 @@ export function TableauLocalSettingsPanel() {
         </SettingsSection>
       ) : (
         <>
+          {etat.vue.comptes !== null ? (
+            <SettingsSection
+              title="Comptes Claude"
+              icon={<UsersIcon className="size-4.5" />}
+              headerAction={boutonRafraichir}
+            >
+              {etat.vue.comptes.map((compte) => (
+                <CompteBloc key={`${compte.label}-${compte.email}`} compte={compte} />
+              ))}
+            </SettingsSection>
+          ) : null}
           {etat.vue.affiliation !== null ? (
             <SettingsSection
               title="Affiliation"
               icon={<HandshakeIcon className="size-4.5" />}
-              headerAction={boutonRafraichir}
+              headerAction={etat.vue.comptes === null ? boutonRafraichir : undefined}
             >
               <p className="px-3 text-xs text-muted-foreground sm:px-4">
                 {etat.vue.affiliation.totalLabel} — {etat.vue.affiliation.ageLabel}

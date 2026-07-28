@@ -7,7 +7,28 @@ const NOW = Date.parse("2026-07-28T15:00:00.000Z");
 /** Real shapes, captured from the proxy on 28/07/2026. */
 const PAYLOAD_REEL = {
   tableau: {
-    quotas: [{ label: "B", etat: "ok" }],
+    quotas: [
+      {
+        label: "A",
+        email: "enzo.barreau1@gmail.com",
+        actif: false,
+        etat: "endpoint quotas saturé (429) — relevé précédent affiché",
+        limites: [
+          { nom: "5 heures", pct: 0.0, reset: null },
+          { nom: "7 jours", pct: 94.0, reset: "2026-08-01T07:59:00+00:00" },
+          { nom: "7 jours · Fable", pct: 100.0, reset: "2026-08-01T07:59:00+00:00" },
+        ],
+        mesure_age_min: 12,
+      },
+      {
+        label: "B",
+        email: "enzo.barreau@gmail.com",
+        actif: true,
+        etat: "ok",
+        limites: [{ nom: "5 heures", pct: 51.0, reset: null }],
+        mesure_age_min: 0,
+      },
+    ],
     usine: { age_min: 23, lignes: [{ cle: "Usine", valeur: "4/4 joignables" }], erreur: null },
     git: { branche: "claude/rescapes-et-identite", devant: "62", sale: 117 },
     instant: "28/07 21:02:28",
@@ -53,6 +74,25 @@ describe("presentTableauLocal", () => {
     // A network with only a note keeps the note, never invents a zero row.
     expect(amazon?.compteurs).toBeNull();
     expect(amazon?.note).toBe("actif (tag `palenza-21`)");
+  });
+
+  it("presents the Claude accounts with their gauges and honest states", () => {
+    const etat = presentTableauLocal(PAYLOAD_REEL, NOW);
+    if (etat.kind !== "present") throw new Error("attendu present");
+    const [a, b] = etat.vue.comptes ?? [];
+    expect(a?.label).toBe("A");
+    expect(a?.etat).toContain("endpoint quotas saturé");
+    expect(a?.ageLabel).toBe("mesuré il y a 12 min");
+    expect(a?.limites.map((l) => [l.nom, l.pctLabel, l.tone])).toEqual([
+      ["5 heures", "0 %", "normal"],
+      ["7 jours", "94 %", "critical"],
+      ["7 jours · Fable", "100 %", "critical"],
+    ]);
+    expect(a?.limites[1]?.resetLabel).toMatch(/^remise à zéro /);
+    // "ok" is the normal state: no line of noise for it.
+    expect(b?.etat).toBeNull();
+    expect(b?.actif).toBe(true);
+    expect(b?.limites[0]?.tone).toBe("warning");
   });
 
   it("stays muet on a non-object payload", () => {

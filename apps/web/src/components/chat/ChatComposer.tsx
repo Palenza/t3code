@@ -966,11 +966,13 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   }, [providerStatuses, activeThreadModelSelection]);
   // The context-window meter also surfaces the ACTIVE account's plan limits:
   // the figure the user needs when deciding whether to fire the next turn.
+  // Resolved through the same chain the composer uses to target an instance
+  // (draft selection → session → thread model → project default): a running
+  // thread often carries its instance on the SESSION, not the model selection.
   const activeThreadRateLimits = useMemo(() => {
-    if (!activeThreadModelSelection) return undefined;
-    return providerStatuses.find((p) => p.instanceId === activeThreadModelSelection.instanceId)
-      ?.rateLimits;
-  }, [providerStatuses, activeThreadModelSelection]);
+    if (explicitSelectedInstanceId === null) return undefined;
+    return providerStatuses.find((p) => p.instanceId === explicitSelectedInstanceId)?.rateLimits;
+  }, [providerStatuses, explicitSelectedInstanceId]);
 
   // ------------------------------------------------------------------
   // Composer-local state

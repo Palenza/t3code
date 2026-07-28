@@ -37,6 +37,26 @@ export interface AffiliationVue {
   readonly reseaux: ReadonlyArray<ReseauAffiliationVue>;
 }
 
+export interface LimiteCompteVue {
+  readonly nom: string;
+  /** Rounded display label, e.g. "94 %" — never invented, absent limits are dropped. */
+  readonly pctLabel: string;
+  /** Clamped to 0–100 for the bar; a bar cannot be 103 % long. */
+  readonly barPct: number;
+  readonly tone: "normal" | "warning" | "critical";
+  readonly resetLabel: string | null;
+}
+
+export interface CompteClaudeVue {
+  readonly label: string;
+  readonly email: string;
+  readonly actif: boolean;
+  /** cc-tableau's own honest state ("jeton périmé…", "endpoint saturé…") — null when "ok". */
+  readonly etat: string | null;
+  readonly ageLabel: string | null;
+  readonly limites: ReadonlyArray<LimiteCompteVue>;
+}
+
 export interface TableauDepotVue {
   readonly branche: string;
   /** e.g. "62 commit(s) non déployé(s) · 117 fichier(s) modifié(s)" */
@@ -44,6 +64,7 @@ export interface TableauDepotVue {
 }
 
 export interface TableauLocalVue {
+  readonly comptes: ReadonlyArray<CompteClaudeVue> | null;
   readonly affiliation: AffiliationVue | null;
   readonly depot: TableauDepotVue | null;
   /** Server-side timestamp of the dashboard snapshot, as served. */
@@ -162,6 +183,81 @@ const parseAffiliation = (value: unknown, now: number): AffiliationVue | null =>
   };
 };
 
+/** cc-tableau thresholds: 50 % warns, 85 % is the wall. */
+const toneForPct = (pct: number): LimiteCompteVue["tone"] =>
+  pct >= 85 ? "critical" : pct >= 50 ? "warning" : "normal";
+
+const formatReset = (value: unknown): string | null => {
+  const iso = readString(value);
+  if (iso === null) {
+    return null;
+  }
+  const instant = Date.parse(iso);
+  if (Number.isNaN(instant)) {
+    return null;
+  }
+  return `remise à zéro ${new Date(instant).toLocaleString("fr-FR", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  })}`;
+};
+
+const parseLimite = (value: unknown): LimiteCompteVue | null => {
+  if (!isRecord(value)) {
+    return null;
+  }
+  const nom = readString(value.nom);
+  const pct = typeof value.pct === "number" && Number.isFinite(value.pct) ? value.pct : null;
+  if (nom === null || pct === null) {
+    return null;
+  }
+  return {
+    nom,
+    pctLabel: `${Math.round(pct)} %`,
+    barPct: Math.max(0, Math.min(100, pct)),
+    tone: toneForPct(pct),
+    resetLabel: formatReset(value.reset),
+  };
+};
+
+const parseComptes = (value: unknown): ReadonlyArray<CompteClaudeVue> | null => {
+  if (!Array.isArray(value)) {
+    return null;
+  }
+  const comptes = value.flatMap((compte): CompteClaudeVue[] => {
+    if (!isRecord(compte)) {
+      return [];
+    }
+    const email = readString(compte.email);
+    if (email === null) {
+      return [];
+    }
+    const etat = readString(compte.etat);
+    const ageMin =
+      typeof compte.mesure_age_min === "number" && Number.isFinite(compte.mesure_age_min)
+        ? compte.mesure_age_min
+        : null;
+    return [
+      {
+        label: readString(compte.label) ?? "?",
+        email,
+        actif: compte.actif === true,
+        etat: etat === "ok" ? null : etat,
+        ageLabel: ageMin === null ? null : formatAgeReleve(ageMin).replace("relevé", "mesuré"),
+        limites: Array.isArray(compte.limites)
+          ? compte.limites.flatMap((l) => {
+              const parsed = parseLimite(l);
+              return parsed === null ? [] : [parsed];
+            })
+          : [],
+      },
+    ];
+  });
+  return comptes.length === 0 ? null : comptes;
+};
+
 const parseDepot = (value: unknown): TableauDepotVue | null => {
   if (!isRecord(value)) {
     return null;
@@ -185,15 +281,17 @@ export const presentTableauLocal = (payload: unknown, now: number): TableauLocal
   }
   const affiliation = parseAffiliation(payload.affiliation, now);
   const tableau = isRecord(payload.tableau) ? payload.tableau : null;
+  const comptes = tableau === null ? null : parseComptes(tableau.quotas);
   const depot = tableau === null ? null : parseDepot(tableau.git);
-  // A payload carrying neither pane has nothing honest to show: stay muet
+  // A payload carrying no pane at all has nothing honest to show: stay muet
   // rather than render an empty shell that looks like "all clear".
-  if (affiliation === null && depot === null) {
+  if (comptes === null && affiliation === null && depot === null) {
     return { kind: "muet", raison: RAISON_ILLISIBLE };
   }
   return {
     kind: "present",
     vue: {
+      comptes,
       affiliation,
       depot,
       instant: tableau === null ? null : readString(tableau.instant),
