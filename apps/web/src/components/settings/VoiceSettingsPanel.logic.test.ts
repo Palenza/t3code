@@ -3,6 +3,7 @@ import { describe, expect, it } from "vite-plus/test";
 import {
   modelSearchMatches,
   parseDictionaryImport,
+  parseDictionaryPaste,
   resolveDisplayedModelTarget,
   resolveModelRegistry,
   selectedQuantization,
@@ -115,5 +116,45 @@ describe("VoiceSettingsPanel logic", () => {
         serverEnabled: true,
       }),
     ).toBe("local");
+  });
+});
+
+describe("parseDictionaryPaste", () => {
+  let n = 0;
+  const makeId = () => `id-${++n}`;
+
+  it("parses aliases with any separator and terms from bare words", () => {
+    const { entries, rejected } = parseDictionaryPaste(
+      [
+        "té trois code, pé trois -> T3 Code",
+        "fable cinq => Fable 5",
+        "palennza = Palenza",
+        "cécé tableau\tcc-tableau",
+        "Affilizz",
+        "",
+      ].join("\n"),
+      makeId,
+    );
+    expect(rejected).toEqual([]);
+    expect(entries.map((entry) => [entry.type, entry.originals, entry.replacement])).toEqual([
+      ["alias", ["té trois code", "pé trois"], "T3 Code"],
+      ["alias", ["fable cinq"], "Fable 5"],
+      ["alias", ["palennza"], "Palenza"],
+      ["alias", ["cécé tableau"], "cc-tableau"],
+      ["term", ["Affilizz"], undefined],
+    ]);
+    // Pasted entries exist to catch mis-heard words: fuzzy, case-insensitive.
+    expect(entries.every((entry) => entry.fuzzy && !entry.caseSensitive && entry.enabled)).toBe(
+      true,
+    );
+  });
+
+  it("reports unusable lines verbatim instead of dropping them", () => {
+    const { entries, rejected } = parseDictionaryPaste(
+      "bon -> Bon\n-> sans gauche\nvide ->",
+      makeId,
+    );
+    expect(entries).toHaveLength(1);
+    expect(rejected).toEqual(["-> sans gauche", "vide ->"]);
   });
 });

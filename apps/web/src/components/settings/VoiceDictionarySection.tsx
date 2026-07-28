@@ -26,8 +26,13 @@ import {
 } from "../ui/sheet";
 import { Switch } from "../ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
+import { Textarea } from "../ui/textarea";
 import { toastManager } from "../ui/toast";
-import { parseDictionaryImport, serializeDictionary } from "./VoiceSettingsPanel.logic";
+import {
+  parseDictionaryImport,
+  parseDictionaryPaste,
+  serializeDictionary,
+} from "./VoiceSettingsPanel.logic";
 
 interface DictionaryDraft {
   readonly type: "term" | "alias";
@@ -146,6 +151,14 @@ export function VoiceDictionarySection(props: {
   readonly degraded: boolean;
 }) {
   const [draft, setDraft] = useState<DictionaryDraft>(EMPTY_DRAFT);
+  // Feedback stays HERE, next to the fields — a toast in the far corner for a
+  // form the user is looking at reads as noise coming from nowhere.
+  const [addError, setAddError] = useState<string | null>(null);
+  const [pasteText, setPasteText] = useState("");
+  const [pasteReport, setPasteReport] = useState<{
+    added: number;
+    rejected: ReadonlyArray<string>;
+  } | null>(null);
   const [editing, setEditing] = useState<VoiceDictionaryEntry | null>(null);
   const [editDraft, setEditDraft] = useState<DictionaryDraft>(EMPTY_DRAFT);
   const importRef = useRef<HTMLInputElement | null>(null);
@@ -153,14 +166,23 @@ export function VoiceDictionarySection(props: {
   const addEntry = () => {
     const entry = draftToEntry(draft);
     if (!entry) {
-      toastManager.add({
-        type: "error",
-        title: draft.type === "alias" ? "Add spoken forms and a replacement." : "Add a term.",
-      });
+      setAddError(draft.type === "alias" ? "Add spoken forms and a replacement." : "Add a term.");
       return;
     }
+    setAddError(null);
     props.onChange([...props.entries, entry]);
     setDraft(EMPTY_DRAFT);
+  };
+
+  const addPastedList = () => {
+    const { entries, rejected } = parseDictionaryPaste(pasteText, randomUUID);
+    if (entries.length > 0) {
+      props.onChange([...props.entries, ...entries]);
+    }
+    setPasteReport({ added: entries.length, rejected });
+    if (rejected.length === 0) {
+      setPasteText("");
+    }
   };
 
   const openEdit = (entry: VoiceDictionaryEntry) => {
@@ -222,7 +244,14 @@ export function VoiceDictionarySection(props: {
         </Alert>
       ) : null}
       <div className="grid gap-2 sm:grid-cols-[9rem_minmax(0,1fr)_minmax(0,1fr)_auto]">
-        <DictionaryFields draft={draft} onChange={setDraft} disabled={props.degraded} />
+        <DictionaryFields
+          draft={draft}
+          onChange={(next) => {
+            setAddError(null);
+            setDraft(next);
+          }}
+          disabled={props.degraded}
+        />
         <Button
           type="button"
           size="sm"
@@ -233,6 +262,50 @@ export function VoiceDictionarySection(props: {
           <PlusIcon data-icon="inline-start" />
           Add
         </Button>
+      </div>
+      {addError ? <p className="text-sm text-destructive">{addError}</p> : null}
+      <div className="flex flex-col gap-2 rounded-lg border border-border/60 p-3">
+        <p className="text-sm font-medium">Paste a list</p>
+        <p className="text-xs text-muted-foreground">
+          One entry per line: <code>spoken forms -&gt; replacement</code> (commas between spoken
+          forms). A bare word becomes a known term. Pasted entries are fuzzy and case-insensitive.
+        </p>
+        <Textarea
+          value={pasteText}
+          onChange={(event) => {
+            setPasteText(event.currentTarget.value);
+            setPasteReport(null);
+          }}
+          placeholder={"té trois code, pé trois -> T3 Code\nfable cinq -> Fable 5\nPalenza"}
+          rows={5}
+          disabled={props.degraded}
+          aria-label="Paste dictionary entries"
+        />
+        <div className="flex items-center gap-3">
+          <Button
+            type="button"
+            size="sm"
+            onClick={addPastedList}
+            disabled={props.degraded || pasteText.trim().length === 0}
+          >
+            <PlusIcon data-icon="inline-start" />
+            Add list
+          </Button>
+          {pasteReport ? (
+            <span
+              className={
+                pasteReport.rejected.length > 0
+                  ? "text-sm text-destructive"
+                  : "text-sm text-muted-foreground"
+              }
+            >
+              {pasteReport.added} added
+              {pasteReport.rejected.length > 0
+                ? ` · ${pasteReport.rejected.length} line(s) not understood — kept in the box`
+                : ""}
+            </span>
+          ) : null}
+        </div>
       </div>
       {props.entries.length > 0 ? (
         <Table>

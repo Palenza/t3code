@@ -72,6 +72,61 @@ export function modelSearchMatches(model: ModelCatalogEntry, query: string): boo
     .includes(normalized);
 }
 
+/** Separators accepted between spoken forms and their replacement, tried in order. */
+const PASTE_SEPARATORS = ["->", "=>", "→", "=", "\t"] as const;
+
+export interface DictionaryPasteResult {
+  readonly entries: ReadonlyArray<VoiceDictionaryEntry>;
+  /** Lines that could not be understood, verbatim — shown back, never dropped silently. */
+  readonly rejected: ReadonlyArray<string>;
+}
+
+/**
+ * Parses a plain-text list pasted by the user, one entry per line:
+ *
+ *   té trois code, pé trois -> T3 Code     (alias: spoken forms → replacement)
+ *   Palenza                                (bare word: term the recognizer should know)
+ *
+ * `->`, `=>`, `→`, `=` and a tab all work as the separator. Pasted entries
+ * default to fuzzy, case-insensitive — the whole point of pasting a list is
+ * catching mis-heard words.
+ */
+export function parseDictionaryPaste(text: string, makeId: () => string): DictionaryPasteResult {
+  const entries: VoiceDictionaryEntry[] = [];
+  const rejected: string[] = [];
+  for (const raw of text.split("\n")) {
+    const line = raw.trim();
+    if (!line) continue;
+    const separator = PASTE_SEPARATORS.find((candidate) => line.includes(candidate));
+    const [left, right] =
+      separator === undefined
+        ? [line, null]
+        : [
+            line.slice(0, line.indexOf(separator)),
+            line.slice(line.indexOf(separator) + separator.length),
+          ];
+    const originals = left
+      .split(/[,·]/)
+      .map((value) => value.trim())
+      .filter(Boolean);
+    const replacement = right?.trim() ?? "";
+    if (originals.length === 0 || (separator !== undefined && !replacement)) {
+      rejected.push(line);
+      continue;
+    }
+    entries.push({
+      id: makeId(),
+      type: separator === undefined ? "term" : "alias",
+      originals,
+      ...(separator === undefined ? {} : { replacement }),
+      caseSensitive: false,
+      fuzzy: true,
+      enabled: true,
+    });
+  }
+  return { entries, rejected };
+}
+
 export function parseDictionaryImport(json: string): ReadonlyArray<VoiceDictionaryEntry> {
   const parsed: unknown = JSON.parse(json);
   if (!Array.isArray(parsed)) throw new Error("Dictionary JSON must be an array.");
