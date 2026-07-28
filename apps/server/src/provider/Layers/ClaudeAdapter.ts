@@ -222,6 +222,14 @@ export interface ClaudeAdapterLiveOptions {
   }) => ClaudeQueryRuntime;
   readonly nativeEventLogPath?: string;
   readonly nativeEventLogger?: EventNdjsonLogger;
+  /**
+   * Runs when the account reports that its usage moved.
+   *
+   * Handed in already wired rather than built here: reading a credential
+   * requires knowing WHICH account this instance is, and that is settled in
+   * the driver. Absent means the instance simply shows no percentage.
+   */
+  readonly refreshAccountUsage?: Effect.Effect<void>;
 }
 
 function isUuid(value: string): boolean {
@@ -2904,6 +2912,21 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
     }
 
     if (message.type === "rate_limit_event") {
+      // This event says WHICH window moved and when it comes back, but never
+      // by how much — verified on a live turn (28/07/2026): no `utilization`
+      // in the payload, ever. The percentage lives in the account API, and
+      // this is the moment to go and read it: the figure just changed, and
+      // someone is looking at the screen.
+      //
+      // Forked, never awaited: a turn must not wait on a gauge, and the
+      // refresh is allowed to fail. It throttles and reports itself. The
+      // effect arrives ready-made from the driver, which is where this
+      // account's credential source is known — resolving one here could
+      // attribute a subscription's figures to another instance's name.
+      if (options?.refreshAccountUsage) {
+        yield* Effect.forkDetach(options.refreshAccountUsage);
+      }
+
       yield* offerRuntimeEvent({
         ...base,
         type: "account.rate-limits.updated",

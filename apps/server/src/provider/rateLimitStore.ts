@@ -1,6 +1,10 @@
-import type { ProviderInstanceId, ServerProviderRateLimits } from "@t3tools/contracts";
+import type {
+  ProviderInstanceId,
+  ServerProviderRateLimits,
+  ServerProviderRateLimitWindow,
+} from "@t3tools/contracts";
 
-import { applyRateLimitEvent } from "./rateLimitSnapshot.ts";
+import { applyRateLimitEvent, mergeRateLimitWindows } from "./rateLimitSnapshot.ts";
 
 /**
  * Last known subscription usage, per provider instance.
@@ -86,6 +90,37 @@ export const recordRateLimitEvent = (event: {
   }
 
   byInstance.set(instanceId, next);
+  notify();
+  return next;
+};
+
+/**
+ * Folds windows read from the account API into the same store.
+ *
+ * The second source, and the only one that knows a percentage. It merges with
+ * the runtime event's contribution rather than replacing it — see
+ * `mergeRateLimitWindows`, where the field-by-field rule lives — so a window
+ * ends up carrying the figure from here and the state from there.
+ *
+ * Same instance key, same notification, so everything downstream (the join at
+ * the client boundary, the live push, the gauge) works unchanged.
+ */
+export const recordAccountUsage = (input: {
+  readonly instanceId: ProviderInstanceId;
+  readonly windows: readonly ServerProviderRateLimitWindow[];
+  readonly observedAt: string;
+}): ServerProviderRateLimits | undefined => {
+  if (input.windows.length === 0) {
+    return undefined;
+  }
+
+  const previous = byInstance.get(input.instanceId);
+  const next: ServerProviderRateLimits = {
+    observedAt: input.observedAt as ServerProviderRateLimits["observedAt"],
+    windows: mergeRateLimitWindows(previous?.windows ?? [], input.windows),
+  };
+
+  byInstance.set(input.instanceId, next);
   notify();
   return next;
 };

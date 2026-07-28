@@ -150,8 +150,19 @@ export const rateLimitWindowsFromPayload = (payload: unknown): ServerProviderRat
  * snapshot would drop the seven-day figure the moment a five-hour update
  * arrives, and the sidebar would never show both at once.
  *
- * Incoming windows win on conflict, and previously known kinds survive. Order
- * is stable — previously known kinds first, in their original order — so the
+ * FIELD BY FIELD, not window by window — and that distinction is the whole
+ * reason two sources can coexist. The same `five_hour` window is described by
+ * both, each holding what the other lacks:
+ *
+ *   - the runtime event carries `severity` (and a reset), never a percentage;
+ *   - the account API carries `utilization` (and a reset), never a severity.
+ *
+ * Replacing wholesale would make each new arrival erase the other's only
+ * contribution, and the gauge would flip between "82%, state unknown" and
+ * "state known, no figure" forever.
+ *
+ * Incoming fields win where present; previously known ones survive. Order is
+ * stable — previously known kinds first, in their original order — so the
  * gauges do not reshuffle under the reader between two updates.
  */
 export const mergeRateLimitWindows = (
@@ -163,7 +174,31 @@ export const mergeRateLimitWindows = (
     byKind.set(window.kind, window);
   }
   for (const window of incoming) {
-    byKind.set(window.kind, window);
+    const known = byKind.get(window.kind);
+    byKind.set(
+      window.kind,
+      known === undefined
+        ? window
+        : {
+            ...known,
+            ...window,
+            // Spreading is not enough: an absent key and a key set to
+            // `undefined` are different to the spread operator only if the key
+            // is missing entirely, and these objects are built with
+            // conditional spreads. Restating each optional field keeps a
+            // source that says nothing about it from erasing what the other
+            // knew.
+            ...(window.utilization === undefined && known.utilization !== undefined
+              ? { utilization: known.utilization }
+              : {}),
+            ...(window.severity === undefined && known.severity !== undefined
+              ? { severity: known.severity }
+              : {}),
+            ...(window.resetsAtEpoch === undefined && known.resetsAtEpoch !== undefined
+              ? { resetsAtEpoch: known.resetsAtEpoch }
+              : {}),
+          },
+    );
   }
   return [...byKind.values()];
 };

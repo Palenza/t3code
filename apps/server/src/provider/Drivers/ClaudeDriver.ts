@@ -53,7 +53,12 @@ import {
   makeProviderSnapshotSettingsSource,
   type ProviderSnapshotSettings,
 } from "../providerUpdateSettings.ts";
-import { makeClaudeCapabilitiesCacheKey, makeClaudeContinuationGroupKey } from "./ClaudeHome.ts";
+import {
+  makeClaudeCapabilitiesCacheKey,
+  makeClaudeContinuationGroupKey,
+  resolveClaudeHomePath,
+} from "./ClaudeHome.ts";
+import { refreshClaudeUsage } from "../claudeUsageRefresh.ts";
 const decodeClaudeSettings = Schema.decodeSync(ClaudeSettings);
 
 const DRIVER_KIND = ProviderDriverKind.make("claudeAgent");
@@ -146,9 +151,29 @@ export const ClaudeDriver: ProviderDriver<ClaudeSettings, ClaudeDriverEnv> = {
         continuationGroupKey,
       });
 
+      // The percentage the runtime event never carries, fetched from the
+      // account API when a turn says usage moved. Built HERE because this is
+      // where the account is known: a custom config directory holds its own
+      // credential, and resolving one anywhere else could put one
+      // subscription's figures under another instance's name.
+      //
+      // Services are provided now, so what the adapter receives is a plain
+      // `Effect<void>` it can fork without inheriting any requirement.
+      const configDir =
+        effectiveConfig.homePath.trim().length > 0
+          ? yield* resolveClaudeHomePath(effectiveConfig)
+          : undefined;
+      const refreshAccountUsage = refreshClaudeUsage({ instanceId, configDir }).pipe(
+        Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
+        Effect.provideService(FileSystem.FileSystem, fileSystem),
+        Effect.provideService(HttpClient.HttpClient, httpClient),
+        Effect.provideService(Path.Path, path),
+      );
+
       const adapterOptions = {
         instanceId,
         environment: processEnv,
+        refreshAccountUsage,
         ...(eventLoggers.native ? { nativeEventLogger: eventLoggers.native } : {}),
       };
       const adapter = yield* makeClaudeAdapter(effectiveConfig, adapterOptions);

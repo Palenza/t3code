@@ -156,6 +156,7 @@ function makeHarness(config?: {
   readonly baseDir?: string;
   readonly claudeConfig?: Partial<ClaudeSettings>;
   readonly instanceId?: ProviderInstanceId;
+  readonly refreshAccountUsage?: ClaudeAdapterLiveOptions["refreshAccountUsage"];
 }) {
   const query = new FakeClaudeQuery();
   let createInput:
@@ -167,6 +168,7 @@ function makeHarness(config?: {
 
   const adapterOptions: ClaudeAdapterLiveOptions = {
     ...(config?.instanceId ? { instanceId: config.instanceId } : {}),
+    ...(config?.refreshAccountUsage ? { refreshAccountUsage: config.refreshAccountUsage } : {}),
     createQuery: (input) => {
       createInput = input;
       return query;
@@ -967,6 +969,71 @@ describe("ClaudeAdapterLive", () => {
         assert.equal(String(turnCompleted.turnId), String(turn.turnId));
         assert.equal(turnCompleted.payload.state, "completed");
       }
+    }).pipe(
+      Effect.provideService(Random.Random, makeDeterministicRandomService()),
+      Effect.provide(harness.layer),
+    );
+  });
+
+  it.effect("goes and reads the account's real percentage when usage moves", () => {
+    // The runtime event says WHICH window moved and when it comes back, never
+    // by how much — checked against a live turn on 28/07/2026, where
+    // `rate_limit_info` carried no `utilization` at all. The figure lives in
+    // the account API, and this fork is what goes to fetch it.
+    //
+    // Without this test the fork is deletable in silence: every other test
+    // stays green, the typecheck stays at zero, and the gauge simply never
+    // shows a percentage again — a failure indistinguishable from a provider
+    // that reports nothing. That exact mistake has already been made twice in
+    // this feature.
+    let refreshes = 0;
+    const harness = makeHarness({
+      refreshAccountUsage: Effect.sync(() => {
+        refreshes += 1;
+      }),
+    });
+    return Effect.gen(function* () {
+      const adapter = yield* ClaudeAdapter;
+
+      const runtimeEventsFiber = yield* Stream.takeUntil(
+        adapter.streamEvents,
+        (event) => event.type === "account.rate-limits.updated",
+      ).pipe(Stream.runCollect, Effect.forkChild);
+
+      const session = yield* adapter.startSession({
+        threadId: THREAD_ID,
+        provider: ProviderDriverKind.make("claudeAgent"),
+        runtimeMode: "full-access",
+      });
+      yield* adapter.sendTurn({
+        threadId: session.threadId,
+        input: "hello",
+        attachments: [],
+      });
+
+      harness.query.emit({
+        type: "rate_limit_event",
+        uuid: "rate-limit-1",
+        session_id: "sdk-session-rate-limit",
+        // Verbatim from the live capture: a status, a reset, a window name,
+        // and no percentage anywhere.
+        rate_limit_info: {
+          status: "allowed",
+          resetsAt: 1_785_211_800,
+          rateLimitType: "five_hour",
+        },
+      } as unknown as SDKMessage);
+
+      const runtimeEvents = Array.from(yield* Fiber.join(runtimeEventsFiber));
+      const usageEvents = runtimeEvents.filter(
+        (event) => event.type === "account.rate-limits.updated",
+      );
+
+      assert.equal(usageEvents.length, 1);
+      // The forked refresh runs beside the turn; a yield is enough for it to
+      // have started, and it must not have delayed the event above.
+      yield* Effect.yieldNow;
+      assert.equal(refreshes, 1);
     }).pipe(
       Effect.provideService(Random.Random, makeDeterministicRandomService()),
       Effect.provide(harness.layer),
