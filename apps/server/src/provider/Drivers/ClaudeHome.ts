@@ -2,9 +2,11 @@ import * as NodeOS from "node:os";
 
 import type { ClaudeSettings } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 
 import { expandHomePath } from "../../pathExpansion.ts";
+import { inheritSharedMcpServers } from "./ClaudeSharedConfig.ts";
 
 export const resolveClaudeHomePath = Effect.fn("resolveClaudeHomePath")(function* (
   config: Pick<ClaudeSettings, "homePath">,
@@ -17,11 +19,14 @@ export const resolveClaudeHomePath = Effect.fn("resolveClaudeHomePath")(function
 export const makeClaudeEnvironment = Effect.fn("makeClaudeEnvironment")(function* (
   config: Pick<ClaudeSettings, "homePath">,
   baseEnv?: NodeJS.ProcessEnv,
-): Effect.fn.Return<NodeJS.ProcessEnv, never, Path.Path> {
+): Effect.fn.Return<NodeJS.ProcessEnv, never, Path.Path | FileSystem.FileSystem> {
   const resolvedBaseEnv = baseEnv ?? process.env;
   const homePath = config.homePath.trim();
   if (homePath.length === 0) return resolvedBaseEnv;
   const resolvedHomePath = yield* resolveClaudeHomePath(config);
+  // Un compte ajouté hérite des serveurs MCP du compte de référence — sinon
+  // le relais bascule le fil sur une instance sans outillage (vécu 29/07).
+  yield* inheritSharedMcpServers(resolvedHomePath);
   return {
     ...resolvedBaseEnv,
     // Isolate this instance's config via CLAUDE_CONFIG_DIR rather than HOME.
