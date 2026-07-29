@@ -18,6 +18,10 @@ interface ForkUpdateEtat {
   readonly latestSubject: string | null;
   readonly building: boolean;
   readonly lastRebuildExitCode?: number | null;
+  /** Commits de l'AMONT (Théo) qui nous manquent — l'info que le bouton
+   * natif de la Nightly donne, et que notre fork ne peut pas avoir. */
+  readonly amontBehind?: number | null;
+  readonly amontSujet?: string | null;
 }
 
 /**
@@ -118,8 +122,13 @@ export function SidebarForkUpdatePill() {
     }
   }, []);
 
-  if (etat === null || etat.behind === null || (etat.behind <= 0 && !etat.building)) {
-    return null;
+  const amont = etat?.amontBehind ?? 0;
+  // On parle dès qu'il y a quelque chose à prendre : nos propres commits
+  // non construits, OU des nouveautés amont.
+  if (etat === null || (etat.behind ?? 0) <= 0) {
+    if (etat === null || (amont <= 0 && !etat.building)) {
+      return null;
+    }
   }
 
   return (
@@ -127,7 +136,7 @@ export function SidebarForkUpdatePill() {
       type="button"
       disabled={building}
       onClick={() => void launch()}
-      title={etat.latestSubject ?? undefined}
+      title={etat.latestSubject ?? etat.amontSujet ?? undefined}
       className={cn(
         "mb-1 flex w-full cursor-pointer items-center gap-2 rounded-lg border border-primary/25 bg-primary/12 px-3 py-2 text-left text-xs font-medium text-primary transition-colors",
         building ? "cursor-default opacity-80" : "hover:bg-primary/20",
@@ -141,7 +150,9 @@ export function SidebarForkUpdatePill() {
       <span className="truncate">
         {building
           ? "Update en cours — rebuild local…"
-          : `Update available · ${etat.behind} commit${etat.behind > 1 ? "s" : ""}`}
+          : (etat.behind ?? 0) > 0
+            ? `Mise à jour · ${etat.behind} commit${(etat.behind ?? 0) > 1 ? "s" : ""}`
+            : `Nouveautés amont · ${amont} commit${amont > 1 ? "s" : ""}`}
       </span>
     </button>
   );

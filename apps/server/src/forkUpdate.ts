@@ -86,10 +86,27 @@ export const forkUpdateEtatRouteLayer = HttpRouter.add(
         ? yield* runGit(["log", "origin/travail", "-1", "--format=%s"])
         : null;
 
+    // Le RETARD SUR L'AMONT — ce que le fondateur cherchait vraiment quand
+    // il comparait avec la Nightly officielle (29/07). Le bouton natif de
+    // l'amont ne peut pas marcher chez nous : notre fork ne publie aucune
+    // release, et sur macOS electron-updater exige une app signée Apple
+    // (compte refusé, décision fondateur). On donne donc l'information
+    // autrement : combien de commits de Théo nous manquent, et le dernier.
+    yield* runGit(["fetch", "upstream", "main", "--tags"]);
+    const amontCountOutput = yield* runGit(["rev-list", "--count", "HEAD..upstream/main"]);
+    const amontBehind =
+      amontCountOutput === null ? null : Number.parseInt(amontCountOutput.trim(), 10);
+    const amontSujetOutput =
+      amontBehind !== null && amontBehind > 0
+        ? yield* runGit(["log", "upstream/main", "-1", "--format=%s"])
+        : null;
+
     return HttpServerResponse.jsonUnsafe(
       {
         behind: behind !== null && Number.isFinite(behind) ? behind : null,
         latestSubject: subjectOutput === null ? null : subjectOutput.trim(),
+        amontBehind: amontBehind !== null && Number.isFinite(amontBehind) ? amontBehind : null,
+        amontSujet: amontSujetOutput === null ? null : amontSujetOutput.trim(),
         building: rebuildRunning,
         lastRebuildExitCode,
         repo: FORK_REPO,
