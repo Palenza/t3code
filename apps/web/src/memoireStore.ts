@@ -26,6 +26,12 @@ export interface ConsigneRetenue extends Consigne {
 
 interface MemoireState {
   consignes: ConsigneRetenue[];
+  /**
+   * Ce que l'humain a explicitement retiré — pierres tombales. Sans elles,
+   * une consigne oubliée serait re-capturée à la prochaine occurrence de la
+   * même phrase, et la décision de l'humain serait défaite en silence.
+   */
+  oubliees: string[];
   /** Lit un message humain et retient ce qu'il pose comme règle. */
   noterDepuisMessage: (input: { message: string; maintenant: string }) => void;
   /** L'humain retire une consigne — il peut toujours changer d'avis. */
@@ -36,10 +42,12 @@ export const useMemoireStore = create<MemoireState>()(
   persist(
     (set) => ({
       consignes: [],
+      oubliees: [],
       noterDepuisMessage: ({ message, maintenant }) =>
         set((state) => {
           const nouvelles = extraireConsignes(message)
             .filter((consigne) => !state.consignes.some((c) => c.id === consigne.phrase))
+            .filter((consigne) => !state.oubliees.includes(consigne.phrase))
             .map((consigne) => ({ ...consigne, id: consigne.phrase, diteA: maintenant }));
           if (nouvelles.length === 0) return state;
           const consignes = [...nouvelles, ...state.consignes];
@@ -53,10 +61,10 @@ export const useMemoireStore = create<MemoireState>()(
         set((state) => {
           const consignes = state.consignes.filter((consigne) => consigne.id !== id);
           void pousserAuServeur(consignes);
-          return { consignes };
+          return { consignes, oubliees: [id, ...state.oubliees].slice(0, 200) };
         }),
     }),
-    { name: "t3code:memoire:v1" },
+    { name: "t3code:memoire:v2" },
   ),
 );
 

@@ -20,6 +20,8 @@ import {
   SIDEBAR_THEME_PRESETS,
   sidebarThemeBackground,
 } from "../../sidebarThemeStore";
+import { useShallow } from "zustand/react/shallow";
+
 import { useThreadCustomizationStore, type ThreadColor } from "../../threadCustomizationStore";
 import { Button } from "../ui/button";
 import { Popover, PopoverPopup, PopoverTrigger } from "../ui/popover";
@@ -391,7 +393,10 @@ function LinkFavicon({ url }: { url: string }) {
  * favicon tient ce rôle pour une adresse.
  */
 export function SidebarFavoritesGrid() {
-  const favorites = useSidebarSpacesStore(visibleFavorites);
+  // useShallow OBLIGATOIRE : visibleFavorites filtre, donc rend un tableau NEUF
+  // à chaque appel — sans cache de snapshot, zustand v5 re-rend en boucle
+  // (« Maximum update depth exceeded », régression attrapée par l'audit du 29/07).
+  const favorites = useSidebarSpacesStore(useShallow(visibleFavorites));
   const activeSpaceId = useSidebarSpacesStore((state) => state.activeSpaceId);
   const toggleFavorite = useSidebarSpacesStore((state) => state.toggleFavorite);
   const addLinkFavorite = useSidebarSpacesStore((state) => state.addLinkFavorite);
@@ -426,11 +431,27 @@ export function SidebarFavoritesGrid() {
               : (etat.spaces.find(
                   (space) => space.name.toLowerCase() === depose.espace?.toLowerCase(),
                 )?.id ?? etat.activeSpaceId);
-          etat.addLinkFavorite({
+          const issue = etat.addLinkFavorite({
             url: depose.url,
             title: depose.titre ?? depose.url.replace(/^https?:\/\//i, ""),
             spaceId: vise,
           });
+          if (issue === "full") {
+            // La relève a déjà VIDÉ la file côté serveur : sans re-dépôt, un
+            // livrable qui ne rentre pas (12/12) serait détruit en silence.
+            void fetch(resolvePrimaryEnvironmentHttpUrl("/api/favoris/epingler"), {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify(depose),
+            }).catch(() => undefined);
+            toastManager.add(
+              stackedThreadToast({
+                type: "error",
+                title: "Favoris pleins",
+                description: `Un lien déposé attend : retire un favori pour qu'il s'épingle.`,
+              }),
+            );
+          }
         }
       } catch {
         // Serveur local absent : on retentera au prochain tour, sans bruit.

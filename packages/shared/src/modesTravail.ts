@@ -70,10 +70,24 @@ export interface ReglesPermission {
 /**
  * Traduit un mode en règles de permission pour la CLI.
  *
- * Le sens de la traduction compte : on REFUSE explicitement ce qui n'est pas
- * accordé, au lieu de n'autoriser que le permis. Une CLI qui gagne un nouvel
- * outil au prochain nightly serait sinon autorisée par défaut — et un
- * périmètre qui s'ouvre tout seul n'est pas un périmètre.
+ * Deux vérités de la doc officielle gouvernent cette traduction, toutes deux
+ * apprises à la dure (audit 29/07 — la première version rendait le mode
+ * Documentation incapable d'écrire QUOI QUE CE SOIT) :
+ *
+ * 1. « A broad deny rule blocks every matching call, including calls that
+ *    also match a narrower allow rule — a deny rule can't carry allowlist
+ *    exceptions. » Donc JAMAIS de deny(*) + allow(périmètre) : le deny gagne
+ *    et le périmètre est mort.
+ * 2. Une famille fermée se refuse par le NOM NU de l'outil (« Edit », pas
+ *    « Edit(*) ») : le nom nu retire l'outil du contexte entièrement — c'est
+ *    le seul refus qui tient dans TOUS les modes d'exécution. Et seules les
+ *    règles Edit(chemin) sont matchées par les contrôles de fichiers — un
+ *    Write(chemin) est accepté puis ignoré avec un avertissement.
+ *
+ * Le périmètre d'écriture devient donc : allow Edit(motif) — ces écritures
+ * passent sans approbation — et TOUT LE RESTE retombe sur l'approbation
+ * normale de la CLI. C'est un périmètre de confort, pas un mur ; le mur,
+ * c'est le mode Revue (noms nus). La différence est dite dans l'UI.
  */
 export function reglesPour(mode: ModeTravail): ReglesPermission {
   const deny: string[] = [];
@@ -82,18 +96,15 @@ export function reglesPour(mode: ModeTravail): ReglesPermission {
   for (const famille of TOUTES_FAMILLES) {
     const outils = OUTILS_PAR_FAMILLE[famille];
     if (!mode.outils.includes(famille)) {
-      for (const outil of outils) deny.push(`${outil}(*)`);
+      // Nom NU : retire l'outil du contexte — le seul refus total qui tient.
+      for (const outil of outils) deny.push(outil);
       continue;
     }
-    // Famille accordée mais périmètre restreint : on refuse tout ce qui sort
-    // du périmètre, plutôt que d'énumérer ce qui y entre — l'énumération
-    // laisserait passer tout ce qu'on aurait oublié de nommer.
     if (famille === "ecriture" && (mode.perimetreEcriture?.length ?? 0) > 0) {
-      for (const outil of outils) {
-        for (const motif of mode.perimetreEcriture ?? []) {
-          allow.push(`${outil}(${motif})`);
-        }
-        deny.push(`${outil}(*)`);
+      // Les contrôles de fichiers ne matchent QUE Edit(chemin) — « Edit rules
+      // cover all file-editing tools » : un seul allow par motif suffit.
+      for (const motif of mode.perimetreEcriture ?? []) {
+        allow.push(`Edit(${motif})`);
       }
     }
   }
@@ -112,7 +123,7 @@ export function promptDuMode(mode: ModeTravail): string {
     // qui surprend fait perdre un tour à tout le monde. L'agent doit savoir
     // où il a le droit d'écrire AVANT d'essayer.
     morceaux.push(
-      `Tu ne peux écrire que dans : ${perimetre.join(", ")}. Toute autre écriture sera refusée.`,
+      `Ton périmètre d'écriture est : ${perimetre.join(", ")}. Toute écriture en dehors devra être approuvée par l'humain — reste dedans.`,
     );
   }
   return morceaux.join("\n\n");

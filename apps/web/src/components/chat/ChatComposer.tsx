@@ -769,8 +769,18 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     [providerStatuses, settings],
   );
   const selectedProviderByThreadId = composerDraft.activeProvider ?? null;
+  // L'instance de la session ne compte que si la session est VIVANTE : une
+  // session en erreur porte le compte MORT, et le laisser primer renverrait
+  // le prochain message exactement là où le relais vient de basculer
+  // (audit 29/07 — le fil repartait sur le compte à sec).
+  const liveSessionInstanceId =
+    activeThread?.session &&
+    activeThread.session.status !== "error" &&
+    activeThread.session.status !== "stopped"
+      ? activeThread.session.providerInstanceId
+      : undefined;
   const threadProvider =
-    activeThread?.session?.providerInstanceId ??
+    liveSessionInstanceId ??
     activeThreadModelSelection?.instanceId ??
     activeProjectDefaultModelSelection?.instanceId ??
     null;
@@ -819,7 +829,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   const selectedInstanceId = useMemo<ProviderInstanceId>(() => {
     const candidates: Array<string | null | undefined> = [
       composerDraft.activeProvider,
-      activeThread?.session?.providerInstanceId,
+      liveSessionInstanceId,
       activeThreadModelSelection?.instanceId,
       activeProjectDefaultModelSelection?.instanceId,
     ];
@@ -856,7 +866,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     );
   }, [
     activeProjectDefaultModelSelection?.instanceId,
-    activeThread?.session?.providerInstanceId,
+    liveSessionInstanceId,
     activeThreadModelSelection?.instanceId,
     composerDraft.activeProvider,
     lockedContinuationGroupKey,

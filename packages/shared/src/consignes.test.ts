@@ -45,6 +45,28 @@ describe("extraction des consignes durables", () => {
     );
   });
 
+  it("le français parlé descriptif ne fabrique JAMAIS de règle — les pièges de l'audit", () => {
+    // Chacune de ces phrases devenait une règle éternelle avant le
+    // durcissement (prouvé par exécution, audit 29/07).
+    for (const piege of [
+      "Ça marche toujours pas.",
+      "Le bug est toujours là après le déploiement.",
+      "On n'a jamais testé sur Safari.",
+      "Tu as toujours accès au serveur ?",
+      "Le thème sombre est activé par défaut.",
+      "Il n'y a jamais eu de problème avec Stripe.",
+      "Mieux vaut tard que jamais pour le fix.",
+    ]) {
+      assert.deepStrictEqual(extraireConsignes(piege), [], piege);
+    }
+  });
+
+  it("une interdiction directive avec un démonstratif reste retenue", () => {
+    // « ce » ne doit pas désarmer un vrai interdit.
+    const [c] = extraireConsignes("Ne touche plus jamais à ce dossier de production.");
+    assert.strictEqual(c?.nature, "interdit");
+  });
+
   it("le code ne pose pas de règle", () => {
     const message = ["Regarde :", "```ts", "// ne jamais faire ça", "```", "C'est tout."].join("\n");
     assert.deepStrictEqual(extraireConsignes(message), []);

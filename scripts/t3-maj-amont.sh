@@ -53,9 +53,12 @@ NOS_TESTS_SERVEUR=(
 )
 
 echo "→ [3/5] Fusion dans $BRANCHE"
-AVANT_FUSION=$(git rev-parse HEAD)
 git checkout "$BRANCHE" --quiet
 git pull --ff-only origin "$BRANCHE" --quiet
+# APRÈS le checkout et le pull, jamais avant : capturé plus tôt, un lancement
+# depuis une autre branche ferait du rollback un hard-reset vers le mauvais
+# commit — et --ff-only garantit qu'aucun commit local n'existe entre les deux.
+AVANT_FUSION=$(git rev-parse HEAD)
 if [ "$RETARD" -gt 0 ]; then
   # --no-edit : le message de merge par défaut suffit. En cas de conflit,
   # git s'arrête ici et `set -e` nous fait sortir : l'arbre reste en état de

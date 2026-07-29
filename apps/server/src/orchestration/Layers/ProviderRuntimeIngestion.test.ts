@@ -3489,8 +3489,26 @@ describe("ProviderRuntimeIngestion", () => {
       },
     } as unknown as Partial<ServerSettings>;
 
-    it("un tour mort sur quota fait basculer le fil sur l'autre compte", async () => {
+    it("un tour mort sur quota REPART sur l'autre compte — même message, même modèle", async () => {
       const harness = await createHarness({ serverSettings: deuxComptes });
+
+      // La question de l'humain : c'est ELLE que le relais doit rejouer.
+      await Effect.runPromise(
+        harness.engine.dispatch({
+          type: "thread.turn.start",
+          commandId: CommandId.make("cmd-relais-question"),
+          threadId: asThreadId("thread-1"),
+          message: {
+            messageId: MessageId.make("msg-relais-question"),
+            role: "user",
+            text: "Ma question restée sans réponse",
+            attachments: [],
+          },
+          runtimeMode: "full-access",
+          interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+          createdAt: "2026-07-29T21:59:50.000Z",
+        }),
+      );
 
       harness.emit({
         type: "turn.started",
@@ -3526,6 +3544,25 @@ describe("ProviderRuntimeIngestion", () => {
       // de cerveau.
       expect(thread.modelSelection.instanceId).toBe("codex_secours");
       expect(thread.modelSelection.model).toBe("gpt-5-codex");
+
+      // Et le tour REPART : l'assertion qui manquait à la première version —
+      // sans elle, le test validait un fil re-routé dont la question restait
+      // sans réponse (audit 29/07). La preuve de la réémission : le message
+      // porte l'updatedAt de la MORT (le rejeu upsert le même messageId au
+      // moment du turn.completed échoué) — et il reste UNIQUE à l'écran.
+      // (Le passage en « starting » appartient au réacteur de commandes,
+      // absent de ce harness — c'est le pendingTurnStart qui le déclenche.)
+      const rejoue = await waitForThread(harness.readModel, (entry) =>
+        entry.messages.some(
+          (message: ProviderRuntimeTestMessage) =>
+            message.role === "user" && message.updatedAt === "2026-07-29T22:00:05.000Z",
+        ),
+      );
+      const messagesHumains = rejoue.messages.filter(
+        (message: ProviderRuntimeTestMessage) => message.role === "user",
+      );
+      expect(messagesHumains).toHaveLength(1);
+      expect(messagesHumains[0]?.text).toBe("Ma question restée sans réponse");
     });
 
     it("une requête invalide ne fait basculer AUCUN compte", async () => {

@@ -143,7 +143,7 @@ export function SidebarModeTravail() {
               <span className="text-xs text-muted-foreground">{mode.role}</span>
               {mode.perimetre.length > 0 ? (
                 <span className="text-xs text-muted-foreground">
-                  Écriture limitée à {mode.perimetre.join(", ")}
+                  Écrit librement dans {mode.perimetre.join(", ")} — approbation demandée ailleurs
                 </span>
               ) : mode.slug === "revue" ? (
                 <span className="text-xs text-muted-foreground">Aucune écriture possible</span>

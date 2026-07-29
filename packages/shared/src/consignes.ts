@@ -32,26 +32,44 @@ export interface Consigne {
   readonly nature: "interdit" | "impose";
 }
 
-/** Ce qui INTERDIT — la forme la plus coûteuse à oublier. */
+/**
+ * Ce qui INTERDIT — la forme la plus coûteuse à oublier.
+ *
+ * Le « jamais » NU a été retiré après preuve par exécution (audit 29/07) :
+ * en français parlé, « on n'a jamais testé sur Safari » et « mieux vaut tard
+ * que jamais » sont descriptifs, pas directifs — chaque session de debug
+ * fabriquait des interdits éternels. Un interdit exige la négation ADRESSÉE
+ * (« ne … jamais ») ou une forme impérative (« arrête de », « plus jamais »).
+ */
 const MOTIFS_INTERDIT: ReadonlyArray<RegExp> = [
-  /\bne\s+(?:jamais|plus)\b/iu,
-  /\b(?:jamais|plus\s+jamais)\b/iu,
+  /\bne\s+(?:me\s+|te\s+|le\s+|la\s+|les\s+)?\p{L}+\s+(?:pas|plus|jamais)\b/iu,
+  /\bne\s+(?:jamais|plus)\s+\p{L}+/iu,
+  /\bplus\s+jamais\b/iu,
   /\barrête\s+de\b/iu,
-  /\bne\s+\p{L}+\s+(?:pas|plus|jamais)\b/iu,
   /\bil\s+ne\s+faut\s+(?:pas|plus|jamais)\b/iu,
   /\bje\s+(?:ne\s+)?veux\s+pas\b/iu,
 ];
 
-/** Ce qui IMPOSE. */
+/**
+ * Ce qui IMPOSE.
+ *
+ * « toujours » et « par défaut » ne comptent que dans une phrase ADRESSÉE à
+ * l'agent (tu/toi ou impératif) : « ça marche toujours pas » et « le thème
+ * sombre est activé par défaut » sont des constats, pas des règles — prouvé
+ * par exécution sur de vraies phrases de session (audit 29/07).
+ */
 const MOTIFS_IMPOSE: ReadonlyArray<RegExp> = [
-  /\btoujours\b/iu,
   /\bà\s+partir\s+de\s+maintenant\b/iu,
   /\bdésormais\b/iu,
   /\bje\s+veux\s+que\s+tu\b/iu,
   /\bil\s+faut\s+(?:que\s+tu|absolument)\b/iu,
   /\bsystématiquement\b/iu,
-  /\bpar\s+défaut\b/iu,
 ];
+
+/** Marqueurs faibles : ne valent que si la phrase s'adresse à l'agent. */
+const MOTIFS_IMPOSE_FAIBLES: ReadonlyArray<RegExp> = [/\btoujours\b/iu, /\bpar\s+défaut\b/iu];
+const PHRASE_ADRESSEE =
+  /\b(?:tu|toi|te)\b|^(?:fais|vérifie|verifie|utilise|garde|pense|mets|écris|ecris|préfère|prefere)\b/iu;
 
 /**
  * Ce qui disqualifie une phrase malgré un marqueur.
@@ -92,11 +110,24 @@ export function extraireConsignes(message: string): ReadonlyArray<Consigne> {
     // Trop court pour porter une règle, trop long pour être une consigne :
     // un paragraphe entier retenu tel quel noierait la mémoire.
     if (phrase.length < 12 || phrase.length > 400) continue;
-    if (PORTEE_PONCTUELLE.some((motif) => motif.test(phrase))) continue;
+    // Une question n'est jamais une règle — « tu as toujours accès ? » posait
+    // une consigne éternelle avant ce garde (audit 29/07).
+    if (phrase.endsWith("?")) continue;
 
     const interdit = MOTIFS_INTERDIT.some((motif) => motif.test(phrase));
-    const impose = !interdit && MOTIFS_IMPOSE.some((motif) => motif.test(phrase));
+    const imposeFort = !interdit && MOTIFS_IMPOSE.some((motif) => motif.test(phrase));
+    const imposeFaible =
+      !interdit &&
+      !imposeFort &&
+      PHRASE_ADRESSEE.test(phrase) &&
+      MOTIFS_IMPOSE_FAIBLES.some((motif) => motif.test(phrase));
+    const impose = imposeFort || imposeFaible;
     if (!interdit && !impose) continue;
+    // Le filtre de portée s'applique aux OBLIGATIONS (« il faut que tu
+    // corriges ce bouton » = tâche du jour), jamais aux interdictions : une
+    // vraie interdiction (« ne fais jamais ça ») gagne toujours sur lui —
+    // sinon un simple démonstratif désarmait la consigne fondatrice.
+    if (!interdit && PORTEE_PONCTUELLE.some((motif) => motif.test(phrase))) continue;
     if (vues.has(phrase)) continue;
     vues.add(phrase);
     consignes.push({ phrase, nature: interdit ? "interdit" : "impose" });

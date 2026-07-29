@@ -1,7 +1,11 @@
 import {
   ApprovalRequestId,
   type AssistantDeliveryMode,
+  type ChatAttachment,
   CommandId,
+  DEFAULT_PROVIDER_INTERACTION_MODE,
+  type ProviderInteractionMode,
+  type RuntimeMode,
   MessageId,
   type OrchestrationEvent,
   type OrchestrationMessage,
@@ -728,6 +732,20 @@ const make = Effect.gen(function* () {
     readonly message: string;
     readonly turnId: string | undefined;
     readonly now: string;
+    /**
+     * Le message utilisateur qui a lancé le tour mort — quand l'appelant le
+     * connaît, le tour est REJOUÉ sur le nouveau compte, pas seulement
+     * re-routé. Sans lui, la bascule seule s'applique (le prochain envoi
+     * partira du bon côté). Le rejeu réutilise le MÊME messageId : la
+     * projection upsert par id, donc rien ne se duplique à l'écran.
+     */
+    readonly rejouer?: {
+      readonly messageId: MessageId;
+      readonly text: string;
+      readonly attachments: ReadonlyArray<ChatAttachment>;
+      readonly runtimeMode: RuntimeMode;
+      readonly interactionMode: ProviderInteractionMode;
+    };
   }) =>
     Effect.gen(function* () {
       const { event, thread } = entree;
@@ -788,10 +806,41 @@ const make = Effect.gen(function* () {
         modelSelection: decision.modelSelection,
       });
       noterBascule(thread.id, compteMort, decision.vers);
+
+      if (entree.rejouer !== undefined) {
+        // La session MORTE est stoppée d'abord : laissée en « error », elle
+        // masquerait la nouvelle sélection au prochain envoi (le composer lit
+        // l'instance de la session avant celle du fil — audit 29/07).
+        yield* orchestrationEngine.dispatch({
+          type: "thread.session.stop",
+          commandId: yield* providerCommandId(event, "relais-stop"),
+          threadId: thread.id,
+          createdAt: entree.now,
+        });
+        // Puis le tour REPART, même message, même modèle, nouveau compte —
+        // c'est tout l'intérêt du relais : la question de l'humain ne reste
+        // pas sans réponse en attendant qu'il la renvoie à la main.
+        yield* orchestrationEngine.dispatch({
+          type: "thread.turn.start",
+          commandId: yield* providerCommandId(event, "relais-rejeu"),
+          threadId: thread.id,
+          message: {
+            messageId: entree.rejouer.messageId,
+            role: "user",
+            text: entree.rejouer.text,
+            attachments: entree.rejouer.attachments,
+          },
+          modelSelection: decision.modelSelection,
+          runtimeMode: entree.rejouer.runtimeMode,
+          interactionMode: entree.rejouer.interactionMode,
+          createdAt: entree.now,
+        });
+      }
       yield* Effect.logInfo("relais: fil basculé", {
         threadId: thread.id,
         depuis: nomDuCompte(instances, compteMort),
         vers: nomDuCompte(instances, decision.vers),
+        rejoue: entree.rejouer !== undefined,
         raison: decision.raison,
       });
     }).pipe(
@@ -1787,12 +1836,30 @@ const make = Effect.gen(function* () {
           noterSucces(compteUtilise);
           oublierFil(thread.id);
         } else {
+          // Le dernier message de l'humain est le tour à rejouer. On le
+          // cherche dans le détail déjà chargé — sans lui, la bascule seule
+          // s'applique et l'humain devra renvoyer sa question.
+          const detailPourRejeu = yield* getLoadedThreadDetail();
+          const dernierUtilisateur = [...(detailPourRejeu?.messages ?? [])]
+            .reverse()
+            .find((m) => m.role === "user");
           yield* tenterRelais({
             event,
             thread,
             message: event.payload.errorMessage ?? "Turn failed",
             turnId: toTurnId(event.turnId) ?? undefined,
             now,
+            ...(dernierUtilisateur === undefined
+              ? {}
+              : {
+                  rejouer: {
+                    messageId: dernierUtilisateur.id,
+                    text: dernierUtilisateur.text,
+                    attachments: dernierUtilisateur.attachments ?? [],
+                    runtimeMode: thread.session?.runtimeMode ?? "full-access",
+                    interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+                  },
+                }),
           });
         }
       }

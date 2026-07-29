@@ -190,4 +190,31 @@ describe("choix du compte", () => {
     });
     assert.strictEqual(choisi?.instanceId, id("B"));
   });
+  it("un compte que le fournisseur a REJETÉ n'est jamais le préféré, même sans pourcentage", () => {
+    // Cas réel du 28/07 : la fenêtre « rejected » arrive SANS utilization —
+    // elle scorait 0 et devenait le compte le moins chargé du relais.
+    const rejeteSansMesure: ServerProviderRateLimits = {
+      observedAt: "2026-07-29T21:59:00.000Z",
+      windows: [{ kind: "seven_day", severity: "rejected" }],
+    };
+    const choisi = choisir({
+      candidats: candidats(["A", sain("A"), rejeteSansMesure], ["B", sain("B"), quotas(96)]),
+      strategie: "moins-charge",
+      maintenant: MAINTENANT,
+    });
+    assert.strictEqual(choisi?.instanceId, id("B"), "le compte sain à 96 % passe avant le rejeté");
+  });
+
+  it("quand il ne reste QUE des rejetés, on tente quand même — jamais d'abandon muet", () => {
+    const rejete: ServerProviderRateLimits = {
+      observedAt: "2026-07-29T21:59:00.000Z",
+      windows: [{ kind: "seven_day", severity: "rejected", utilization: 94 }],
+    };
+    const choisi = choisir({
+      candidats: candidats(["A", sain("A"), rejete]),
+      strategie: "moins-charge",
+      maintenant: MAINTENANT,
+    });
+    assert.strictEqual(choisi?.instanceId, id("A"));
+  });
 });

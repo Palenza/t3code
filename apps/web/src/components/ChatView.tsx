@@ -2278,30 +2278,15 @@ function ChatViewContent(props: ChatViewProps) {
     return null;
   }, [displayServerMessages]);
 
-  // Ce que l'humain vient de poser comme règle. Lu sur SON dernier message,
-  // pas sur la réponse : une consigne vient de lui, jamais de l'agent.
-  const dernierMessageHumain = useMemo(() => {
-    for (let index = displayServerMessages.length - 1; index >= 0; index -= 1) {
-      const message = displayServerMessages[index];
-      if (message?.role === "user") return message;
-    }
-    return null;
-  }, [displayServerMessages]);
-
   useEffect(() => {
-    const texte = dernierMessageHumain?.text;
-    if (texte === undefined || texte.length === 0) return;
-    useMemoireStore.getState().noterDepuisMessage({
-      message: texte,
-      maintenant: new Date().toISOString(),
-    });
-  }, [dernierMessageHumain]);
-
-  useEffect(() => {
-    const texte = dernierAssistantFini?.text;
+    if (dernierAssistantFini === null) return;
+    const texte = dernierAssistantFini.text;
     if (texte === undefined || texte.length === 0) return;
     usePromessesStore.getState().noterDepuisReponse({
       reponse: texte,
+      // La dédup par message SOURCE : rouvrir un vieux fil ne re-note rien,
+      // et une promesse barrée ne ressuscite pas (audit 29/07).
+      sourceMessageId: String(dernierAssistantFini.id),
       threadKey: routeThreadKey,
       maintenant: new Date().toISOString(),
     });
@@ -4645,6 +4630,14 @@ function ChatViewContent(props: ChatViewProps) {
       selectedModelSelection: ctxSelectedModelSelection,
     } = sendCtx;
     const promptForSend = promptRef.current;
+    // La mémoire capture sur l'ÉVÉNEMENT d'envoi — jamais sur l'historique
+    // rechargé d'un vieux fil, qui ressusciterait des consignes oubliées.
+    if (promptForSend.trim().length > 0) {
+      useMemoireStore.getState().noterDepuisMessage({
+        message: promptForSend,
+        maintenant: new Date().toISOString(),
+      });
+    }
     const {
       trimmedPrompt: trimmed,
       sendableTerminalContexts: sendableComposerTerminalContexts,

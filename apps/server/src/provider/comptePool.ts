@@ -197,11 +197,23 @@ export function chargeDe(quotas: ServerProviderRateLimits | undefined): number {
   return pire;
 }
 
+/** Le fournisseur a-t-il déjà dit NON à ce compte ? La mesure prime sur tout. */
+export function estAuMur(quotas: ServerProviderRateLimits | undefined): boolean {
+  return quotas?.windows.some((fenetre) => fenetre.severity === "rejected") ?? false;
+}
+
 /**
  * Choisit le compte qui sert le prochain tour.
  *
  * `dejaTentes` porte les comptes déjà essayés DANS CE TOUR : chacun n'a droit
  * qu'à une tentative, sinon un tour qui échoue partout tournerait en rond.
+ *
+ * Les comptes dont une fenêtre est `severity: "rejected"` passent DERNIERS :
+ * le fournisseur a déjà refusé, et — cas vérifié en réel le 28/07 — ces
+ * fenêtres arrivent souvent SANS pourcentage, donc `chargeDe` les scorait 0
+ * et « moins-charge » en faisait les préférés du relais (audit 29/07). On ne
+ * les exclut pas : quand il ne reste qu'eux, mieux vaut un essai qu'un
+ * abandon — mais jamais avant un compte sain.
  *
  * Renvoie `null` quand il ne reste rien — et l'appelant DOIT le dire fort
  * plutôt que de retomber en silence sur un compte à sec.
@@ -218,9 +230,11 @@ export function choisir(entree: {
       !tentes.has(candidat.instanceId) && etatA(candidat.sante, entree.maintenant) === "ok",
   );
   if (disponibles.length === 0) return null;
-  if (entree.strategie === "ordre") return disponibles[0] ?? null;
+  const sains = disponibles.filter((candidat) => !estAuMur(candidat.quotas));
+  const vivier = sains.length > 0 ? sains : disponibles;
+  if (entree.strategie === "ordre") return vivier[0] ?? null;
 
-  return disponibles.reduce((meilleur, candidat) =>
+  return vivier.reduce((meilleur, candidat) =>
     chargeDe(candidat.quotas) < chargeDe(meilleur.quotas) ? candidat : meilleur,
   );
 }

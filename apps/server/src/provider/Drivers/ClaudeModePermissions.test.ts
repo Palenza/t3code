@@ -36,10 +36,12 @@ describe("permissions d'un mode dans le dossier de l'instance", () => {
         yield* appliquerModeAuHome(home, modeParSlug("revue"));
 
         const contenu = yield* lire(path.join(home, "settings.json"));
-        assert.include(contenu, '"Edit(*)"');
-        assert.include(contenu, '"Bash(*)"');
+        // Les refus sont des NOMS NUS — le seul refus total que la CLI
+        // garantit (doc : le nom nu retire l'outil du contexte).
+        assert.include(contenu, '"Edit"');
+        assert.include(contenu, '"Bash"');
         // La lecture reste ouverte, sinon le mode ne relit rien.
-        assert.notInclude(contenu, '"Read(*)"');
+        assert.notInclude(contenu, '"Read"');
       }),
     ),
   );

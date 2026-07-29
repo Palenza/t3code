@@ -15,37 +15,38 @@ const modeParSlug = (slug: string): ModeTravail => {
 };
 
 describe("traduction d'un mode en permissions", () => {
-  it("le mode Revue ne peut RIEN écrire ni lancer", () => {
-    // La consigne « tu ne corriges rien » devient un refus, pas un espoir.
+  it("le mode Revue refuse l'écriture par NOM NU — le seul refus qui tient", () => {
+    // Doc officielle : le nom nu retire l'outil du contexte. Un Edit(*)
+    // n'aurait pas cette garantie (audit 29/07).
     const { deny } = reglesPour(modeParSlug("revue"));
-    for (const interdit of ["Edit(*)", "Write(*)", "Bash(*)", "WebFetch(*)"]) {
-      assert.ok(deny.includes(interdit), `${interdit} devrait être refusé`);
+    for (const interdit of ["Edit", "Write", "NotebookEdit", "Bash", "WebFetch", "WebSearch"]) {
+      assert.ok(deny.includes(interdit), `${interdit} devrait être refusé nommément`);
     }
   });
 
   it("le mode Revue garde la lecture, sinon il ne relit rien", () => {
     const { deny } = reglesPour(modeParSlug("revue"));
-    for (const outil of ["Read(*)", "Grep(*)", "Glob(*)"]) {
+    for (const outil of ["Read", "Grep", "Glob"]) {
       assert.ok(!deny.includes(outil), `${outil} ne doit pas être refusé`);
     }
   });
 
-  it("le mode Documentation n'écrit que dans son périmètre", () => {
+  it("le périmètre n'émet JAMAIS un deny large qui l'annulerait", () => {
+    // « A deny rule can't carry allowlist exceptions » : deny Edit(*) +
+    // allow Edit(**/*.md) = plus RIEN ne s'écrit, pas même les .md — c'était
+    // le bug qui rendait le mode Documentation entièrement mort.
     const { deny, allow } = reglesPour(modeParSlug("documentation"));
     assert.ok(allow.includes("Edit(**/*.md)"));
-    assert.ok(allow.includes("Write(docs/**)"));
-    // Et tout le reste est refusé : sans ce refus large, un chemin oublié
-    // resterait ouvert.
-    assert.ok(deny.includes("Edit(*)"));
-    assert.ok(deny.includes("Write(*)"));
+    assert.ok(allow.includes("Edit(docs/**)"));
+    assert.ok(!deny.includes("Edit"), "deny Edit annulerait tout le périmètre");
+    assert.ok(!deny.some((regle) => regle.startsWith("Edit(")), "aucun deny Edit(motif)");
   });
 
-  it("un outil INCONNU d'aujourd'hui reste refusé par défaut", () => {
-    // On refuse ce qui n'est pas accordé plutôt que d'autoriser une liste :
-    // une CLI qui gagne un outil au prochain nightly serait sinon ouverte
-    // toute seule, et un périmètre qui s'ouvre n'est pas un périmètre.
-    const { allow } = reglesPour(modeParSlug("revue"));
-    assert.deepStrictEqual(allow, [], "rien ne doit être autorisé nommément");
+  it("seules des règles Edit(chemin) portent le périmètre — Write(chemin) est ignoré par la CLI", () => {
+    // Doc : « The file permission checks match only Edit(path) rules ».
+    const { allow } = reglesPour(modeParSlug("documentation"));
+    assert.ok(!allow.some((regle) => regle.startsWith("Write(")), "Write(chemin) serait ignoré");
+    assert.ok(!allow.some((regle) => regle.startsWith("NotebookEdit(")));
   });
 
   it("le mode Atelier ne refuse rien", () => {

@@ -31,13 +31,32 @@ export interface PromesseOuverte {
 
 interface PromessesState {
   ouvertes: PromesseOuverte[];
+  /**
+   * Les promesses BARRÉES par l'humain — pierres tombales. Sans elles,
+   * rouvrir un vieux fil re-extrait sa dernière réponse et ressuscite ce qui
+   * a été barré : la décision de l'humain serait défaite en silence.
+   */
+  barrees: string[];
+  /**
+   * Les messages déjà lus, par id — l'extraction est ÉVÉNEMENTIELLE, pas
+   * dérivée de l'état : un historique rechargé ne doit jamais re-noter.
+   */
+  messagesNotes: string[];
   /** Lit une réponse d'agent et retient ce qu'elle engage. */
   noterDepuisReponse: (input: {
     reponse: string;
+    sourceMessageId: string;
     threadKey: string | null;
     maintenant: string;
   }) => void;
-  /** Ferme les promesses que ce travail tient. */
+  /**
+   * Ferme les promesses que ce travail tient. PAS branché automatiquement, et
+   * c'est un choix (audit 29/07) : le seul signal disponible côté client est
+   * le texte des réponses, et fermer sur ce texte fermerait la promesse au
+   * moment même où elle est faite — la phrase qui promet contient son action.
+   * La fermeture attend un vrai signal de travail (commits, fichiers) ; d'ici
+   * là, l'humain barre d'un clic droit.
+   */
   fermerParTravail: (traces: ReadonlyArray<string>) => void;
   /** L'humain barre une promesse — son dernier mot prime toujours. */
   barrer: (id: string) => void;
@@ -51,10 +70,14 @@ export const usePromessesStore = create<PromessesState>()(
   persist(
     (set, get) => ({
       ouvertes: [],
-      noterDepuisReponse: ({ reponse, threadKey, maintenant }) =>
+      barrees: [],
+      messagesNotes: [],
+      noterDepuisReponse: ({ reponse, sourceMessageId, threadKey, maintenant }) =>
         set((state) => {
+          if (state.messagesNotes.includes(sourceMessageId)) return state;
           const nouvelles = extrairePromesses(reponse)
             .filter((promesse) => !state.ouvertes.some((o) => o.id === promesse.phrase))
+            .filter((promesse) => !state.barrees.includes(promesse.phrase))
             .map((promesse) => ({
               id: promesse.phrase,
               phrase: promesse.phrase,
@@ -62,10 +85,13 @@ export const usePromessesStore = create<PromessesState>()(
               faiteA: maintenant,
               threadKey,
             }));
-          if (nouvelles.length === 0) return state;
-          // Les plus récentes en tête, et on plafonne : une liste sans fin
-          // cesse d'être lue, donc cesse de servir.
+          // Le message est marqué lu MÊME sans promesse : le relire ne
+          // coûtera plus une extraction. Plafonné pour ne pas croître à vie.
+          const messagesNotes = [sourceMessageId, ...state.messagesNotes].slice(0, 400);
+          if (nouvelles.length === 0) return { ...state, messagesNotes };
           return {
+            ...state,
+            messagesNotes,
             ouvertes: [...nouvelles, ...state.ouvertes].slice(0, MAX_PROMESSES_OUVERTES),
           };
         }),
@@ -77,9 +103,13 @@ export const usePromessesStore = create<PromessesState>()(
           ),
         })),
       barrer: (id) =>
-        set((state) => ({ ouvertes: state.ouvertes.filter((promesse) => promesse.id !== id) })),
+        set((state) => ({
+          ouvertes: state.ouvertes.filter((promesse) => promesse.id !== id),
+          // La pierre tombale : barré une fois = barré pour toujours.
+          barrees: [id, ...state.barrees].slice(0, 200),
+        })),
       tout: () => get().ouvertes,
     }),
-    { name: "t3code:promesses:v1" },
+    { name: "t3code:promesses:v2" },
   ),
 );
