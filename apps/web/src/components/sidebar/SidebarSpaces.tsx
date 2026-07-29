@@ -1,10 +1,11 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { useRouter } from "@tanstack/react-router";
 import { GlobeIcon, LayersIcon, PaletteIcon, PlusIcon } from "lucide-react";
 
 import { settlePromise } from "@t3tools/client-runtime/state/runtime";
 
+import { resolvePrimaryEnvironmentHttpUrl } from "../../environments/primary";
 import { readLocalApi } from "../../localApi";
 import { cn } from "../../lib/utils";
 import {
@@ -26,6 +27,10 @@ import { stackedThreadToast, toastManager } from "../ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { SpaceThemePanel } from "./SpaceThemePanel";
 import { SpaceIcon, SpaceIconPicker } from "./SpaceIconPicker";
+
+/** Ce que l'agent dépose pour nous, relevé sans qu'on ait rien à taper. */
+const FAVORIS_EN_ATTENTE_PATH = "/api/favoris/en-attente";
+const RELEVE_FAVORIS_MS = 20_000;
 
 /**
  * La barre d'Espaces façon Arc, en bas de la sidebar. Lisibilité d'abord
@@ -396,6 +401,48 @@ export function SidebarFavoritesGrid() {
   const [adresse, setAdresse] = useState("");
   const [nom, setNom] = useState("");
   const [ouvert, setOuvert] = useState(false);
+
+  // Ce que l'agent (ou un script, ou une commande) a déposé pour nous :
+  // relevé à l'ouverture puis régulièrement, épinglé sans qu'on tape quoi que
+  // ce soit. Un livrable qu'on doit copier-coller est un livrable qu'on perd.
+  useEffect(() => {
+    let vivant = true;
+    const relever = async () => {
+      try {
+        const reponse = await fetch(resolvePrimaryEnvironmentHttpUrl(FAVORIS_EN_ATTENTE_PATH), {
+          cache: "no-store",
+        });
+        if (!reponse.ok || !vivant) return;
+        const { favoris } = (await reponse.json()) as {
+          favoris?: ReadonlyArray<{ url: string; titre?: string; espace?: string }>;
+        };
+        if (favoris === undefined || favoris.length === 0) return;
+        const etat = useSidebarSpacesStore.getState();
+        for (const depose of favoris) {
+          // L'espace peut être visé par son nom ; sinon c'est celui où on est.
+          const vise =
+            depose.espace === undefined
+              ? etat.activeSpaceId
+              : (etat.spaces.find(
+                  (space) => space.name.toLowerCase() === depose.espace?.toLowerCase(),
+                )?.id ?? etat.activeSpaceId);
+          etat.addLinkFavorite({
+            url: depose.url,
+            title: depose.titre ?? depose.url.replace(/^https?:\/\//i, ""),
+            spaceId: vise,
+          });
+        }
+      } catch {
+        // Serveur local absent : on retentera au prochain tour, sans bruit.
+      }
+    };
+    void relever();
+    const minuterie = window.setInterval(() => void relever(), RELEVE_FAVORIS_MS);
+    return () => {
+      vivant = false;
+      window.clearInterval(minuterie);
+    };
+  }, []);
 
   const openFavorite = useCallback(
     (favorite: SidebarFavorite) => {

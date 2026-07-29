@@ -14,6 +14,10 @@ import {
 } from "./http.ts";
 import { fixPath } from "./os-jank.ts";
 import { tableauLocalProxyRouteLayer } from "./tableauLocalProxy.ts";
+import {
+  favorisEnAttenteRouteLayer,
+  favorisEpinglerRouteLayer,
+} from "./favorisEnAttente.ts";
 import { forkUpdateEtatRouteLayer, forkUpdateLancerRouteLayer } from "./forkUpdate.ts";
 import { websocketRpcRouteLayer } from "./ws.ts";
 import * as ExternalLauncher from "./process/externalLauncher.ts";
@@ -376,6 +380,8 @@ export const makeRoutesLayer = Layer.mergeAll(
     tableauLocalProxyRouteLayer,
     forkUpdateEtatRouteLayer,
     forkUpdateLancerRouteLayer,
+    favorisEnAttenteRouteLayer,
+    favorisEpinglerRouteLayer,
     assetRouteLayer,
     staticAndDevRouteLayer,
     websocketRpcRouteLayer,
