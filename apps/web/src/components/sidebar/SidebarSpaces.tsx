@@ -282,37 +282,38 @@ export function SidebarSpacesBar() {
           <SpaceThemePanel />
         </PopoverPopup>
       </Popover>
-      <Popover open={creating} onOpenChange={setCreating}>
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <PopoverTrigger
-                render={
-                  <button
-                    type="button"
-                    aria-label="Nouvel espace"
-                    className="flex size-7 cursor-pointer items-center justify-center rounded-lg text-sidebar-muted-foreground/70 transition-colors hover:bg-sidebar-row-hover hover:text-sidebar-foreground"
-                  >
-                    <PlusIcon className="size-4" />
-                  </button>
-                }
-              />
-            }
-          />
-          <TooltipPopup side="top">Nouvel espace</TooltipPopup>
-        </Tooltip>
-        <PopoverPopup
-          // La VUE d'Arc, pas une bulle : leur création d'espace occupe TOUTE
-          // la colonne — illustration, nom, thème, et les deux actions collées
-          // en bas. Notre petite bulle flottante posée sur la barre était le
-          // « trop moche » du 30/07 ; ici elle recouvre la sidebar sur toute
-          // sa hauteur, exactement comme chez eux.
-          anchor={() => document.querySelector("[data-app-sidebar]")}
-          side="right"
-          align="center"
-          sideOffset={-999}
-          className="h-[100dvh] w-[var(--sidebar-width,17rem)] rounded-none border-0 p-0 shadow-2xl"
-          viewportClassName="h-full overflow-y-auto p-0 [--viewport-inline-padding:0px]"
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <button
+              type="button"
+              aria-label="Nouvel espace"
+              onClick={() => setCreating(true)}
+              className="flex size-7 cursor-pointer items-center justify-center rounded-lg text-sidebar-muted-foreground/70 transition-colors hover:bg-sidebar-row-hover hover:text-sidebar-foreground"
+            >
+              <PlusIcon className="size-4" />
+            </button>
+          }
+        />
+        <TooltipPopup side="top">Nouvel espace</TooltipPopup>
+      </Tooltip>
+      {/*
+        La VUE d'Arc, pas une bulle : leur création d'espace occupe TOUTE la
+        colonne — illustration, nom, thème, et les deux actions collées en bas.
+
+        Ce n'est PLUS un popover. C'en était un, tiré de force sur la sidebar
+        par un `sideOffset` de −999 : on se servait d'un moteur fait pour
+        « flotter à côté d'une ancre » afin d'obtenir l'exact contraire, la
+        recouvrir. Le bouton ouvrait bien quelque chose, mais ailleurs qu'à
+        l'écran — d'où le « le + ne fait plus rien » du 30/07. Un calque posé
+        sur la colonne n'a rien à négocier avec personne.
+      */}
+      {creating ? (
+        <div
+          className="fixed inset-y-0 left-0 z-50 w-[var(--sidebar-width,17rem)] overflow-y-auto bg-sidebar shadow-2xl"
+          onKeyDown={(event) => {
+            if (event.key === "Escape") setCreating(false);
+          }}
         >
           <div className="flex h-full flex-col px-5 pt-10 pb-5">
             {/* L'en-tête d'Arc : une pile de cartes, le titre, la promesse. */}
@@ -400,8 +401,8 @@ export function SidebarSpacesBar() {
               </Button>
             </div>
           </div>
-        </PopoverPopup>
-      </Popover>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -698,4 +699,3 @@ const FAVORITE_DOT_CLASSES: Record<ThreadColor, string> = {
   blue: "bg-sky-400",
   purple: "bg-purple-400",
 };
-

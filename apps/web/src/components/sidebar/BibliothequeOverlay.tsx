@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { ArchiveIcon, LayersIcon, XIcon } from "lucide-react";
 import { create } from "zustand";
@@ -37,6 +37,9 @@ const ONGLETS = [
   { cle: "archives" as const, nom: "Fils archivés", Icone: ArchiveIcon },
 ];
 
+/** Durée de la sortie — doit rester en phase avec `duration-200` plus bas. */
+const SORTIE_MS = 200;
+
 export function BibliothequeOverlay() {
   const ouverte = useBibliothequeStore((state) => state.ouverte);
   const onglet = useBibliothequeStore((state) => state.onglet);
@@ -53,13 +56,68 @@ export function BibliothequeOverlay() {
     return () => window.removeEventListener("keydown", surTouche);
   }, [ouverte, fermer]);
 
-  if (!ouverte) return null;
+  /**
+   * L'ENTRÉE et la SORTIE, animées.
+   *
+   * La vue était montée et démontée sèchement : elle apparaissait d'un bloc.
+   * On la garde donc montée le temps de la sortie, et `visible` pilote les
+   * classes — sans ça, démonter au clic couperait l'animation en plein vol.
+   */
+  const [monte, setMonte] = useState(false);
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    if (ouverte) {
+      setMonte(true);
+      // Une image d'écart : poser les classes d'arrivée dans le même tour que
+      // le montage ne déclencherait aucune transition.
+      const image = requestAnimationFrame(() => setVisible(true));
+      return () => cancelAnimationFrame(image);
+    }
+    setVisible(false);
+    const minuteur = setTimeout(() => setMonte(false), SORTIE_MS);
+    return () => clearTimeout(minuteur);
+  }, [ouverte]);
+
+  /**
+   * Le geste de RETOUR — deux doigts vers la GAUCHE.
+   *
+   * Il manquait, et c'est une impasse : on entrait ici au geste, on ne pouvait
+   * en sortir qu'à la souris. L'écouteur d'origine vit sur la sidebar, que
+   * cette vue recouvre entièrement — aucun événement ne l'atteignait.
+   *
+   * Même convention qu'ailleurs : avec le défilement naturel de macOS, les
+   * doigts vers la gauche donnent un deltaX POSITIF.
+   */
+  const accumRef = useRef(0);
+  const surMolette = useCallback(
+    (event: { deltaX: number; deltaY: number }) => {
+      if (Math.abs(event.deltaX) <= Math.abs(event.deltaY)) {
+        accumRef.current = 0;
+        return;
+      }
+      accumRef.current += event.deltaX;
+      if (accumRef.current < 110) return;
+      accumRef.current = 0;
+      fermer();
+    },
+    [fermer],
+  );
+
+  if (!monte) return null;
 
   return (
     // Fond MESURÉ chez Arc : #101010, quasi opaque — pas un voile flou. Les
     // colonnes colorées ne ressortent que sur un noir franc ; un fond
     // translucide les aurait délavées (mesure 30/07).
-    <div className="fixed inset-0 z-50 flex bg-[#101010]">
+    <div
+      onWheel={surMolette}
+      className={cn(
+        "fixed inset-0 z-50 flex bg-[#101010] transition-[opacity,transform] duration-200 ease-out",
+        // Une entrée qui vient de la droite : c'est le sens du geste qui
+        // l'ouvre, donc la vue arrive par là d'où la main la tire.
+        visible ? "translate-x-0 opacity-100" : "translate-x-6 opacity-0",
+      )}
+    >
       {/* Le rail d'Arc : icône au-dessus, libellé dessous, l'actif en pastille.
           MESURÉ au second passage : 140 px de large (frontière nette à 280 px
           Retina), et surtout un PAS VERTICAL de 100 px entre entrées — mesuré
