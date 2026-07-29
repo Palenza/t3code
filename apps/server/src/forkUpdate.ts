@@ -28,9 +28,11 @@ import {
  * describes and touches only the machine the server runs on.
  */
 
-const FORK_REPO = process.env["T3_FORK_REPO"] ?? NodePath.join(NodeOS.homedir(), "Documents/t3code");
+const FORK_REPO_PATH =
+  process.env["T3_FORK_REPO"] ?? NodePath.join(NodeOS.homedir(), "Documents/t3code");
+const FORK_REPO = FORK_REPO_PATH;
 const UPDATE_COMMAND =
-  process.env["T3_FORK_UPDATE_COMMAND"] ?? NodePath.join(NodeOS.homedir(), ".local/bin/t3-maj");
+  process.env["T3_FORK_UPDATE_COMMAND"] ?? NodePath.join(FORK_REPO_PATH, "scripts/t3-maj-amont.sh");
 const UPDATE_LOG = NodePath.join(NodeOS.homedir(), ".t3/logs/t3-maj.log");
 const GIT_TIMEOUT_MS = 25_000;
 
