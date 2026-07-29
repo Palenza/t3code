@@ -336,7 +336,11 @@ export function SidebarFavoritesGrid() {
     return null;
   }
   return (
-    <div className="grid grid-cols-3 gap-1.5 px-3 pb-1">
+    // Les favoris d'Arc : des TUILES DE VERRE carrées, l'initiale seule au
+    // centre, le titre en survol. Le fond suit l'encre du voile (donc le
+    // contraste tient sur toutes les couleurs) — plus de carte sombre
+    // opaque ni de titre en 9 px illisible (reproche fondateur 29/07).
+    <div className="grid grid-cols-4 gap-1.5 px-3 pb-1.5">
       {favorites.map((favorite) => {
         const color = colorByThreadKey[favorite.threadKey];
         return (
@@ -351,19 +355,14 @@ export function SidebarFavoritesGrid() {
                     event.preventDefault();
                     handleFavoriteContextMenu(favorite, { x: event.clientX, y: event.clientY });
                   }}
-                  className="flex h-14 cursor-pointer flex-col items-center justify-center gap-1 rounded-xl bg-sidebar-control-surface/70 px-1.5 ring-1 ring-sidebar-border/60 transition-colors hover:bg-sidebar-row-hover"
+                  className={cn(
+                    "flex aspect-square cursor-pointer items-center justify-center rounded-xl text-[15px] font-semibold text-sidebar-foreground/90 ring-1 ring-sidebar-border transition-transform hover:scale-105",
+                    // currentColor = l'encre décidée par le voile : la tuile
+                    // est toujours un verre teinté DU BON CÔTÉ.
+                    color === undefined ? "bg-current/12" : FAVORITE_TILE_CLASSES[color],
+                  )}
                 >
-                  <span
-                    className={cn(
-                      "flex size-5 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold",
-                      FAVORITE_DOT_CLASSES[color ?? "none"],
-                    )}
-                  >
-                    {favoriteInitial(favorite.title)}
-                  </span>
-                  <span className="line-clamp-2 w-full text-center text-[9px] leading-[10.5px] font-medium text-sidebar-foreground/75">
-                    {favorite.title}
-                  </span>
+                  {favoriteInitial(favorite.title)}
                 </button>
               }
             />
@@ -375,15 +374,15 @@ export function SidebarFavoritesGrid() {
   );
 }
 
-/** Statiques exprès : Tailwind ne compile pas les classes composées à la volée. */
-const FAVORITE_DOT_CLASSES: Record<ThreadColor | "none", string> = {
-  none: "bg-sidebar-foreground/10 text-sidebar-foreground/80",
-  red: "bg-red-400/25 text-red-200",
-  orange: "bg-orange-400/25 text-orange-200",
-  yellow: "bg-yellow-400/25 text-yellow-200",
-  green: "bg-emerald-400/25 text-emerald-200",
-  blue: "bg-sky-400/25 text-sky-200",
-  purple: "bg-purple-400/25 text-purple-200",
+/** Statiques exprès : Tailwind ne compile pas les classes composées à la volée.
+ * Teintes légères — la couleur SIGNE le favori, l'encre reste celle du voile. */
+const FAVORITE_TILE_CLASSES: Record<ThreadColor, string> = {
+  red: "bg-red-500/22",
+  orange: "bg-orange-500/22",
+  yellow: "bg-yellow-500/22",
+  green: "bg-emerald-500/22",
+  blue: "bg-sky-500/22",
+  purple: "bg-purple-500/22",
 };
 
 function favoriteInitial(title: string): string {
