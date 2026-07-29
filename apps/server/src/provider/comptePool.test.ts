@@ -38,6 +38,39 @@ describe("classement des échecs", () => {
     }
   });
 
+  it("le SOLDE épuisé est reconnu — la phrase exacte vue le 30/07", () => {
+    // Cette phrase-là, mot pour mot, a tué un tour en « Runtime error » : aucun
+    // motif de quota ne l'attrapait, donc le relais n'a pas tiré. Elle est
+    // épinglée ici pour qu'une reformulation du fournisseur casse le test au
+    // lieu de casser le relais en silence.
+    const verdict = classerEchec({
+      message:
+        "You're out of usage credits. Run /usage-credits to keep using Fable 5 or /model to switch models.",
+      maintenant: MAINTENANT,
+    });
+    assert.strictEqual(verdict.nature, "quota");
+    // Un solde ne repart pas tout seul dans l'heure : on écarte le compte
+    // longtemps plutôt que de le sonder pour rien.
+    // `repriseA` est optionnel dans le type : son ABSENCE serait un compte
+    // remis en rotation aussitôt, donc on l'exige explicitement.
+    assert.ok(verdict.repriseA !== undefined, "un solde vide a une heure de reprise");
+    assert.ok(
+      Date.parse(verdict.repriseA ?? "") - MAINTENANT > 6 * 60 * 60_000,
+      "un solde vide s'écarte pour bien plus qu'une heure",
+    );
+  });
+
+  it("les autres formulations de solde vide sont couvertes", () => {
+    for (const message of [
+      "Insufficient credits for this request",
+      "Your credit balance is too low to continue",
+      "No credits remaining on this account",
+      "You are out of credits",
+    ]) {
+      assert.strictEqual(classerEchec({ message, maintenant: MAINTENANT }).nature, "quota", message);
+    }
+  });
+
   it("une requête invalide n'est la faute d'AUCUN compte", () => {
     // Sans ce cas, un 400 brûlerait les trois comptes pour la même erreur.
     const verdict = classerEchec({

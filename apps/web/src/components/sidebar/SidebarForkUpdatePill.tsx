@@ -92,7 +92,11 @@ export function SidebarForkUpdatePill() {
       const response = await fetch(resolvePrimaryEnvironmentHttpUrl(LANCER_PATH), {
         method: "POST",
       });
-      const body = (await response.json()) as { started?: boolean };
+      const body = (await response.json()) as {
+        started?: boolean;
+        reason?: string;
+        fichiers?: ReadonlyArray<string>;
+      };
       if (body.started === true) {
         toastManager.add(
           stackedThreadToast({
@@ -106,11 +110,23 @@ export function SidebarForkUpdatePill() {
         setEtat((previous) => (previous === null ? null : { ...previous, building: true }));
         return;
       }
+      // Le refus se DIT, avec sa raison et les fichiers en cause. « Voir le
+      // log » renvoyait chercher au fond d'un fichier ce que le serveur venait
+      // de constater en 30 ms — et seulement APRÈS avoir promis « quelques
+      // minutes » (30/07).
+      const fichiers = body.fichiers ?? [];
       toastManager.add(
         stackedThreadToast({
           type: "error",
-          title: "Update non lancée",
-          description: "Voir ~/.t3/logs/t3-maj.log — le dépôt a peut-être des modifs locales.",
+          title: body.reason === "depot-sale" ? "Dépôt pas propre" : "Update non lancée",
+          description:
+            body.reason === "depot-sale"
+              ? `Des modifications ne sont pas commitées — rien n'a été touché.${
+                  fichiers.length > 0 ? ` ${fichiers.join(", ")}` : ""
+                }`
+              : body.reason === "already-running"
+                ? "Une mise à jour est déjà en cours."
+                : "Voir ~/.t3/logs/t3-maj.log.",
         }),
       );
     } catch {

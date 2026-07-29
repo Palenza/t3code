@@ -123,9 +123,8 @@ export const forkUpdateEtatRouteLayer = HttpRouter.add(
         // toujours pourquoi il s'arrête (dépôt sale, conflit, test rouge) et
         // l'écrit dans son journal — « Update échouée (code 1) » ne disait
         // rien à personne (30/07).
-        derniereRaison: lastRebuildExitCode !== null && lastRebuildExitCode !== 0
-          ? derniereLigneEchec()
-          : null,
+        derniereRaison:
+          lastRebuildExitCode !== null && lastRebuildExitCode !== 0 ? derniereLigneEchec() : null,
         behind: behind !== null && Number.isFinite(behind) ? behind : null,
         latestSubject: subjectOutput === null ? null : subjectOutput.trim(),
         amontBehind: amontBehind !== null && Number.isFinite(amontBehind) ? amontBehind : null,
@@ -152,6 +151,33 @@ export const forkUpdateLancerRouteLayer = HttpRouter.add(
     }
     if (rebuildRunning) {
       return HttpServerResponse.jsonUnsafe({ started: false, reason: "already-running" });
+    }
+    // PRÉ-VOL. Le script refuse un dépôt sale — mais il le découvrait APRÈS
+    // qu'on ait annoncé « quelques minutes, la nouvelle app s'ouvre toute
+    // seule ». On promettait, puis on se dédisait. Une condition qui se
+    // vérifie en 30 ms ne doit jamais être découverte après une promesse.
+    //
+    // Le script re-vérifie : il reste l'autorité, ceci n'est qu'un refus
+    // précoce. Deux contrôles qui divergeraient seraient pires qu'un seul,
+    // c'est pourquoi la commande est la MÊME (`git status --porcelain`).
+    const sale = yield* Effect.callback<string | null>((resume) => {
+      NodeChildProcess.execFile(
+        "git",
+        ["status", "--porcelain"],
+        { cwd: FORK_REPO, timeout: 5_000 },
+        (erreur, sortie) => {
+          // Une erreur de git n'est PAS un dépôt propre : on laisse passer et
+          // le script tranchera, plutôt que de refuser sur une non-réponse.
+          resume(Effect.succeed(erreur !== null ? null : sortie.trim() || null));
+        },
+      );
+    });
+    if (sale !== null) {
+      return HttpServerResponse.jsonUnsafe({
+        started: false,
+        reason: "depot-sale",
+        fichiers: sale.split("\n").slice(0, 10),
+      });
     }
     // `spawn` fails ASYNCHRONOUSLY (a missing `t3-maj` emits `error` on the
     // next tick), so answering right after the call would report started:true

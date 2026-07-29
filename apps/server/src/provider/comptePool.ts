@@ -92,6 +92,29 @@ const CAUSES_QUOTA: ReadonlyArray<RegExp> = [
 ];
 
 /**
+ * Le SOLDE épuisé — pas un quota qui repart tout seul.
+ *
+ * Rencontré en vrai le 30/07 : « You're out of usage credits. Run
+ * /usage-credits to keep using Fable 5 or /model to switch models. » Aucun
+ * motif ci-dessus ne l'attrape, alors le relais — bâti pour EXACTEMENT ce
+ * moment-là — n'a jamais tiré, et le tour est mort en « Runtime error ».
+ *
+ * La différence avec un quota compte : un quota revient à l'heure dite, un
+ * solde ne revient qu'après une recharge. On l'écarte donc pour longtemps
+ * plutôt que de le retenter toutes les heures pour rien.
+ */
+const CAUSES_SOLDE: ReadonlyArray<RegExp> = [
+  /out of usage credits/i,
+  /insufficient credits/i,
+  /no credits remaining/i,
+  /credit balance is too low/i,
+  /out of credits/i,
+];
+
+/** Un solde ne se recharge pas tout seul : inutile de sonder toutes les heures. */
+const REPRISE_SOLDE_MS = 12 * 60 * 60_000;
+
+/**
  * Délai avant de retenter un compte écarté, selon le code HTTP.
  *
  * Un 401 est court exprès : il est souvent transitoire (jeton en cours de
@@ -138,6 +161,16 @@ export function classerEchec(entree: {
     entree.repriseAnnoncee ??
     new Date(entree.maintenant + delaiRepriseMs(code)).toISOString();
 
+  // Le solde AVANT le quota : « out of usage credits » ne doit pas être
+  // confondu avec une limite qui repart d'elle-même dans l'heure.
+  if (CAUSES_SOLDE.some((motif) => motif.test(message))) {
+    return {
+      nature: "quota",
+      repriseA:
+        entree.repriseAnnoncee ??
+        new Date(entree.maintenant + REPRISE_SOLDE_MS).toISOString(),
+    };
+  }
   if (code === 429 || CAUSES_QUOTA.some((motif) => motif.test(message))) {
     return { nature: "quota", repriseA };
   }
