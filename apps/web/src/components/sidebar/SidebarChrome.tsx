@@ -1,12 +1,15 @@
 import { useAtomValue } from "@effect/atom-react";
 import { SettingsIcon } from "lucide-react";
-import { memo, useCallback } from "react";
+import { memo, useCallback, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 
 import { APP_STAGE_LABEL } from "../../branding";
 import { cn } from "../../lib/utils";
 import { primaryServerConfigAtom } from "../../state/server";
 import { resolveSidebarStageBadgeLabel } from "../Sidebar.logic";
+import { GeneralSettingsPanel, ProviderSettingsPanel } from "../settings/SettingsPanels";
+import { TableauLocalSettingsPanel } from "../settings/TableauLocalSettings";
+import { Popover, PopoverPopup, PopoverTrigger } from "../ui/popover";
 import { SidebarStageBackdrop, resolveSidebarStageBackdropVariant } from "../SidebarStageBackdrop";
 import {
   SidebarFooter,
@@ -118,10 +121,62 @@ function T3Wordmark() {
 // Un clic au lieu de Settings → sous-page (retour fondateur 29/07, façon
 // Arc) : les pages du quotidien vivent directement dans la sidebar.
 const SIDEBAR_QUICK_LINKS = [
-  { label: "General", to: "/settings/general" },
-  { label: "Providers", to: "/settings/providers" },
-  { label: "Tableau local", to: "/settings/tableau-local" },
+  { label: "General", to: "/settings/general", panneau: "general" },
+  { label: "Providers", to: "/settings/providers", panneau: "providers" },
+  { label: "Tableau local", to: "/settings/tableau-local", panneau: "tableau" },
 ] as const;
+
+/**
+ * Le réglage s'ouvre AU SURVOL, dans un panneau flottant ancré au bord de la
+ * sidebar — comme l'éditeur de couleurs. Plus de navigation vers une page
+ * dont il faut revenir par « Back » (reproche fondateur 29/07 : « je ne veux
+ * pas cliquer, je veux passer ma souris »). La souris peut traverser jusqu'au
+ * panneau sans qu'il se referme : c'est un survol avec délai, pas un tooltip.
+ */
+function QuickSettingLink({
+  link,
+  onNavigate,
+}: {
+  readonly link: (typeof SIDEBAR_QUICK_LINKS)[number];
+  readonly onNavigate: (to: string) => void;
+}) {
+  const [ouvert, setOuvert] = useState(false);
+  return (
+    <Popover open={ouvert} onOpenChange={setOuvert}>
+      <PopoverTrigger
+        openOnHover
+        delay={160}
+        closeDelay={240}
+        render={
+          <SidebarMenuButton
+            className="h-7 text-[13px] text-sidebar-foreground/70 hover:text-sidebar-foreground"
+            onClick={() => onNavigate(link.to)}
+          >
+            <span className="truncate">{link.label}</span>
+          </SidebarMenuButton>
+        }
+      />
+      <PopoverPopup
+        anchor={() => document.querySelector("[data-app-sidebar]")}
+        side="right"
+        align="end"
+        sideOffset={14}
+        className="max-h-[80vh] w-[min(720px,60vw)] overflow-hidden p-0"
+        viewportClassName="max-h-[80vh] overflow-y-auto p-0 [--viewport-inline-padding:0px]"
+      >
+        <div className="px-5 py-4">
+          {link.panneau === "general" ? (
+            <GeneralSettingsPanel />
+          ) : link.panneau === "providers" ? (
+            <ProviderSettingsPanel />
+          ) : (
+            <TableauLocalSettingsPanel />
+          )}
+        </div>
+      </PopoverPopup>
+    </Popover>
+  );
+}
 
 export const SidebarChromeFooter = memo(function SidebarChromeFooter() {
   const navigate = useNavigate();
@@ -147,8 +202,9 @@ export const SidebarChromeFooter = memo(function SidebarChromeFooter() {
       <SidebarMenu>
         {SIDEBAR_QUICK_LINKS.map((link) => (
           <SidebarMenuItem key={link.to}>
+            <QuickSettingLink link={link} onNavigate={navigateClosingMobile} />
             <SidebarMenuButton
-              className="h-7 text-[13px] text-sidebar-foreground/70 hover:text-sidebar-foreground"
+              className="hidden"
               onClick={() => navigateClosingMobile(link.to)}
             >
               <span className="pl-6">{link.label}</span>
