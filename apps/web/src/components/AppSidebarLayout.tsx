@@ -224,6 +224,9 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
             "fixed! inset-y-2! left-2! z-50 h-auto! translate-x-0! rounded-xl border border-sidebar-border shadow-2xl [&_[data-slot=sidebar-inner]]:rounded-xl",
         )}
         resizable={{
+          // En edge peek la sidebar est visible mais « fermée » : le
+          // redimensionnement doit rester possible (29/07).
+          enabledWhenCollapsed: sidebarPeek,
           maxWidth: sidebarMaximumWidth,
           minWidth: THREAD_SIDEBAR_MIN_WIDTH,
           shouldAcceptWidth: ({ currentWidth, nextWidth, wrapper }) =>

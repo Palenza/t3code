@@ -40,6 +40,14 @@ type SidebarContextProps = {
 };
 
 type SidebarResizableOptions = {
+  /**
+   * Autorise le redimensionnement alors même que la sidebar est « fermée ».
+   * Le fork s'en sert pour l'edge peek : la sidebar est techniquement
+   * collapsed mais VISIBLE en survol — la brider là n'a aucun sens
+   * (reproche fondateur 29/07). Le rail n'est de toute façon atteignable
+   * que quand la sidebar est à l'écran.
+   */
+  enabledWhenCollapsed?: boolean;
   maxWidth?: number;
   minWidth?: number;
   onResize?: (width: number) => void;
@@ -55,6 +63,7 @@ type SidebarResizableOptions = {
 };
 
 type SidebarResolvedResizableOptions = {
+  enabledWhenCollapsed: boolean;
   maxWidth: number;
   minWidth: number;
   onResize?: (width: number) => void;
@@ -199,6 +208,7 @@ function Sidebar({
 
     const options = typeof resizable === "boolean" ? {} : resizable;
     return {
+      enabledWhenCollapsed: options.enabledWhenCollapsed === true,
       maxWidth: options.maxWidth ?? Number.POSITIVE_INFINITY,
       minWidth: options.minWidth ?? SIDEBAR_RESIZE_DEFAULT_MIN_WIDTH,
       storageKey: options.storageKey ?? null,
@@ -375,7 +385,8 @@ function SidebarRail({
     wrapper: HTMLElement;
   } | null>(null);
   const resolvedResizable = sidebarInstance?.resizable ?? null;
-  const canResize = resolvedResizable !== null && open;
+  const canResize =
+    resolvedResizable !== null && (open || resolvedResizable.enabledWhenCollapsed);
   const railLabel = canResize ? "Resize Sidebar" : "Toggle Sidebar";
   const railTitle = canResize ? "Drag to resize sidebar" : "Toggle Sidebar";
 
