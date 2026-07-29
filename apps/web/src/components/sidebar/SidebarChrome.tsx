@@ -1,5 +1,5 @@
 import { useAtomValue } from "@effect/atom-react";
-import { SettingsIcon } from "lucide-react";
+import { GaugeIcon, PlugIcon, SettingsIcon, SlidersHorizontalIcon } from "lucide-react";
 import { memo, useCallback, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 
@@ -7,6 +7,7 @@ import { APP_STAGE_LABEL } from "../../branding";
 import { cn } from "../../lib/utils";
 import { primaryServerConfigAtom } from "../../state/server";
 import { resolveSidebarStageBadgeLabel } from "../Sidebar.logic";
+import { SidebarModeTravail } from "./SidebarModeTravail";
 import { GeneralSettingsPanel, ProviderSettingsPanel } from "../settings/SettingsPanels";
 import { TableauLocalSettingsPanel } from "../settings/TableauLocalSettings";
 import { Popover, PopoverPopup, PopoverTrigger } from "../ui/popover";
@@ -128,9 +129,14 @@ function T3Wordmark() {
 // Un clic au lieu de Settings → sous-page (retour fondateur 29/07, façon
 // Arc) : les pages du quotidien vivent directement dans la sidebar.
 const SIDEBAR_QUICK_LINKS = [
-  { label: "General", to: "/settings/general", panneau: "general" },
-  { label: "Providers", to: "/settings/providers", panneau: "providers" },
-  { label: "Tableau local", to: "/settings/tableau-local", panneau: "tableau" },
+  { label: "General", to: "/settings/general", panneau: "general", Icone: SlidersHorizontalIcon },
+  { label: "Providers", to: "/settings/providers", panneau: "providers", Icone: PlugIcon },
+  {
+    label: "Tableau local",
+    to: "/settings/tableau-local",
+    panneau: "tableau",
+    Icone: GaugeIcon,
+  },
 ] as const;
 
 /**
@@ -159,7 +165,12 @@ function QuickSettingLink({
             className="h-7 text-[13px] text-sidebar-foreground/70 hover:text-sidebar-foreground"
             onClick={() => onNavigate(link.to)}
           >
-            <span className="truncate pl-6">{link.label}</span>
+            {/* Une VRAIE icône : le `pl-6` d'avant réservait la place d'une
+                icône absente, si bien que les trois libellés flottaient dans
+                le vide pendant que « Settings », juste dessous, en portait
+                une — trois lignes décalées sans repère (capture 30/07). */}
+            <link.Icone />
+            <span className="truncate">{link.label}</span>
           </SidebarMenuButton>
         }
       />
@@ -206,6 +217,11 @@ export const SidebarChromeFooter = memo(function SidebarChromeFooter() {
       <SidebarForkUpdatePill />
       <SidebarProviderUpdatePill />
       <SidebarUpdatePill />
+      {/* Le mode de travail est un RÉGLAGE, pas un favori : en tête de sidebar
+          il s'intercalait entre les liens épinglés et la recherche, coupant
+          la grille en deux (capture 30/07). Sa place est ici, avec General et
+          Providers. */}
+      <SidebarModeTravail />
       <SidebarMenu>
         {SIDEBAR_QUICK_LINKS.map((link) => (
           <SidebarMenuItem key={link.to}>

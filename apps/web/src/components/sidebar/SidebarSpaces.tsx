@@ -544,6 +544,12 @@ export function SidebarFavoritesGrid() {
     // quand on élargit la sidebar) et le TITRE lisible — deux favoris du même
     // projet ne peuvent plus se confondre en deux « R » (reproche 29/07).
     <div className="flex flex-col gap-0.5 px-2 pb-1.5">
+      {/* Un intertitre, parce que deux pilules collées sous le bandeau ne
+          disent pas ce qu'elles sont (capture 30/07) — et il donne au même
+          moment la respiration qui manquait sous la marque. */}
+      <p className="px-2 pt-1.5 pb-0.5 text-[11px] font-medium text-sidebar-muted-foreground/70">
+        Favoris
+      </p>
       {favorites.map((favorite) => {
         const color = colorByThreadKey[favorite.threadKey];
         return (

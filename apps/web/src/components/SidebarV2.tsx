@@ -99,7 +99,6 @@ import {
 } from "../threadCustomizationStore";
 import { useSidebarThemeStore } from "../sidebarThemeStore";
 import { MAX_SIDEBAR_FAVORITES, useSidebarSpacesStore } from "../sidebarSpacesStore";
-import { SidebarModeTravail } from "./sidebar/SidebarModeTravail";
 import { SidebarPromesses } from "./sidebar/SidebarPromesses";
 import { SidebarFavoritesGrid, SidebarSpacesBar } from "./sidebar/SidebarSpaces";
 import { SortableThreadItem } from "./sidebar/SortableThreadItem";
@@ -2430,7 +2429,6 @@ export default function SidebarV2() {
     <>
       <SidebarChromeHeader isElectron={isElectron} />
       <SidebarFavoritesGrid />
-      <SidebarModeTravail />
       <SidebarPromesses />
       <SidebarContent
         className="gap-0"
