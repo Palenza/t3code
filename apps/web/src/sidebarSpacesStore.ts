@@ -24,12 +24,32 @@ export interface SidebarSpace {
 }
 
 export interface SidebarFavorite {
-  /** `${environmentId}:${threadId}` — la clé de fil canonique. */
+  /**
+   * La clé unique du favori : `${environmentId}:${threadId}` pour un fil,
+   * `lien:${url}` pour un lien.
+   */
   readonly threadKey: string;
-  readonly environmentId: string;
-  readonly threadId: string;
+  /** Absents sur un favori LIEN. */
+  readonly environmentId?: string;
+  readonly threadId?: string;
   readonly title: string;
+  /**
+   * Un favori LIEN — l'adresse à rouvrir (demande fondateur 29/07 : « quand
+   * on bosse sur le design, le banc.html, il faut qu'il soit épinglé en
+   * favori, qu'on n'ait pas à re-cliquer sur je-ne-sais-quoi qui
+   * disparaît »). Absent = c'est un fil.
+   */
+  readonly url?: string;
+  /**
+   * L'espace auquel ce favori appartient. `null`/absent = visible partout,
+   * comme la grille transversale d'Arc ; renseigné = ne se montre que dans
+   * cet espace — le lien de design vit dans l'espace Design.
+   */
+  readonly spaceId?: string | null;
 }
+
+/** La clé canonique d'un favori-lien. */
+export const linkFavoriteKey = (url: string): string => `lien:${url}`;
 
 export const MAX_SIDEBAR_FAVORITES = 12;
 
@@ -68,6 +88,17 @@ interface SidebarSpacesState {
   assignThread: (threadKey: string, spaceId: string | null) => void;
   /** "full" = cap atteint, rien n'a bougé — l'appelant le DIT (jamais muet). */
   toggleFavorite: (favorite: SidebarFavorite) => "added" | "removed" | "full";
+  /**
+   * Épingle une ADRESSE. Renvoie "duplicate" si elle y est déjà — on ne crée
+   * jamais deux tuiles pour la même page.
+   */
+  addLinkFavorite: (input: {
+    url: string;
+    title: string;
+    spaceId: string | null;
+  }) => "added" | "duplicate" | "full";
+  /** Renomme un favori (les deux sortes) — le nom donné vaut mieux qu'une URL. */
+  renameFavorite: (threadKey: string, title: string) => void;
   /** Un fil supprimé ne laisse ni favori fantôme ni rangement orphelin. */
   purgeThread: (threadKey: string) => void;
 }
@@ -124,6 +155,10 @@ export const useSidebarSpacesStore = create<SidebarSpacesState>()(
           return {
             spaces: state.spaces.filter((space) => space.id !== id),
             assignments,
+            // Un favori rattaché à l'espace supprimé deviendrait invisible à
+            // jamais (aucun espace ne le montre) tout en mangeant une place
+            // sur les 12 — on le retire avec l'espace.
+            favorites: state.favorites.filter((favorite) => favorite.spaceId !== id),
             activeSpaceId: state.activeSpaceId === id ? null : state.activeSpaceId,
           };
         }),
@@ -159,6 +194,24 @@ export const useSidebarSpacesStore = create<SidebarSpacesState>()(
         set({ favorites: [...state.favorites, favorite] });
         return "added";
       },
+      addLinkFavorite: ({ url, title, spaceId }) => {
+        const state = get();
+        const threadKey = linkFavoriteKey(url);
+        if (state.favorites.some((f) => f.threadKey === threadKey)) {
+          return "duplicate";
+        }
+        if (state.favorites.length >= MAX_SIDEBAR_FAVORITES) {
+          return "full";
+        }
+        set({ favorites: [...state.favorites, { threadKey, title, url, spaceId }] });
+        return "added";
+      },
+      renameFavorite: (threadKey, title) =>
+        set((state) => ({
+          favorites: state.favorites.map((favorite) =>
+            favorite.threadKey === threadKey ? { ...favorite, title } : favorite,
+          ),
+        })),
       purgeThread: (threadKey) =>
         set((state) => {
           const { [threadKey]: _removed, ...assignments } = state.assignments;
@@ -171,6 +224,39 @@ export const useSidebarSpacesStore = create<SidebarSpacesState>()(
     { name: "t3code:sidebar-spaces:v1" },
   ),
 );
+
+/**
+ * Un fil qui vient de naître hérite de l'espace où on se trouve — la règle
+ * d'Arc, et la réponse à « est-ce que ça a du sens de demander dans quel
+ * space le mettre ? » (fondateur 29/07) : non. Créer un fil est le geste le
+ * plus fréquent de l'app ; y poser une question, c'est une friction payée dix
+ * fois par jour pour un rangement qu'on peut deviner. Dans « Tous », le fil
+ * ne se range nulle part — comme avant.
+ *
+ * Ne touche JAMAIS un fil déjà rangé : un classement fait à la main a le
+ * dernier mot, et l'appel devient idempotent.
+ */
+export function inheritActiveSpace(threadKey: string): void {
+  const state = useSidebarSpacesStore.getState();
+  if (state.activeSpaceId === null) return;
+  if (state.assignments[threadKey] !== undefined) return;
+  state.assignThread(threadKey, state.activeSpaceId);
+}
+
+/**
+ * Les favoris à montrer là où on est : ceux de l'espace actif, plus les
+ * transversaux (sans espace) qui suivent partout — la grille d'Arc.
+ */
+export function visibleFavorites(
+  state: Pick<SidebarSpacesState, "favorites" | "activeSpaceId">,
+): SidebarFavorite[] {
+  return state.favorites.filter(
+    (favorite) =>
+      favorite.spaceId === undefined ||
+      favorite.spaceId === null ||
+      favorite.spaceId === state.activeSpaceId,
+  );
+}
 
 /** Le thème effectif de l'espace actif, s'il en a un. */
 export function activeSpaceTheme(

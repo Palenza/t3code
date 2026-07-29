@@ -50,6 +50,7 @@ import { createJSONStorage, persist } from "zustand/middleware";
 import { useShallow } from "zustand/react/shallow";
 import { createDebouncedStorage, createMemoryStorage } from "./lib/storage";
 import { getDefaultServerModel } from "./providerModels";
+import { inheritActiveSpace } from "./sidebarSpacesStore";
 import { UnifiedSettings } from "@t3tools/contracts/settings";
 import { ReviewCommentContextSchema, type ReviewCommentContext } from "./reviewCommentContext";
 const isRuntimeMode = Schema.is(RuntimeMode);
@@ -3568,6 +3569,10 @@ export function markPromotedDraftThreadByRef(threadRef: ScopedThreadRef): void {
       draftThread.threadId === threadRef.threadId
     ) {
       draftStore.markDraftThreadPromoting(DraftId.make(draftId), threadRef);
+      // Le brouillon vient de devenir un vrai fil : c'est ICI, et nulle part
+      // ailleurs, qu'on connaît sa clé pour la première fois — donc c'est ici
+      // qu'il hérite de l'espace où on travaille.
+      inheritActiveSpace(scopedThreadKey(threadRef));
     }
   }
 }

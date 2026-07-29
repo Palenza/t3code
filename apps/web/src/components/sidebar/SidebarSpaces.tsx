@@ -1,15 +1,17 @@
 import { useCallback, useState } from "react";
 
 import { useRouter } from "@tanstack/react-router";
-import { LayersIcon, PaletteIcon, PlusIcon } from "lucide-react";
+import { GlobeIcon, LayersIcon, PaletteIcon, PlusIcon } from "lucide-react";
 
 import { settlePromise } from "@t3tools/client-runtime/state/runtime";
 
 import { readLocalApi } from "../../localApi";
 import { cn } from "../../lib/utils";
 import {
+  MAX_SIDEBAR_FAVORITES,
   SPACE_EMOJI_PRESETS,
   useSidebarSpacesStore,
+  visibleFavorites,
   type SidebarFavorite,
 } from "../../sidebarSpacesStore";
 import {
@@ -20,6 +22,7 @@ import {
 import { useThreadCustomizationStore, type ThreadColor } from "../../threadCustomizationStore";
 import { Button } from "../ui/button";
 import { Popover, PopoverPopup, PopoverTrigger } from "../ui/popover";
+import { stackedThreadToast, toastManager } from "../ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { SpaceThemePanel } from "./SpaceThemePanel";
 import { SpaceIcon, SpaceIconPicker } from "./SpaceIconPicker";
@@ -346,22 +349,61 @@ export function SidebarSpacesBar() {
   );
 }
 
+/** Le favicon du site, deviné depuis l'origine — repli muet sur un globe. */
+function LinkFavicon({ url }: { url: string }) {
+  const [broken, setBroken] = useState(false);
+  let origin: string | null = null;
+  try {
+    origin = new URL(url).origin;
+  } catch {
+    origin = null;
+  }
+  if (broken || origin === null) {
+    return <GlobeIcon className="size-3.5 shrink-0 text-sidebar-foreground/60" />;
+  }
+  return (
+    <img
+      src={`${origin}/favicon.ico`}
+      alt=""
+      aria-hidden
+      onError={() => setBroken(true)}
+      className="size-3.5 shrink-0 rounded-[3px] object-contain"
+    />
+  );
+}
+
 /**
- * Les favoris façon Arc : la grille tout en haut de la sidebar, transversale
- * aux espaces. Chaque favori EST un fil — cliquer le rouvre (avec son
- * contexte), jamais une fenêtre neuve. Chaque tuile porte le TITRE du fil
- * (reproche fondateur 29/07 : « RU, RA, on ne sait même pas ce que c'est ») ;
- * la pastille reprend la couleur donnée au fil dans la liste, quand il en a
- * une.
+ * Les favoris façon Arc : la grille tout en haut de la sidebar. Un favori est
+ * soit UN FIL — cliquer le rouvre avec son contexte, jamais une fenêtre
+ * neuve — soit UNE ADRESSE (demande fondateur 29/07 : « quand on bosse sur le
+ * design, le banc.html, il faut qu'il soit épinglé, qu'on n'ait pas à
+ * re-cliquer sur je-ne-sais-quoi qui disparaît »).
+ *
+ * Et ils suivent l'ESPACE : ce qu'on épingle depuis l'espace Design ne
+ * s'affiche que là ; les favoris sans espace suivent partout. Chaque tuile
+ * porte son TITRE (reproche 29/07 : « RU, RA, on ne sait même pas ce que
+ * c'est ») ; la pastille reprend la couleur du fil quand il en a une, le
+ * favicon tient ce rôle pour une adresse.
  */
 export function SidebarFavoritesGrid() {
-  const favorites = useSidebarSpacesStore((state) => state.favorites);
+  const favorites = useSidebarSpacesStore(visibleFavorites);
+  const activeSpaceId = useSidebarSpacesStore((state) => state.activeSpaceId);
   const toggleFavorite = useSidebarSpacesStore((state) => state.toggleFavorite);
+  const addLinkFavorite = useSidebarSpacesStore((state) => state.addLinkFavorite);
+  const renameFavorite = useSidebarSpacesStore((state) => state.renameFavorite);
   const colorByThreadKey = useThreadCustomizationStore((state) => state.colorByThreadKey);
   const router = useRouter();
+  const [adresse, setAdresse] = useState("");
+  const [nom, setNom] = useState("");
+  const [ouvert, setOuvert] = useState(false);
 
   const openFavorite = useCallback(
     (favorite: SidebarFavorite) => {
+      if (favorite.url !== undefined) {
+        void readLocalApi()?.shell.openExternal(favorite.url);
+        return;
+      }
+      if (favorite.environmentId === undefined || favorite.threadId === undefined) return;
       void router.navigate({
         to: "/$environmentId/$threadId",
         params: { environmentId: favorite.environmentId, threadId: favorite.threadId },
@@ -376,20 +418,59 @@ export function SidebarFavoritesGrid() {
         const api = readLocalApi();
         if (!api) return;
         const clicked = await settlePromise(() =>
-          api.contextMenu.show([{ id: "remove", label: "Retirer des favoris" }], position),
+          api.contextMenu.show(
+            [
+              { id: "rename", label: "Renommer" },
+              { id: "remove", label: "Retirer des favoris" },
+            ],
+            position,
+          ),
         );
         if (clicked._tag === "Failure") return;
         if (clicked.value === "remove") {
           toggleFavorite(favorite);
+          return;
+        }
+        if (clicked.value === "rename") {
+          const saisi = window.prompt("Nom du favori", favorite.title);
+          if (saisi !== null && saisi.trim().length > 0) {
+            renameFavorite(favorite.threadKey, saisi.trim());
+          }
         }
       })();
     },
-    [toggleFavorite],
+    [renameFavorite, toggleFavorite],
   );
 
-  if (favorites.length === 0) {
-    return null;
-  }
+  const epingler = useCallback(() => {
+    // Une adresse sans schéma (« localhost:4321/banc.html ») est ce qu'on tape
+    // naturellement — on la complète plutôt que de refuser.
+    const brut = adresse.trim();
+    if (brut.length === 0) return;
+    const url = /^https?:\/\//i.test(brut) ? brut : `http://${brut}`;
+    const titre = nom.trim().length > 0 ? nom.trim() : url.replace(/^https?:\/\//i, "");
+    const issue = addLinkFavorite({ url, title: titre, spaceId: activeSpaceId });
+    if (issue === "full") {
+      toastManager.add(
+        stackedThreadToast({
+          type: "error",
+          title: "Favoris pleins",
+          description: `${MAX_SIDEBAR_FAVORITES} au maximum — retires-en un d'abord.`,
+        }),
+      );
+      return;
+    }
+    if (issue === "duplicate") {
+      toastManager.add(
+        stackedThreadToast({ type: "info", title: "Cette adresse est déjà épinglée" }),
+      );
+      return;
+    }
+    setAdresse("");
+    setNom("");
+    setOuvert(false);
+  }, [addLinkFavorite, activeSpaceId, adresse, nom]);
+
   return (
     // Des PILULES, pas des tuiles : hauteur FIXE (elles ne grossissent plus
     // quand on élargit la sidebar) et le TITRE lisible — deux favoris du même
@@ -411,22 +492,74 @@ export function SidebarFavoritesGrid() {
                   }}
                   className="flex h-7 w-full cursor-pointer items-center gap-2 rounded-lg px-2 text-left ring-1 ring-sidebar-border/70 transition-colors hover:bg-sidebar-row-hover"
                 >
-                  <span
-                    className={cn(
-                      "size-1.5 shrink-0 rounded-full",
-                      color === undefined ? "bg-current/40" : FAVORITE_DOT_CLASSES[color],
-                    )}
-                  />
+                  {favorite.url === undefined ? (
+                    <span
+                      className={cn(
+                        "size-1.5 shrink-0 rounded-full",
+                        color === undefined ? "bg-current/40" : FAVORITE_DOT_CLASSES[color],
+                      )}
+                    />
+                  ) : (
+                    <LinkFavicon url={favorite.url} />
+                  )}
                   <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-sidebar-foreground/85">
                     {favorite.title}
                   </span>
                 </button>
               }
             />
-            <TooltipPopup side="right">{favorite.title}</TooltipPopup>
+            <TooltipPopup side="right">{favorite.url ?? favorite.title}</TooltipPopup>
           </Tooltip>
         );
       })}
+
+      <Popover open={ouvert} onOpenChange={setOuvert}>
+        <PopoverTrigger
+          render={
+            <button
+              type="button"
+              aria-label="Épingler une adresse"
+              className="flex h-7 w-full cursor-pointer items-center gap-2 rounded-lg px-2 text-left text-sidebar-foreground/55 transition-colors hover:bg-sidebar-row-hover hover:text-sidebar-foreground/85"
+            >
+              <PlusIcon className="size-3.5 shrink-0" />
+              <span className="min-w-0 flex-1 truncate text-[12px] font-medium">
+                Épingler une adresse
+              </span>
+            </button>
+          }
+        />
+        <PopoverPopup className="w-72 p-3">
+          <div className="flex flex-col gap-2">
+            <p className="text-xs text-muted-foreground">
+              {activeSpaceId === null
+                ? "Visible dans tous les espaces."
+                : "Épinglé dans cet espace seulement."}
+            </p>
+            <input
+              value={adresse}
+              onChange={(event) => setAdresse(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") epingler();
+              }}
+              placeholder="localhost:4321/banc.html"
+              autoFocus
+              className="h-8 rounded-md border border-border bg-background px-2 text-sm outline-none focus:border-primary"
+            />
+            <input
+              value={nom}
+              onChange={(event) => setNom(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") epingler();
+              }}
+              placeholder="Nom (optionnel)"
+              className="h-8 rounded-md border border-border bg-background px-2 text-sm outline-none focus:border-primary"
+            />
+            <Button size="sm" onClick={epingler} disabled={adresse.trim().length === 0}>
+              Épingler
+            </Button>
+          </div>
+        </PopoverPopup>
+      </Popover>
     </div>
   );
 }
