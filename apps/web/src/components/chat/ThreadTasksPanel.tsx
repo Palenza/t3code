@@ -2,6 +2,7 @@ import type { OrchestrationThreadActivity } from "@t3tools/contracts";
 import { useEffect, useMemo, useState } from "react";
 
 import { cn } from "~/lib/utils";
+import { BackgroundTasksSection } from "./BackgroundTasksSection";
 import { deriveWorkLogEntries, type WorkLogEntry } from "../../session-logic";
 import { formatRelativeTimeLabel } from "../../timestampFormat";
 import { ScrollArea } from "../ui/scroll-area";
@@ -137,35 +138,32 @@ export function ThreadTasksPanel({
     return () => clearInterval(id);
   }, [running.length]);
 
-  if (running.length === 0 && settled.length === 0) {
-    return (
-      <div className="flex min-h-0 flex-1 items-center justify-center p-6">
-        <p className="max-w-56 text-center text-[13px] leading-[1.45] text-muted-foreground/70">
-          Tools and agents run by this thread will appear here, with their live status.
-        </p>
-      </div>
-    );
-  }
-
   return (
     <ScrollArea className="min-h-0 flex-1">
+      {/* Vue GLOBALE d'abord (tous les fils qui travaillent, façon Claude
+          Code), puis le journal détaillé du fil ouvert. */}
+      <BackgroundTasksSection />
       <div className="flex flex-col gap-0.5 p-2">
-        {running.length > 0 ? (
+        {running.length === 0 && settled.length === 0 ? (
+          <p className="px-2 pt-2 pb-1 text-[12px] leading-[1.45] text-muted-foreground/50">
+            Les outils et agents de CE fil apparaîtront ici, avec leur état en direct.
+          </p>
+        ) : (
           <>
-            <SectionHeader>Running · {running.length}</SectionHeader>
+            <SectionHeader>Ce fil — running · {running.length}</SectionHeader>
             {running.map((entry) => (
               <TaskRow key={entry.id} entry={entry} now={now} />
             ))}
+            {settled.length > 0 ? (
+              <>
+                <SectionHeader>Ce fil — done</SectionHeader>
+                {settled.map((entry) => (
+                  <TaskRow key={entry.id} entry={entry} now={now} />
+                ))}
+              </>
+            ) : null}
           </>
-        ) : null}
-        {settled.length > 0 ? (
-          <>
-            <SectionHeader>Done</SectionHeader>
-            {settled.map((entry) => (
-              <TaskRow key={entry.id} entry={entry} now={now} />
-            ))}
-          </>
-        ) : null}
+        )}
       </div>
     </ScrollArea>
   );
