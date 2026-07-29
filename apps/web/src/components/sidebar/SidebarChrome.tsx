@@ -184,12 +184,27 @@ function QuickSettingLink({
         // elle disparaît » (30/07). Il se déploie maintenant à hauteur du
         // lien, et `sideOffset` court garde le pont souris franchissable.
         side="right"
-        align="center"
+        // ALIGNÉ PAR LE BAS, pas centré. Centré sur « Tableau local » — un lien
+        // posé à 72 px du bord — il ne restait que 142 px de positionneur et le
+        // panneau débordait de 419 px sous la fenêtre (mesuré le 30/07).
+        // Aligné par la fin, il monte à partir du lien et dispose de toute la
+        // hauteur au-dessus.
+        align="end"
         sideOffset={6}
-        // `h-` borne la BOÎTE (le contenu long défile dedans) ; `max-h` seul
-        // laissait le panneau prendre sa hauteur naturelle et déborder.
-        className="max-h-[min(80vh,44rem)] w-[min(720px,60vw)] overflow-hidden p-0"
-        viewportClassName="max-h-[min(80vh,44rem)] overflow-y-auto overscroll-contain p-0 [--viewport-inline-padding:0px]"
+        // `max-h-full` : le panneau ne dépasse JAMAIS son positionneur.
+        //
+        // Il était borné à `min(80vh,44rem)` — 576 px quelle que soit la
+        // position du lien. Ouvert depuis « Tableau local », posé à 72 px du
+        // bas, il débordait de 419 px sous la fenêtre : les trois quarts hors
+        // écran (mesuré le 30/07). `--available-height` ne sauve rien — elle
+        // vaut la fenêtre entière (710 px), pas la place sous l'ancre.
+        //
+        // La place réelle, c'est le POSITIONNEUR : 142 px à cette hauteur-là.
+        // Un panneau de 696 px n'y tient pas, et aucun alignement n'y change
+        // rien. Il devient donc un APERÇU qui défile — jamais rogné, jamais
+        // hors champ — et le contenu entier reste à un clic, sur sa page.
+        className="max-h-full w-[min(720px,60vw)] overflow-hidden p-0"
+        viewportClassName="max-h-full overflow-y-auto overscroll-contain p-0 [--viewport-inline-padding:0px]"
       >
         <div className="px-5 py-4">
           {link.panneau === "general" ? (

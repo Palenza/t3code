@@ -165,6 +165,27 @@ describe("choix du compte", () => {
     assert.strictEqual(choisi?.instanceId, id("B"));
   });
 
+  it("solde Fable vide sur A : le relais part sur B, qui n'y a pas touché", () => {
+    // L'état RÉEL relevé sur l'écran du fondateur le 30/07, à la minute où le
+    // tour est mort : A — 5 h 2 %, 7 j 95 %, 7 j·Fable 100 % · B — 0 %, 26 %,
+    // Fable 0 % · C — 10 %, 49 %, Fable 70 %.
+    //
+    // Ce test dit la chose qui compte : le remplaçant EXISTAIT. Le relais
+    // n'avait pas de problème de choix, il avait un problème de lecture — la
+    // phrase « out of usage credits » n'était reconnue par aucun motif, donc
+    // il n'a jamais été appelé.
+    const choisi = choisir({
+      candidats: candidats(
+        ["A", sain("A"), quotas(2, 95, 100)],
+        ["B", sain("B"), quotas(0, 26, 0)],
+        ["C", sain("C"), quotas(10, 49, 70)],
+      ),
+      strategie: "moins-charge",
+      maintenant: MAINTENANT,
+    });
+    assert.strictEqual(choisi?.instanceId, id("B"));
+  });
+
   it("c'est la fenêtre la PLUS entamée qui décide, pas la moyenne", () => {
     // A a une moyenne plus basse, mais une fenêtre à 99 % : c'est elle qui
     // le fera tomber au prochain tour.
