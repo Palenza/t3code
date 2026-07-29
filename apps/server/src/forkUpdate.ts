@@ -1,0 +1,135 @@
+// @effect-diagnostics nodeBuiltinImport:off - The detached rebuild outlives this process on purpose.
+import * as NodeChildProcess from "node:child_process";
+import * as NodeFS from "node:fs";
+import * as NodeOS from "node:os";
+import * as NodePath from "node:path";
+
+import * as Effect from "effect/Effect";
+import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
+
+import { isLoopbackRemoteAddress, readRemoteAddress } from "./tableauLocalProxy.ts";
+
+/**
+ * Fork self-update WITHOUT an Apple Developer signature (décision fondateur
+ * 29/07 : « je ne vais pas prendre Apple Developer, je préfère faire ça
+ * manuellement » — mais avec le même geste que la Nightly : une barre
+ * « Update available », un clic, un restart).
+ *
+ * electron-updater refuses unsigned installs on macOS, so the circuit is
+ * local instead: upstream nightlies flow into the fork's `travail` branch by
+ * the sync workflow (Enzo's features survive as merge history), this route
+ * says how far the LOCAL checkout is behind, and « lancer » runs the
+ * existing `t3-maj` script detached — pull, local rebuild (no quarantine),
+ * open the fresh DMG. Loopback-gated like the tableau-local proxy: this
+ * describes and touches only the machine the server runs on.
+ */
+
+const FORK_REPO = process.env["T3_FORK_REPO"] ?? NodePath.join(NodeOS.homedir(), "Documents/t3code");
+const UPDATE_COMMAND =
+  process.env["T3_FORK_UPDATE_COMMAND"] ?? NodePath.join(NodeOS.homedir(), ".local/bin/t3-maj");
+const UPDATE_LOG = NodePath.join(NodeOS.homedir(), ".t3/logs/t3-maj.log");
+const GIT_TIMEOUT_MS = 25_000;
+
+/** `git <args>` in the fork repo; null on any failure — the caller degrades. */
+const runGit = (args: ReadonlyArray<string>): Effect.Effect<string | null> =>
+  Effect.callback<string | null>((resume) => {
+    const child = NodeChildProcess.execFile(
+      "git",
+      [...args],
+      { cwd: FORK_REPO, timeout: GIT_TIMEOUT_MS },
+      (error, stdout) => {
+        resume(Effect.succeed(error === null ? stdout : null));
+      },
+    );
+    return Effect.sync(() => {
+      child.kill();
+    });
+  });
+
+/** One rebuild at a time — the pill turns into "building…" meanwhile. */
+let rebuildRunning = false;
+
+export function isForkRebuildRunning(): boolean {
+  return rebuildRunning;
+}
+
+export const forkUpdateEtatRouteLayer = HttpRouter.add(
+  "GET",
+  "/api/fork-update/etat",
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    if (!isLoopbackRemoteAddress(readRemoteAddress(request.source))) {
+      return HttpServerResponse.text("Local machine only.", { status: 403 });
+    }
+    // A fetch that fails (offline, repo moved) degrades to comparing against
+    // the last-known remote ref — still honest, just possibly stale.
+    yield* runGit(["fetch", "origin", "travail"]);
+    const countOutput = yield* runGit(["rev-list", "--count", "HEAD..origin/travail"]);
+    const behind = countOutput === null ? null : Number.parseInt(countOutput.trim(), 10);
+    const subjectOutput =
+      behind !== null && behind > 0
+        ? yield* runGit(["log", "origin/travail", "-1", "--format=%s"])
+        : null;
+
+    return HttpServerResponse.jsonUnsafe(
+      {
+        behind: behind !== null && Number.isFinite(behind) ? behind : null,
+        latestSubject: subjectOutput === null ? null : subjectOutput.trim(),
+        building: rebuildRunning,
+        repo: FORK_REPO,
+      },
+      { headers: { "cache-control": "no-store" } },
+    );
+  }),
+);
+
+export const forkUpdateLancerRouteLayer = HttpRouter.add(
+  "POST",
+  "/api/fork-update/lancer",
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    if (!isLoopbackRemoteAddress(readRemoteAddress(request.source))) {
+      return HttpServerResponse.text("Local machine only.", { status: 403 });
+    }
+    if (rebuildRunning) {
+      return HttpServerResponse.jsonUnsafe({ started: false, reason: "already-running" });
+    }
+    const started = yield* Effect.sync(() => {
+      try {
+        NodeFS.mkdirSync(NodePath.dirname(UPDATE_LOG), { recursive: true });
+        const log = NodeFS.openSync(UPDATE_LOG, "a");
+        // Detached on purpose: the rebuild replaces THIS app, so it must not
+        // die with the server process it updates.
+        const child = NodeChildProcess.spawn(UPDATE_COMMAND, [], {
+          cwd: FORK_REPO,
+          detached: true,
+          stdio: ["ignore", log, log],
+        });
+        rebuildRunning = true;
+        child.on("exit", () => {
+          rebuildRunning = false;
+        });
+        child.on("error", () => {
+          rebuildRunning = false;
+        });
+        child.unref();
+        NodeFS.closeSync(log);
+        return true;
+      } catch {
+        rebuildRunning = false;
+        return false;
+      }
+    });
+    if (!started) {
+      return HttpServerResponse.jsonUnsafe(
+        { started: false, reason: "spawn-failed", command: UPDATE_COMMAND },
+        { status: 500 },
+      );
+    }
+    yield* Effect.logInfo("fork update rebuild launched", {
+      command: UPDATE_COMMAND,
+      log: UPDATE_LOG,
+    });
+    return HttpServerResponse.jsonUnsafe({ started: true, log: UPDATE_LOG });
+  }),
+);

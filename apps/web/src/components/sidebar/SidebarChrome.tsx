@@ -17,6 +17,7 @@ import {
   SidebarTrigger,
   useSidebar,
 } from "../ui/sidebar";
+import { SidebarForkUpdatePill } from "./SidebarForkUpdatePill";
 import { SidebarProviderUpdatePill } from "./SidebarProviderUpdatePill";
 import { SidebarUpdatePill } from "./SidebarUpdatePill";
 
@@ -130,6 +131,7 @@ export const SidebarChromeFooter = memo(function SidebarChromeFooter() {
 
   return (
     <SidebarFooter className="p-2">
+      <SidebarForkUpdatePill />
       <SidebarProviderUpdatePill />
       <SidebarUpdatePill />
       <SidebarMenu>
