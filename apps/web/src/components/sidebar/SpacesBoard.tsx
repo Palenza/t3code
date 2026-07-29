@@ -1,7 +1,7 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { useRouter } from "@tanstack/react-router";
-import { BrushIcon, GripVerticalIcon, MoreHorizontalIcon, PlusIcon } from "lucide-react";
+import { BrushIcon, MoreHorizontalIcon, MoveIcon, PlusIcon } from "lucide-react";
 
 import { Popover, PopoverPopup, PopoverTrigger } from "../ui/popover";
 
@@ -70,7 +70,26 @@ export function SpacesBoard({ onFermer }: { onFermer: () => void }) {
   }, [projects, threadShells]);
 
   const [renommage, setRenommage] = useState<{ id: string; valeur: string } | null>(null);
-  const [glisse, setGlisse] = useState<string | null>(null);
+
+  /**
+   * LE GLISSÉ CONTINU.
+   *
+   * C'était du glisser-déposer natif : image fantôme, et l'ordre ne changeait
+   * qu'au LÂCHER. Chez Arc les colonnes s'échangent PENDANT le mouvement, et
+   * c'est ça qu'on ressent — la main pousse, la rangée cède. Le natif ne sait
+   * pas faire ça ; on écoute donc le pointeur.
+   *
+   * `indexDepart` est figé au premier appui. À tout instant le décalage visuel
+   * vaut « distance parcourue − ce que la rangée a déjà bougé toute seule » :
+   * sans ce retrait, la colonne sauterait d'une case à chaque échange.
+   */
+  const PAS_COLONNE = 240 + 24; // largeur mesurée + gouttière mesurée
+  const [glisse, setGlisse] = useState<{
+    readonly id: string;
+    readonly origineX: number;
+    readonly indexDepart: number;
+    readonly decalage: number;
+  } | null>(null);
 
   /** Les fils rangés dans un espace, dans l'ordre où ils y sont entrés. */
   const filsDe = useCallback(
@@ -108,6 +127,68 @@ export function SpacesBoard({ onFermer }: { onFermer: () => void }) {
     [deleteSpace, onFermer, setActiveSpace],
   );
 
+  /**
+   * Les VOISINES, animées (technique FLIP).
+   *
+   * Réordonner le tableau les fait sauter : le flux les repose ailleurs d'une
+   * image à l'autre. On mémorise donc leur position d'avant, on les y remet
+   * d'un coup après le rendu, puis on les laisse revenir. Sans ça, l'échange
+   * est juste correct — il n'est pas fluide, et c'est la fluidité qui fait
+   * qu'on sent la rangée céder.
+   */
+  const refsColonnes = useRef(new Map<string, HTMLDivElement>());
+  const positionsRef = useRef(new Map<string, number>());
+  const glisseId = glisse?.id ?? null;
+  useLayoutEffect(() => {
+    const avant = positionsRef.current;
+    const apres = new Map<string, number>();
+    for (const [id, element] of refsColonnes.current) {
+      const x = element.getBoundingClientRect().left;
+      apres.set(id, x);
+      const precedent = avant.get(id);
+      if (precedent === undefined || precedent === x || id === glisseId) continue;
+      element.style.transition = "none";
+      element.style.transform = `translateX(${precedent - x}px)`;
+      // Lecture forcée : sans elle le navigateur fusionne les deux écritures
+      // et il n'y a aucune transition à voir.
+      void element.getBoundingClientRect();
+      element.style.transition = "transform 220ms cubic-bezier(0.2, 0, 0, 1)";
+      element.style.transform = "";
+    }
+    positionsRef.current = apres;
+  });
+
+  /** Le pointeur mène la danse jusqu'au relâchement, où qu'il aille. */
+  useEffect(() => {
+    if (glisse === null) return;
+    const surDeplacement = (event: PointerEvent) => {
+      const parcouru = event.clientX - glisse.origineX;
+      const indexCourant = spaces.findIndex((espace) => espace.id === glisse.id);
+      if (indexCourant < 0) return;
+      const vise = Math.min(
+        spaces.length - 1,
+        Math.max(0, glisse.indexDepart + Math.round(parcouru / PAS_COLONNE)),
+      );
+      if (vise !== indexCourant) {
+        const voisine = spaces[vise];
+        if (voisine !== undefined) reorderSpaces(glisse.id, voisine.id);
+      }
+      setGlisse({
+        ...glisse,
+        decalage: parcouru - (indexCourant - glisse.indexDepart) * PAS_COLONNE,
+      });
+    };
+    const surRelachement = () => setGlisse(null);
+    window.addEventListener("pointermove", surDeplacement);
+    window.addEventListener("pointerup", surRelachement);
+    window.addEventListener("pointercancel", surRelachement);
+    return () => {
+      window.removeEventListener("pointermove", surDeplacement);
+      window.removeEventListener("pointerup", surRelachement);
+      window.removeEventListener("pointercancel", surRelachement);
+    };
+  }, [PAS_COLONNE, glisse, reorderSpaces, spaces]);
+
   return (
     // Dimensions MESURÉES sur l'enregistrement Retina d'Arc (30/07, frames
     // 3600×2338 → CSS = pixels ÷ 2) : colonnes de 240 px, écarts de 24 px,
@@ -119,26 +200,35 @@ export function SpacesBoard({ onFermer }: { onFermer: () => void }) {
         const fond =
           sidebarThemeBackground(space.theme ?? makeSidebarThemeFromColors(["#8a8f98"]), "dark") ??
           undefined;
+        const tenue = glisse?.id === space.id;
         return (
           <div
             key={space.id}
-            draggable
-            onDragStart={() => setGlisse(space.id)}
-            onDragOver={(event) => event.preventDefault()}
-            onDrop={(event) => {
-              event.preventDefault();
-              if (glisse !== null && glisse !== space.id) reorderSpaces(glisse, space.id);
-              setGlisse(null);
+            ref={(element) => {
+              if (element === null) refsColonnes.current.delete(space.id);
+              else refsColonnes.current.set(space.id, element);
             }}
-            onDragEnd={() => setGlisse(null)}
+            style={
+              tenue
+                ? {
+                    background: fond,
+                    // Sous le doigt : pas de transition, sinon la colonne
+                    // traîne derrière la main au lieu de la suivre.
+                    transform: `translateX(${glisse?.decalage ?? 0}px) scale(1.03)`,
+                    transition: "none",
+                  }
+                : { background: fond }
+            }
             className={cn(
               // Une colonne = un espace, et son dégradé EST son identité :
               // c'est ce qui rend le tableau lisible d'un coup d'œil.
               // 240 px de large, coins de 10 px : mesurés, pas devinés.
-              "flex h-full w-60 shrink-0 flex-col rounded-[10px] ring-1 ring-black/5 transition-opacity",
-              glisse === space.id && "opacity-40",
+              "flex h-full w-60 shrink-0 flex-col rounded-[10px] ring-1 ring-black/5",
+              // Tenue : SOULEVÉE, pas effacée. Je la passais à 40 %
+              // d'opacité — on perdait de vue ce qu'on déplaçait. Chez Arc
+              // elle grossit et prend une ombre : elle passe DEVANT.
+              tenue && "z-10 shadow-2xl",
             )}
-            style={{ background: fond }}
           >
             <div className="flex items-center gap-2 px-3 pt-3 pb-1">
               {/* L'icône n'est pas une décoration : chez Arc elle OUVRE le
@@ -272,7 +362,28 @@ export function SpacesBoard({ onFermer }: { onFermer: () => void }) {
 
             {/* Le pied d'Arc : poignée à gauche, menu à droite. */}
             <div className="flex items-center justify-between px-3 pt-1 pb-2.5 text-black/35">
-              <GripVerticalIcon className="size-4 cursor-grab" />
+              {/* La poignée d'Arc : une croix de déplacement, pas des rainures
+                  — et c'est ELLE qui démarre le glissé, pas la colonne
+                  entière. Elle s'allume tant qu'on tient. */}
+              <button
+                type="button"
+                aria-label={`Déplacer ${space.name}`}
+                onPointerDown={(event) => {
+                  event.preventDefault();
+                  setGlisse({
+                    id: space.id,
+                    origineX: event.clientX,
+                    indexDepart: spaces.findIndex((espace) => espace.id === space.id),
+                    decalage: 0,
+                  });
+                }}
+                className={cn(
+                  "cursor-grab rounded-md p-1 transition-colors active:cursor-grabbing",
+                  tenue ? "bg-black/10 text-black/70" : "hover:bg-black/5",
+                )}
+              >
+                <MoveIcon className="size-4" />
+              </button>
               <button
                 type="button"
                 aria-label={`Options de ${space.name}`}

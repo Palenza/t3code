@@ -178,6 +178,30 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
     }
     useSidebarSpacesStore.getState().cycleSpace(versLaDroite);
   }, []);
+
+  /**
+   * ⌘⇧E — la SECONDE porte de la bibliothèque.
+   *
+   * Elle n'en avait qu'une : le geste au trackpad. Un commentaire annonçait
+   * bien ce raccourci, mais il n'était câblé nulle part — vérifié le 30/07 en
+   * l'essayant dans l'app. Sans souris à deux doigts, sans deltaX, ou si le
+   * geste échoue pour une raison quelconque, le tableau des espaces devenait
+   * tout simplement inatteignable. Un chemin unique vers une vue entière est
+   * un cul-de-sac qui attend son jour.
+   */
+  useEffect(() => {
+    const surTouche = (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey) || !event.shiftKey) return;
+      if (event.key.toLowerCase() !== "e") return;
+      event.preventDefault();
+      const biblio = useBibliothequeStore.getState();
+      if (biblio.ouverte) biblio.fermer();
+      else biblio.ouvrir("espaces");
+    };
+    window.addEventListener("keydown", surTouche);
+    return () => window.removeEventListener("keydown", surTouche);
+  }, []);
+
   const sidebarProviderStyle = {
     "--sidebar-width": `${sidebarWidth}px`,
     ...(isMacosDesktop && !isWindowFullscreen
