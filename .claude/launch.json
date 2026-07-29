@@ -1,0 +1,14 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "raptor",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": [
+        "-c",
+        "cd /Users/enzo/Documents/t3code && PATH=/Users/enzo/Documents/t3code/node_modules/.bin:$PATH T3CODE_PORT_OFFSET=200 exec node scripts/dev-runner.ts dev"
+      ],
+      "port": 5933
+    }
+  ]
+}

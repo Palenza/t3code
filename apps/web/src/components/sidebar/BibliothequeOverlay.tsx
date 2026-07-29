@@ -68,10 +68,16 @@ export function BibliothequeOverlay() {
   useEffect(() => {
     if (ouverte) {
       setMonte(true);
-      // Une image d'écart : poser les classes d'arrivée dans le même tour que
+      // Un souffle d'écart : poser les classes d'arrivée dans le même tour que
       // le montage ne déclencherait aucune transition.
-      const image = requestAnimationFrame(() => setVisible(true));
-      return () => cancelAnimationFrame(image);
+      //
+      // Un `requestAnimationFrame` serait le geste naturel — mais il NE SE
+      // DÉCLENCHE PAS quand la fenêtre est masquée, et la vue restait alors
+      // montée à `opacity-0` : ouverte, et invisible. Mesuré le 30/07 sur le
+      // serveur de dev (visibilityState « hidden », rAF muet). Un minuteur
+      // finit toujours par tomber.
+      const souffle = setTimeout(() => setVisible(true), 16);
+      return () => clearTimeout(souffle);
     }
     setVisible(false);
     const minuteur = setTimeout(() => setMonte(false), SORTIE_MS);
