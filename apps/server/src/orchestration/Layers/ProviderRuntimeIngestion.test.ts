@@ -3477,4 +3477,90 @@ describe("ProviderRuntimeIngestion", () => {
     expect(thread.session?.status).toBe("error");
     expect(thread.session?.lastError).toBe("runtime still processed");
   });
+  describe("relais de compte", () => {
+    /** Deux comptes du même driver : celui du fil, et un compte de secours. */
+    const deuxComptes = {
+      providerInstances: {
+        codex: { driver: ProviderDriverKind.make("codex"), displayName: "Compte A" },
+        codex_secours: {
+          driver: ProviderDriverKind.make("codex"),
+          displayName: "Compte B",
+        },
+      },
+    } as unknown as Partial<ServerSettings>;
+
+    it("un tour mort sur quota fait basculer le fil sur l'autre compte", async () => {
+      const harness = await createHarness({ serverSettings: deuxComptes });
+
+      harness.emit({
+        type: "turn.started",
+        eventId: asEventId("evt-relais-start"),
+        provider: ProviderDriverKind.make("codex"),
+        createdAt: "2026-07-29T22:00:00.000Z",
+        threadId: asThreadId("thread-1"),
+        turnId: asTurnId("turn-relais"),
+      });
+      await waitForThread(harness.readModel, (thread) => thread.session?.status === "running");
+
+      // La mort telle qu'elle arrive vraiment : un tour marqué échoué, avec
+      // le refus de quota en texte brut.
+      harness.emit({
+        type: "turn.completed",
+        eventId: asEventId("evt-relais-mort"),
+        provider: ProviderDriverKind.make("codex"),
+        createdAt: "2026-07-29T22:00:05.000Z",
+        threadId: asThreadId("thread-1"),
+        turnId: asTurnId("turn-relais"),
+        payload: {
+          state: "failed",
+          errorMessage: "You've hit your usage limit · resets 12:50pm",
+        },
+      } as unknown as ProviderRuntimeEvent);
+
+      const thread = await waitForThread(
+        harness.readModel,
+        (entry) => entry.modelSelection.instanceId === "codex_secours",
+      );
+
+      // Le compte change, le MODÈLE ne bouge pas : on change de compte, pas
+      // de cerveau.
+      expect(thread.modelSelection.instanceId).toBe("codex_secours");
+      expect(thread.modelSelection.model).toBe("gpt-5-codex");
+    });
+
+    it("une requête invalide ne fait basculer AUCUN compte", async () => {
+      const harness = await createHarness({ serverSettings: deuxComptes });
+
+      harness.emit({
+        type: "turn.started",
+        eventId: asEventId("evt-invalide-start"),
+        provider: ProviderDriverKind.make("codex"),
+        createdAt: "2026-07-29T22:10:00.000Z",
+        threadId: asThreadId("thread-1"),
+        turnId: asTurnId("turn-invalide"),
+      });
+      await waitForThread(harness.readModel, (thread) => thread.session?.status === "running");
+
+      harness.emit({
+        type: "turn.completed",
+        eventId: asEventId("evt-invalide-mort"),
+        provider: ProviderDriverKind.make("codex"),
+        createdAt: "2026-07-29T22:10:05.000Z",
+        threadId: asThreadId("thread-1"),
+        turnId: asTurnId("turn-invalide"),
+        payload: {
+          state: "failed",
+          errorMessage: "400 Bad Request: messages: field required",
+        },
+      } as unknown as ProviderRuntimeEvent);
+
+      const thread = await waitForThread(
+        harness.readModel,
+        (entry) => entry.session?.activeTurnId === null,
+      );
+
+      // Rejouer ailleurs produirait la même erreur en brûlant un 2e compte.
+      expect(thread.modelSelection.instanceId).toBe("codex");
+    });
+  });
 });
