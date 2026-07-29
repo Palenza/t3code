@@ -66,17 +66,24 @@ function SidebarBrand({ onBackdrop }: { onBackdrop: boolean }) {
       <span
         className={cn(
           "sidebar-brand-word truncate text-sm font-medium tracking-tight",
-          onBackdrop ? "text-white/70" : "text-muted-foreground",
+          // BLANC PUR sur le bandeau (demande fondateur 29/07) : sur
+          // l'ardoise griffée, un gris se noie.
+          onBackdrop ? "text-white" : "text-muted-foreground",
         )}
       >
         Code
       </span>
       {/* Le canal du fork, dit à sa place : « T3 Code Raptor ». En braise
           cuivre sur le bandeau griffé, pour prolonger l'icône. */}
+      {/* RAPTOR : braise dégradée + halo, comme une signature chauffée à
+          blanc. Le dégradé est peint DANS le texte (background-clip), donc
+          il garde son éclat sur n'importe quelle couleur de bandeau. */}
       <span
         className={cn(
-          "sidebar-brand-word truncate text-[11px] font-semibold uppercase tracking-[0.14em]",
-          onBackdrop ? "text-[#ff9d4d]" : "text-muted-foreground/70",
+          "sidebar-brand-word truncate text-[11px] font-bold uppercase tracking-[0.18em]",
+          onBackdrop
+            ? "bg-gradient-to-r from-[#ffd9a8] via-[#ff9d4d] to-[#ff5a1f] bg-clip-text text-transparent drop-shadow-[0_0_6px_rgba(255,120,40,0.55)]"
+            : "text-muted-foreground/70",
         )}
       >
         Raptor

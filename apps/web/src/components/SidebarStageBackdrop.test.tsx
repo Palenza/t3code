@@ -8,8 +8,9 @@ import {
 } from "./SidebarStageBackdrop";
 
 describe("resolveSidebarStageBackdropVariant", () => {
-  // Décision fork (28/07/2026) : le ciel étoilé Nightly sur TOUS les canaux —
-  // notre build du quotidien est « Alpha », que l'amont laisse sans habillage.
+  // Décision fork : un habillage sur TOUS les canaux — l'amont laisse le
+  // nôtre (« Raptor ») sans rien. Depuis le 29/07 cet habillage est
+  // l'ardoise griffée de l'identité Raptor, plus le ciel étoilé amont.
   it.each(["Raptor", "Dev", "Nightly", "quelconque"])(
     "gives every channel the nightly sky (%s)",
     (stageLabel) => {
@@ -19,19 +20,18 @@ describe("resolveSidebarStageBackdropVariant", () => {
 });
 
 describe("SidebarStageBackdrop", () => {
-  it.each(["nightly", "dev"] as const)(
-    "uses unique SVG definition ids when %s artwork is rendered more than once",
-    (variant) => {
-      const markup = renderToStaticMarkup(
-        <>
-          <StageBackdropArt variant={variant} />
-          <StageBackdropButtonArt variant={variant} />
-        </>,
-      );
-      const ids = Array.from(markup.matchAll(/\sid="([^"]+)"/g), (match) => match[1]);
+  // Le golden d'origine vérifiait l'unicité des identifiants SVG. L'habillage
+  // n'est plus un SVG mais la TEXTURE d'ardoise griffée : ce test-là n'avait
+  // plus d'objet, celui-ci fige ce qui compte désormais — la texture est bien
+  // peinte, dans les deux tailles, quel que soit le canal.
+  it.each(["nightly", "dev"] as const)("peint la texture Raptor pour %s", (variant) => {
+    const markup = renderToStaticMarkup(
+      <>
+        <StageBackdropArt variant={variant} />
+        <StageBackdropButtonArt variant={variant} />
+      </>,
+    );
 
-      expect(ids.length).toBeGreaterThan(0);
-      expect(new Set(ids).size).toBe(ids.length);
-    },
-  );
+    expect(markup.match(/\/brand\/raptor-bandeau\.png/g)).toHaveLength(2);
+  });
 });
