@@ -130,6 +130,9 @@ export const make = Effect.fn("makeTranscriptionService")(function* (
     stateDir: serverConfig.stateDir,
     modelUsage: voiceModels,
     resolveModel: () => voiceModels.resolveSelectedModelPath(),
+    // GO fondateur 29/07 (« go dictée ») : le modèle reste chaud pour
+    // toujours — recharger ~7 s à chaque reprise coûtait le premier clip.
+    idleTimeoutOverride: Duration.infinity,
     ...options.transcribeCpp,
   });
 
@@ -146,6 +149,32 @@ export const make = Effect.fn("makeTranscriptionService")(function* (
   const getVoiceSettings = serverSettings.getSettings.pipe(
     Effect.map((settings) => settings.voice),
     Effect.orDie,
+  );
+
+  // GO fondateur 29/07 (« go dictée ») : la voix activée précharge son modèle
+  // au démarrage — le premier clip ne paie plus les ~7 s de chargement.
+  // Fail-soft : sans modèle téléchargé (ou moteur sidecar), un warning et le
+  // service vit exactement comme avant. Une voix activée APRÈS le boot ne
+  // profite du préchauffage qu'au démarrage suivant.
+  yield* getVoiceSettings.pipe(
+    Effect.flatMap((settings) => {
+      if (!settings.enabled || settings.engine !== "transcribecpp") return Effect.void;
+      return transcribeCpp.warmup({ idleTimeoutMinutes: settings.idleTimeoutMinutes }).pipe(
+        Effect.timed,
+        Effect.flatMap(([duration]) =>
+          Effect.logInfo("voice model preloaded at startup", {
+            loadMs: Math.round(Duration.toMillis(duration)),
+          }),
+        ),
+        Effect.catch((error) =>
+          Effect.logWarning("voice model preload skipped", {
+            reason: error.reason,
+            detail: error.detail,
+          }),
+        ),
+      );
+    }),
+    Effect.forkDetach,
   );
 
   const failAllSessions = (error: TranscriptionSidecarError) =>

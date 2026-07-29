@@ -176,6 +176,36 @@ describe("TranscribeCppEngine", () => {
     }),
   );
 
+  it.effect("warmup preloads the model once and a later session reuses it", () =>
+    Effect.gen(function* () {
+      const loadedPaths: string[] = [];
+      const engine = yield* makeTranscribeCppEngine({
+        stateDir: "/project-state",
+        loader: async () => ({
+          load: async (path) => {
+            loadedPaths.push(path);
+            return makeModel();
+          },
+        }),
+        resolveModel: async () => MODEL_PATH,
+      });
+
+      yield* engine.warmup({ idleTimeoutMinutes: 5 });
+      expect(loadedPaths).toEqual([MODEL_PATH]);
+
+      const { handlers, updates } = yield* makeHandlers();
+      const cleanup = yield* engine.start({ sessionId: "warm-session" }, handlers, {
+        idleTimeoutMinutes: 5,
+      });
+      expect((yield* Queue.take(updates)).kind).toBe("ready");
+      // The warm model serves the session — no second native load.
+      expect(loadedPaths).toEqual([MODEL_PATH]);
+
+      yield* cleanup;
+      yield* engine.shutdown;
+    }),
+  );
+
   it.effect("reports an unavailable selected model without importing the native binding", () =>
     Effect.gen(function* () {
       let loaderCalls = 0;

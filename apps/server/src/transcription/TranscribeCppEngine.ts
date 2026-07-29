@@ -79,6 +79,14 @@ export interface TranscribeCppEngineStartOptions {
 }
 
 export interface TranscribeCppEngineShape {
+  /**
+   * Loads the selected model now instead of on the first clip. Same path as
+   * `start` (`ensureModel`), so a session that races the warmup just reuses
+   * whichever load finished first — never a second native load.
+   */
+  readonly warmup: (options: {
+    readonly idleTimeoutMinutes: number;
+  }) => Effect.Effect<void, TranscriptionSidecarError>;
   readonly start: (
     input: TranscriptionStartInput,
     handlers: TranscriptionSessionHandlers,
@@ -531,6 +539,7 @@ export const makeTranscribeCppEngine = Effect.fn("makeTranscribeCppEngine")(func
   );
 
   return {
+    warmup: (warmupOptions) => ensureModel(warmupOptions.idleTimeoutMinutes).pipe(Effect.asVoid),
     start,
     sendAudio: (input) =>
       Effect.gen(function* () {
