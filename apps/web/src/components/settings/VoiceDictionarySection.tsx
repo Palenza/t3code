@@ -130,7 +130,7 @@ function DictionaryFields(props: {
             }
             disabled={props.disabled}
           />
-          Case-sensitive
+          Respecter les majuscules
         </label>
         <label className="flex items-center gap-2 text-sm">
           <Switch
@@ -138,7 +138,7 @@ function DictionaryFields(props: {
             onCheckedChange={(checked) => props.onChange({ ...props.draft, fuzzy: checked })}
             disabled={props.disabled}
           />
-          Fuzzy match
+          Accepter les à-peu-près
         </label>
       </div>
     </div>
@@ -265,7 +265,7 @@ export function VoiceDictionarySection(props: {
       </div>
       {addError ? <p className="text-sm text-destructive">{addError}</p> : null}
       <div className="flex flex-col gap-2 rounded-lg border border-border/60 p-3">
-        <p className="text-sm font-medium">Paste a list</p>
+        <p className="text-sm font-medium">Coller une liste</p>
         <p className="text-xs text-muted-foreground">
           One entry per line: <code>spoken forms -&gt; replacement</code> (commas between spoken
           forms). A bare word becomes a known term. Pasted entries are fuzzy and case-insensitive.

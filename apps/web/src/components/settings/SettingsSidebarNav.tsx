@@ -81,7 +81,10 @@ export function SettingsSidebarNav({ pathname }: { pathname: string }) {
   return (
     <>
       <SidebarContent className="overflow-x-hidden">
-        <SidebarGroup className="p-2">
+        {/* Le bandeau griffé occupe le haut de la colonne : sans ce retrait,
+            « General » lui rentre dedans et le nom devient illisible
+            (reproche fondateur 29/07). */}
+        <SidebarGroup className="p-2 pt-8">
           <SidebarMenu>
             {SETTINGS_NAV_ITEMS.map((item) => {
               const Icon = item.icon;

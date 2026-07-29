@@ -11,6 +11,7 @@ import { AsyncResult } from "effect/unstable/reactivity";
 import {
   CheckIcon,
   ChevronDownIcon,
+  ChevronRightIcon,
   DownloadIcon,
   GaugeIcon,
   HardDriveIcon,
@@ -447,45 +448,27 @@ export function VoiceSettingsPanel() {
 
   return (
     <SettingsPageContainer>
-      <SettingsSection title="Voice">
+      {/* UNE question, pas quatre (demande fondateur 29/07 : « il y a trop
+          d'options, on ne comprend rien, on ne sait même pas ce qu'elles
+          font »). La dictée locale est le cas de 99 % des gens : elle passe
+          en tête, en français, sans jargon. Le moteur serveur, le mode
+          d'inférence et la langue sont des détails d'implémentation : ils
+          descendent sous « Réglages avancés », repliés. */}
+      <SettingsSection title="Dictée vocale">
         <SettingsRow
-          title="Enable server transcription"
-          description="Allow browsers and devices without a local model to send microphone audio to this environment."
+          title="Dicter avec le micro"
+          description="Parlez, le texte s'écrit dans le composer. Tout se passe sur ce Mac : aucun son ne part sur Internet."
           control={
             <Switch
               checked={settings.voice.enabled}
               onCheckedChange={(enabled) => patchVoice({ enabled })}
-              aria-label="Enable server transcription"
+              aria-label="Activer la dictée vocale"
             />
           }
         />
         <SettingsRow
-          title="Server engine"
-          description="Choose the speech engine used for remote/browser transcription."
-          control={
-            <Select
-              items={engineItems}
-              value={settings.voice.engine}
-              onValueChange={(engine) => engine && patchVoice({ engine: engine as VoiceEngine })}
-            >
-              <SelectTrigger size="sm" className="w-56" aria-label="Server voice engine">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectGroup>
-                  {engineItems.map((item) => (
-                    <SelectItem key={item.value} value={item.value}>
-                      {item.label}
-                    </SelectItem>
-                  ))}
-                </SelectGroup>
-              </SelectContent>
-            </Select>
-          }
-        />
-        <SettingsRow
-          title="Language"
-          description="Automatic detection is used when the selected model supports it."
+          title="Langue"
+          description="La dictée s'adapte à ce que vous parlez. « Automatique » convient si vous mélangez les langues."
           control={
             <Select
               items={languageItems}
@@ -494,7 +477,7 @@ export function VoiceSettingsPanel() {
                 language && patchVoice({ language: language === "auto" ? "" : language })
               }
             >
-              <SelectTrigger size="sm" className="w-44" aria-label="Voice language">
+              <SelectTrigger size="sm" className="w-44" aria-label="Langue de la dictée">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -509,32 +492,64 @@ export function VoiceSettingsPanel() {
             </Select>
           }
         />
-        <SettingsRow
-          title="Inference mode"
-          description="Auto preserves a working server setup. Choosing on-device is always explicit."
-          control={
-            <Select
-              items={modeItems}
-              value={settings.voiceInferenceMode}
-              onValueChange={(mode) =>
-                mode && updateSettings({ voiceInferenceMode: mode as VoiceInferenceMode })
+        <details className="group border-t border-border/50 pt-3">
+          <summary className="flex cursor-pointer list-none items-center gap-1.5 text-[13px] text-muted-foreground transition-colors hover:text-foreground">
+            <ChevronRightIcon className="size-3.5 transition-transform group-open:rotate-90" />
+            Réglages avancés
+          </summary>
+          <div className="pt-2">
+            <SettingsRow
+              title="Dicter depuis un autre appareil"
+              description="Permet à un navigateur ou un téléphone, qui n'a pas de modèle local, d'envoyer son micro à cet ordinateur. Inutile si vous dictez ici."
+              control={
+                <Select
+                  items={modeItems}
+                  value={settings.voiceInferenceMode}
+                  onValueChange={(mode) =>
+                    mode && updateSettings({ voiceInferenceMode: mode as VoiceInferenceMode })
+                  }
+                >
+                  <SelectTrigger size="sm" className="w-44" aria-label="Où tourne la dictée">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      {modeItems.map((item) => (
+                        <SelectItem key={item.value} value={item.value}>
+                          {item.label}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
               }
-            >
-              <SelectTrigger size="sm" className="w-44" aria-label="Voice inference mode">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectGroup>
-                  {modeItems.map((item) => (
-                    <SelectItem key={item.value} value={item.value}>
-                      {item.label}
-                    </SelectItem>
-                  ))}
-                </SelectGroup>
-              </SelectContent>
-            </Select>
-          }
-        />
+            />
+            <SettingsRow
+              title="Moteur de reconnaissance"
+              description="Le programme qui transforme la voix en texte quand la dictée vient d'un autre appareil. Ne changez ceci que si la dictée à distance échoue."
+              control={
+                <Select
+                  items={engineItems}
+                  value={settings.voice.engine}
+                  onValueChange={(engine) => engine && patchVoice({ engine: engine as VoiceEngine })}
+                >
+                  <SelectTrigger size="sm" className="w-56" aria-label="Moteur de reconnaissance">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      {engineItems.map((item) => (
+                        <SelectItem key={item.value} value={item.value}>
+                          {item.label}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              }
+            />
+          </div>
+        </details>
       </SettingsSection>
 
       <SettingsSection
@@ -653,7 +668,12 @@ export function VoiceSettingsPanel() {
         </p>
       </SettingsSection>
 
-      <SettingsSection title="Dictionary">
+      <SettingsSection title="Corriger les mots que la dictée écorche">
+        <p className="px-3 pb-3 text-[13px] text-muted-foreground sm:px-4">
+          La dictée entend « té trois code » quand vous dites T3 Code ? Ajoutez la correction ici
+          et elle s'appliquera toute seule. « Respecter les majuscules » n'agit que si la casse
+          compte pour vous ; « accepter les à-peu-près » rattrape aussi les variantes proches.
+        </p>
         <div className="px-3 sm:px-4">
           <VoiceDictionarySection
             entries={settings.voice.dictionary}
