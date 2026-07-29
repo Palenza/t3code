@@ -67,7 +67,9 @@ describe("permissions d'un mode dans le dossier de l'instance", () => {
         const fs = yield* FileSystem.FileSystem;
         const path = yield* Path.Path;
         const fichier = path.join(home, "settings.json");
-        yield* fs.writeFileString(fichier, '{"model":"opus","autreChose":42}');
+        yield* fs
+          .writeFileString(fichier, '{"model":"opus","autreChose":42}')
+          .pipe(Effect.orElseSucceed(() => undefined));
 
         yield* appliquerModeAuHome(home, modeParSlug("documentation"));
 
@@ -87,7 +89,9 @@ describe("permissions d'un mode dans le dossier de l'instance", () => {
         const fs = yield* FileSystem.FileSystem;
         const path = yield* Path.Path;
         const fichier = path.join(home, "settings.json");
-        yield* fs.writeFileString(fichier, "{ceci n'est pas du json");
+        yield* fs
+          .writeFileString(fichier, "{ceci n'est pas du json")
+          .pipe(Effect.orElseSucceed(() => undefined));
 
         yield* appliquerModeAuHome(home, modeParSlug("revue"));
 
