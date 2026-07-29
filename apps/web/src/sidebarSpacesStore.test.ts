@@ -236,4 +236,18 @@ describe("gestion des espaces (façon Arc)", () => {
 
     expect(store.getState().assignments["env:fil"]).toBe(design);
   });
+  it("remonter depuis un espace ramène à « Tous » — la bibliothèque attend l'étape d'après", () => {
+    // Le geste garde un seul sens : vers la droite on REMONTE, d'espace en
+    // espace jusqu'à la vue principale. C'est seulement UNE FOIS arrivé que
+    // le même geste ouvre la bibliothèque (précision fondateur 30/07) —
+    // sinon on sortirait de son rangement par surprise.
+    const store = useSidebarSpacesStore;
+    store.setState({ spaces: [], activeSpaceId: null, assignments: {}, favorites: [] });
+    const design = store.getState().createSpace({ name: "Design", emoji: "🎨", theme: null });
+    store.getState().setActiveSpace(design);
+
+    store.getState().cycleSpace(-1);
+
+    expect(store.getState().activeSpaceId).toBeNull();
+  });
 });

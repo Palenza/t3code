@@ -160,10 +160,14 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
     const direction = spaceSwipeAccumRef.current > 0 ? 1 : -1;
     spaceSwipeAccumRef.current = 0;
     spaceSwipeLastFireRef.current = now;
-    // Deux doigts vers la DROITE ouvrent la bibliothèque — le geste d'Arc,
-    // filmé le 30/07. Vers la gauche, on continue de circuler entre espaces.
-    // Le seuil est le même : un seul apprentissage pour deux directions.
-    if (direction > 0) {
+    // Deux doigts vers la DROITE ouvrent la bibliothèque — mais SEULEMENT
+    // depuis la vue principale. Depuis un espace, le même geste ramène
+    // d'abord vers « Tous » : sinon il faudrait deviner quand il navigue et
+    // quand il ouvre une fenêtre, et on sortirait de son rangement par
+    // surprise (précision fondateur 30/07). Le geste garde donc un seul
+    // sens : vers la droite on REMONTE — d'espace en espace jusqu'à la vue
+    // principale, puis d'un cran de plus jusqu'à la bibliothèque.
+    if (direction > 0 && useSidebarSpacesStore.getState().activeSpaceId === null) {
       useBibliothequeStore.getState().ouvrir("espaces");
       return;
     }
