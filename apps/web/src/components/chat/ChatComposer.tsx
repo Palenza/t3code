@@ -421,6 +421,7 @@ const ComposerFooterPrimaryActions = memo(function ComposerFooterPrimaryActions(
   activeThreadProviderDisplayName: string | null;
   activeThreadRateLimits: ServerProvider["rateLimits"];
   activeThreadRateLimitsInstanceId: ProviderInstanceId | null;
+  activeThreadRateLimitsExpected: boolean;
   isPreparingWorktree: boolean;
   pendingAction: {
     questionIndex: number;
@@ -449,6 +450,7 @@ const ComposerFooterPrimaryActions = memo(function ComposerFooterPrimaryActions(
           providerDisplayName={props.activeThreadProviderDisplayName}
           rateLimits={props.activeThreadRateLimits}
           rateLimitsInstanceId={props.activeThreadRateLimitsInstanceId}
+          rateLimitsExpected={props.activeThreadRateLimitsExpected}
         />
       ) : null}
       {props.isPreparingWorktree ? (
@@ -979,6 +981,15 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   const activeThreadRateLimits = useMemo(() => {
     if (explicitSelectedInstanceId === null) return undefined;
     return providerStatuses.find((p) => p.instanceId === explicitSelectedInstanceId)?.rateLimits;
+  }, [providerStatuses, explicitSelectedInstanceId]);
+  // Claude and Codex DO report plan limits; for them the popover section must
+  // exist even before the first reading, with an honest empty state.
+  const activeThreadRateLimitsExpected = useMemo(() => {
+    if (explicitSelectedInstanceId === null) return false;
+    const driver = providerStatuses.find(
+      (p) => p.instanceId === explicitSelectedInstanceId,
+    )?.driver;
+    return String(driver) === "claudeAgent" || String(driver) === "codex";
   }, [providerStatuses, explicitSelectedInstanceId]);
 
   // ------------------------------------------------------------------
@@ -3394,6 +3405,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                   activeThreadProviderDisplayName={activeThreadProviderDisplayName}
                   activeThreadRateLimits={activeThreadRateLimits}
                   activeThreadRateLimitsInstanceId={explicitSelectedInstanceId}
+                  activeThreadRateLimitsExpected={activeThreadRateLimitsExpected}
                   pendingAction={pendingPrimaryAction}
                   // The stop button must appear the instant a turn is on its
                   // way — local dispatch in flight or session still spawning —

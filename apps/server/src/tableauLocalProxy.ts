@@ -1,6 +1,8 @@
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Schema from "effect/Schema";
+
+import { DESKTOP_RENDERER_ORIGINS } from "./http.ts";
 import {
   HttpClient,
   HttpClientResponse,
@@ -51,21 +53,31 @@ const LOCAL_ORIGIN_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
  * IS loopback. Browsers label such requests themselves: `sec-fetch-site:
  * cross-site` and/or a foreign `origin` header. Those are refused.
  *
- * What must keep working: the app's own renderer (same-origin in the packaged
- * app, same-site between the dev web port and the server port) and plain
- * local tooling like curl, which sends neither header and is already covered
- * by the loopback gate.
+ * What must keep working: the PACKAGED app's renderer — it lives on the
+ * custom scheme (`t3code://app`, see DESKTOP_RENDERER_ORIGINS), so its
+ * fetches to the local server are labelled cross-site by Chromium; the
+ * origin allowlist must therefore be checked BEFORE the sec-fetch-site
+ * verdict (learned the hard way: the first version of this guard silenced
+ * the Tableau local page and the update pill in the installed app). Also
+ * kept working: the dev renderer (same-site between web and server ports)
+ * and plain local tooling like curl, which sends neither header and is
+ * already covered by the loopback gate.
  */
 export function isSameAppBrowserRequest(headers: {
   readonly [key: string]: string | ReadonlyArray<string> | undefined;
 }): boolean {
   const single = (value: string | ReadonlyArray<string> | undefined): string | undefined =>
     Array.isArray(value) ? value[0] : (value as string | undefined);
+  const origin = single(headers["origin"])?.trim();
+  // The desktop renderer's own origin outranks every other signal: a web
+  // page cannot forge its Origin header, so this allowlist is safe.
+  if (origin !== undefined && DESKTOP_RENDERER_ORIGINS.includes(origin)) {
+    return true;
+  }
   const fetchSite = single(headers["sec-fetch-site"])?.trim().toLowerCase();
   if (fetchSite !== undefined && fetchSite !== "") {
     return fetchSite === "same-origin" || fetchSite === "same-site" || fetchSite === "none";
   }
-  const origin = single(headers["origin"])?.trim();
   if (origin === undefined || origin === "" || origin === "null") {
     // No browser markings at all: not a cross-site browser request.
     return origin !== "null";

@@ -59,13 +59,22 @@ export function ContextWindowMeter(props: {
   rateLimits?: ServerProvider["rateLimits"];
   /** The instance those rate limits belong to — refreshed when the popover opens. */
   rateLimitsInstanceId?: ProviderInstanceId | null;
+  /**
+   * True when the instance's driver DOES report plan limits (Claude, Codex).
+   * The section then always renders — with an honest "no reading yet" when
+   * the account has not answered (walled, throttled, never probed), instead
+   * of silently vanishing (reproche fondateur 29/07 : « ça ne montre
+   * toujours pas le contexte global d'utilisation »).
+   */
+  rateLimitsExpected?: boolean;
 }) {
-  const { usage, providerDisplayName, rateLimits, rateLimitsInstanceId } = props;
+  const { usage, providerDisplayName, rateLimits, rateLimitsInstanceId, rateLimitsExpected } =
+    props;
   const handleOpenChange = useRefreshRateLimitsOnOpen(rateLimitsInstanceId);
-  // Gate the whole section on the same judgement the gauges make: a header
-  // above "nothing worth showing" would read as "all limits at zero".
   const hasRateLimits =
     rateLimits !== undefined && presentProviderRateLimits({ rateLimits, now: Date.now() }) !== null;
+  const showRateLimitsSection =
+    hasRateLimits || (rateLimitsExpected === true && rateLimitsInstanceId != null);
   const usedPercentage = formatPercentage(usage.usedPercentage);
   const normalizedPercentage = Math.max(0, Math.min(100, usage.usedPercentage ?? 0));
   const radius = 9.75;
@@ -181,10 +190,16 @@ export function ContextWindowMeter(props: {
               {providerDisplayName ?? "It"} automatically compacts its context when needed.
             </div>
           ) : null}
-          {hasRateLimits ? (
+          {showRateLimitsSection ? (
             <div className="mt-1 border-t border-border/60 pt-2">
               <div className="font-medium text-muted-foreground text-xs">Plan usage limits</div>
-              <ProviderRateLimitGauges rateLimits={rateLimits} />
+              {hasRateLimits ? (
+                <ProviderRateLimitGauges rateLimits={rateLimits} />
+              ) : (
+                <p className="pt-1 text-pretty text-[11px] leading-4 text-muted-foreground/60">
+                  No reading yet — the account has not reported its limits. Hovering here retries.
+                </p>
+              )}
             </div>
           ) : null}
         </div>

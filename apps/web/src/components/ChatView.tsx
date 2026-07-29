@@ -1952,6 +1952,29 @@ function ChatViewContent(props: ChatViewProps) {
     versionMismatchServerLabel,
   ]);
   const providerStatuses = serverConfig?.providers ?? EMPTY_PROVIDERS;
+  // A Claude account silently losing its login is how the auto-relay dies
+  // without anyone knowing (vécu 29/07 : A et B déconnectés, le mur du matin
+  // n'avait plus aucune cible). Say it the moment it happens — once per
+  // authenticated→unauthenticated transition, never on startup noise.
+  const lastAuthStatusByInstanceRef = useRef<Map<string, string>>(new Map());
+  useEffect(() => {
+    const previous = lastAuthStatusByInstanceRef.current;
+    for (const provider of providerStatuses) {
+      if (String(provider.driver) !== "claudeAgent" || !provider.enabled) continue;
+      const authStatus = provider.auth.status;
+      const before = previous.get(provider.instanceId);
+      if (before === "authenticated" && authStatus === "unauthenticated") {
+        const name = provider.displayName?.trim() || provider.instanceId;
+        toastManager.add({
+          type: "error",
+          title: `${name} — déconnecté`,
+          description:
+            "Ce compte est sorti du pool de relais. Reconnecte-le : `claude /login` avec son CLAUDE_CONFIG_DIR.",
+        });
+      }
+      previous.set(provider.instanceId, authStatus);
+    }
+  }, [providerStatuses]);
   const unlockedSelectedProvider = resolveSelectableProvider(
     providerStatuses,
     selectedProviderByThreadId ?? threadProvider,

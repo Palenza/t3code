@@ -1,51 +1,44 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { isLoopbackRemoteAddress, readRemoteAddress } from "./tableauLocalProxy.ts";
+import { isLoopbackRemoteAddress, isSameAppBrowserRequest } from "./tableauLocalProxy.ts";
 
-describe("tableauLocalProxy", () => {
-  describe("isLoopbackRemoteAddress", () => {
-    it("accepts IPv4 loopback", () => {
-      expect(isLoopbackRemoteAddress("127.0.0.1")).toBe(true);
-    });
+describe("isLoopbackRemoteAddress", () => {
+  it("accepts loopback shapes and refuses the rest", () => {
+    expect(isLoopbackRemoteAddress("127.0.0.1")).toBe(true);
+    expect(isLoopbackRemoteAddress("::1")).toBe(true);
+    expect(isLoopbackRemoteAddress("::ffff:127.0.0.1")).toBe(true);
+    expect(isLoopbackRemoteAddress("192.168.1.20")).toBe(false);
+    expect(isLoopbackRemoteAddress(undefined)).toBe(false);
+  });
+});
 
-    it("accepts IPv6 loopback", () => {
-      expect(isLoopbackRemoteAddress("::1")).toBe(true);
-    });
-
-    it("accepts IPv4-mapped IPv6 loopback", () => {
-      expect(isLoopbackRemoteAddress("::ffff:127.0.0.1")).toBe(true);
-    });
-
-    it("refuses a LAN address", () => {
-      expect(isLoopbackRemoteAddress("192.168.1.24")).toBe(false);
-    });
-
-    it("refuses a tailnet-style address", () => {
-      expect(isLoopbackRemoteAddress("100.98.12.7")).toBe(false);
-    });
-
-    it("refuses an unknown source rather than trusting it", () => {
-      expect(isLoopbackRemoteAddress(undefined)).toBe(false);
-      expect(isLoopbackRemoteAddress(null)).toBe(false);
-      expect(isLoopbackRemoteAddress("")).toBe(false);
-    });
+describe("isSameAppBrowserRequest", () => {
+  it("accepts the PACKAGED renderer despite its cross-site labelling", () => {
+    // The custom scheme (t3code://app) makes Chromium label every fetch to
+    // the local server cross-site — the origin allowlist must win, or the
+    // installed app loses Tableau local and the update pill (vécu 29/07).
+    expect(
+      isSameAppBrowserRequest({ origin: "t3code://app", "sec-fetch-site": "cross-site" }),
+    ).toBe(true);
+    expect(
+      isSameAppBrowserRequest({ origin: "t3code-dev://app", "sec-fetch-site": "cross-site" }),
+    ).toBe(true);
   });
 
-  describe("readRemoteAddress", () => {
-    it("prefers the socket address", () => {
-      expect(
-        readRemoteAddress({ socket: { remoteAddress: "127.0.0.1" }, remoteAddress: "10.0.0.9" }),
-      ).toBe("127.0.0.1");
-    });
+  it("accepts the dev renderer and plain local tooling", () => {
+    // Dev: web port → server port is same-site. curl: no browser headers.
+    expect(isSameAppBrowserRequest({ "sec-fetch-site": "same-site" })).toBe(true);
+    expect(isSameAppBrowserRequest({ "sec-fetch-site": "same-origin" })).toBe(true);
+    expect(isSameAppBrowserRequest({})).toBe(true);
+    expect(isSameAppBrowserRequest({ origin: "http://localhost:5738" })).toBe(true);
+  });
 
-    it("falls back to the request-level address", () => {
-      expect(readRemoteAddress({ remoteAddress: "::1" })).toBe("::1");
-    });
-
-    it("returns undefined for sourceless requests", () => {
-      expect(readRemoteAddress(undefined)).toBeUndefined();
-      expect(readRemoteAddress("not-an-object")).toBeUndefined();
-      expect(readRemoteAddress({})).toBeUndefined();
-    });
+  it("refuses cross-site websites — the CSRF this guard exists for", () => {
+    expect(
+      isSameAppBrowserRequest({ origin: "https://evil.example", "sec-fetch-site": "cross-site" }),
+    ).toBe(false);
+    expect(isSameAppBrowserRequest({ "sec-fetch-site": "cross-site" })).toBe(false);
+    expect(isSameAppBrowserRequest({ origin: "null" })).toBe(false);
+    expect(isSameAppBrowserRequest({ origin: "https://evil.example" })).toBe(false);
   });
 });
