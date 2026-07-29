@@ -1,6 +1,12 @@
 import type { ModelSelection, ProviderInstanceId } from "@t3tools/contracts";
 
-import { choisir, classerEchec, type Candidat, type Strategie } from "./comptePool.ts";
+import {
+  choisir,
+  classerEchec,
+  type Candidat,
+  type Strategie,
+  type Verdict,
+} from "./comptePool.ts";
 
 /**
  * Le relais — que faire d'un tour qui vient de mourir.
@@ -20,16 +26,17 @@ import { choisir, classerEchec, type Candidat, type Strategie } from "./comptePo
 
 export type DecisionRelais =
   /** Ne rien faire — et la raison est dite, jamais avalée. */
-  | { readonly type: "laisser"; readonly raison: string }
+  | { readonly type: "laisser"; readonly raison: string; readonly verdict: Verdict }
   /** Rejouer le tour sur un autre compte. */
   | {
       readonly type: "basculer";
       readonly vers: ProviderInstanceId;
       readonly modelSelection: ModelSelection;
       readonly raison: string;
+      readonly verdict: Verdict;
     }
   /** Plus aucun compte disponible — à DIRE fort, jamais à masquer. */
-  | { readonly type: "epuise"; readonly raison: string };
+  | { readonly type: "epuise"; readonly raison: string; readonly verdict: Verdict };
 
 export interface EntreeRelais {
   /** Le compte sur lequel le tour vient de mourir. */
@@ -68,6 +75,7 @@ export function deciderRelais(entree: EntreeRelais): DecisionRelais {
     return {
       type: "laisser",
       raison: "La requête elle-même est invalide — la rejouer ailleurs donnerait la même erreur.",
+      verdict,
     };
   }
 
@@ -83,6 +91,7 @@ export function deciderRelais(entree: EntreeRelais): DecisionRelais {
   if (remplacant === null) {
     return {
       type: "epuise",
+      verdict,
       raison:
         verdict.nature === "authentification-morte"
           ? "Ce compte n'est plus authentifié et aucun autre n'est disponible."
@@ -93,6 +102,7 @@ export function deciderRelais(entree: EntreeRelais): DecisionRelais {
   return {
     type: "basculer",
     vers: remplacant.instanceId,
+    verdict,
     // Le MODÈLE ne bouge pas : on change de compte, pas de cerveau. Un tour
     // relancé sur un modèle différent ne serait plus le tour demandé.
     modelSelection: { ...entree.selectionActuelle, instanceId: remplacant.instanceId },

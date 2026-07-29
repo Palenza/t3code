@@ -14,7 +14,9 @@ import {
   type OrchestrationCheckpointSummary,
   type OrchestrationProposedPlan,
   type OrchestrationThread,
+  type ModelSelection,
   type OrchestrationThreadActivity,
+  type ProviderInstanceId,
   type ProviderRuntimeEvent,
 } from "@t3tools/contracts";
 import * as Cache from "effect/Cache";
@@ -38,6 +40,17 @@ import {
   type ProviderRuntimeIngestionShape,
 } from "../Services/ProviderRuntimeIngestion.ts";
 import { ServerSettingsService } from "../../serverSettings.ts";
+import { candidatsPourDriver, nomDuCompte } from "../../provider/comptesCandidats.ts";
+import { noterEchec, noterSucces, santeDe } from "../../provider/compteSanteStore.ts";
+import { deciderRelais } from "../../provider/relaisDecision.ts";
+import {
+  dejaTentes,
+  noterBascule,
+  oublierFil,
+  peutEncoreBasculer,
+  reclamerMort,
+} from "../../provider/relaisJournal.ts";
+import { getRateLimits } from "../../provider/rateLimitStore.ts";
 
 const providerTurnKey = (threadId: ThreadId, turnId: TurnId) => `${threadId}:${turnId}`;
 const providerTaskKey = (threadId: ThreadId, taskId: string) => `${threadId}:${taskId}`;
@@ -696,6 +709,97 @@ const make = Effect.gen(function* () {
   const providerCommandId = (event: ProviderRuntimeEvent, tag: string) =>
     crypto.randomUUIDv4.pipe(
       Effect.map((uuid) => CommandId.make(`provider:${event.eventId}:${tag}:${uuid}`)),
+    );
+
+  /**
+   * Le RELAIS : un tour vient de mourir, on le reprend sur un autre compte.
+   *
+   * Branché sur les deux seules surfaces où une mort remonte avec son message
+   * d'erreur encore attaché. Les deux peuvent décrire la MÊME mort, d'où la
+   * réclamation en tête : sans elle, le tour repartirait deux fois, sur deux
+   * comptes, pour une seule question posée.
+   *
+   * Ne relance rien de lui-même en cas de doute. Chaque sortie anticipée est
+   * un cas où rejouer coûterait du quota sans rien garantir.
+   */
+  const tenterRelais = (entree: {
+    readonly event: ProviderRuntimeEvent;
+    readonly thread: { readonly id: ThreadId; readonly modelSelection: ModelSelection };
+    readonly message: string;
+    readonly turnId: string | undefined;
+    readonly now: string;
+  }) =>
+    Effect.gen(function* () {
+      const { event, thread } = entree;
+      if (!reclamerMort(thread.id, entree.turnId)) return;
+      if (!peutEncoreBasculer(thread.id)) {
+        yield* Effect.logWarning("relais: plafond de bascules atteint", { threadId: thread.id });
+        return;
+      }
+
+      const compteMort =
+        (event.providerInstanceId as ProviderInstanceId | undefined) ??
+        thread.modelSelection.instanceId;
+      const settings = yield* serverSettingsService.getSettings;
+      const instances = settings.providerInstances;
+      const driver = instances[compteMort]?.driver;
+      if (driver === undefined) {
+        // Compte inconnu des réglages : on ne devine pas ses pairs.
+        yield* Effect.logWarning("relais: compte introuvable dans les réglages", { compteMort });
+        return;
+      }
+
+      const decision = deciderRelais({
+        compteMort,
+        selectionActuelle: thread.modelSelection,
+        message: entree.message,
+        candidats: candidatsPourDriver({
+          instances,
+          driver,
+          lireQuotas: getRateLimits,
+          lireSante: santeDe,
+        }),
+        dejaTentes: dejaTentes(thread.id),
+        strategie: "moins-charge",
+        maintenant: Date.parse(entree.now),
+      });
+
+      // La santé se met à jour dans TOUS les cas où le compte est en cause —
+      // même sans remplaçant, pour que le prochain tour parte ailleurs.
+      if (decision.type !== "laisser") {
+        noterEchec(compteMort, decision.verdict, entree.message);
+      }
+
+      if (decision.type !== "basculer") {
+        yield* Effect.logInfo("relais: pas de bascule", {
+          threadId: thread.id,
+          decision: decision.type,
+          raison: decision.raison,
+        });
+        return;
+      }
+
+      // Le chemin du changement de compte MANUEL : on repose la sélection sur
+      // le fil, puis on relance le tour. Aucun circuit parallèle.
+      yield* orchestrationEngine.dispatch({
+        type: "thread.meta.update",
+        commandId: yield* providerCommandId(event, "relais-meta"),
+        threadId: thread.id,
+        modelSelection: decision.modelSelection,
+      });
+      noterBascule(thread.id, compteMort, decision.vers);
+      yield* Effect.logInfo("relais: fil basculé", {
+        threadId: thread.id,
+        depuis: nomDuCompte(instances, compteMort),
+        vers: nomDuCompte(instances, decision.vers),
+        raison: decision.raison,
+      });
+    }).pipe(
+      // Un relais qui échoue ne doit JAMAIS empêcher le reste de l'ingestion :
+      // le tour est déjà mort, aggraver serait pire que ne rien faire.
+      Effect.catchCause((cause) =>
+        Effect.logWarning("relais: échec du relais lui-même", { cause: Cause.pretty(cause) }),
+      ),
     );
 
   const turnMessageIdsByTurnKey = yield* Cache.make<string, Set<MessageId>>({
@@ -1670,12 +1774,43 @@ const make = Effect.gen(function* () {
         }
       }
 
+      // Le tour est fini : soit il a réussi et le compte est blanchi, soit il
+      // est mort et on tente de le reprendre ailleurs.
+      if (event.type === "turn.completed") {
+        const echoue = normalizeRuntimeTurnState(event.payload.state) === "failed";
+        const compteUtilise =
+          (event.providerInstanceId as ProviderInstanceId | undefined) ??
+          thread.modelSelection.instanceId;
+        if (!echoue) {
+          // La seule preuve qui vaut : un tour passé blanchit le compte, même
+          // s'il avait été condamné à tort, et rouvre les bascules du fil.
+          noterSucces(compteUtilise);
+          oublierFil(thread.id);
+        } else {
+          yield* tenterRelais({
+            event,
+            thread,
+            message: event.payload.errorMessage ?? "Turn failed",
+            turnId: toTurnId(event.turnId) ?? undefined,
+            now,
+          });
+        }
+      }
+
       if (event.type === "session.exited") {
         yield* clearTurnStateForSession(thread.id);
       }
 
       if (event.type === "runtime.error") {
         const runtimeErrorMessage = event.payload.message;
+
+        yield* tenterRelais({
+          event,
+          thread,
+          message: runtimeErrorMessage,
+          turnId: toTurnId(event.turnId) ?? undefined,
+          now,
+        });
 
         const shouldApplyRuntimeError = !STRICT_PROVIDER_LIFECYCLE_GUARD
           ? true
