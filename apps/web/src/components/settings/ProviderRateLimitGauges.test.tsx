@@ -64,6 +64,9 @@ describe("ProviderRateLimitGauges", () => {
   it("keeps the bar inside its track when the account is over", () => {
     const markup = renderToStaticMarkup(
       <ProviderRateLimitGauges
+        // `now` explicite : sans lui le test compare une mesure figée au
+        // 27/07 à l'heure RÉELLE, et casse 24 h après avoir été écrit.
+        now={NOW}
         rateLimits={rateLimits([{ kind: "five_hour", utilization: 103 }])}
       />,
     );

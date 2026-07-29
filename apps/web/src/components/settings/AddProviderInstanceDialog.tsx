@@ -117,14 +117,25 @@ function validateInstanceId(id: string, existing: ReadonlySet<string>): string |
 interface AddProviderInstanceDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /**
+   * Le fournisseur est DÉJÀ connu quand on part du « + » de sa propre carte
+   * (idée fondateur 29/07) : l'étape « Driver » n'a alors plus rien à
+   * demander — le contexte l'a dit — et le dialogue s'ouvre directement sur
+   * l'identité. Une étape de moins, et une erreur de moins.
+   */
+  initialDriver?: ProviderDriverKind;
 }
 
-export function AddProviderInstanceDialog({ open, onOpenChange }: AddProviderInstanceDialogProps) {
+export function AddProviderInstanceDialog({
+  open,
+  onOpenChange,
+  initialDriver,
+}: AddProviderInstanceDialogProps) {
   const settings = usePrimarySettings();
   const updateSettings = useUpdatePrimarySettings();
 
-  const [wizardStep, setWizardStep] = useState(0);
-  const [driver, setDriver] = useState<ProviderDriverKind>(DEFAULT_DRIVER_KIND);
+  const [wizardStep, setWizardStep] = useState(initialDriver === undefined ? 0 : 1);
+  const [driver, setDriver] = useState<ProviderDriverKind>(initialDriver ?? DEFAULT_DRIVER_KIND);
   const [label, setLabel] = useState("");
   const [accentColor, setAccentColor] = useState<string>("");
   const [instanceIdOverride, setInstanceIdOverride] = useState<string | null>(null);

@@ -1,7 +1,7 @@
 import { ArchiveIcon, ArchiveX, LoaderIcon, PlusIcon, RefreshCwIcon } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import type { CSSProperties } from "react";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useMemo, useRef, useState } from "react";
 import { useAtomValue } from "@effect/atom-react";
 import {
   defaultInstanceIdForDriver,
@@ -1109,6 +1109,8 @@ export function ProviderSettingsPanel() {
   });
   const [isRefreshingProviders, setIsRefreshingProviders] = useState(false);
   const [isAddInstanceDialogOpen, setIsAddInstanceDialogOpen] = useState(false);
+  // Le « + » contextuel : quel fournisseur reçoit un nouveau compte.
+  const [addInstanceDriver, setAddInstanceDriver] = useState<ProviderDriverKind | null>(null);
   const [updatingProviderDrivers, setUpdatingProviderDrivers] = useState<
     ReadonlySet<ProviderDriverKind>
   >(() => new Set());
@@ -1434,7 +1436,7 @@ export function ProviderSettingsPanel() {
           </div>
         }
       >
-        {rows.map((row) => {
+        {rows.map((row, index) => {
           const driverOption = getDriverOption(row.driver);
           const liveProvider = serverProviders.find(
             (candidate) => candidate.instanceId === row.instanceId,
@@ -1471,7 +1473,12 @@ export function ProviderSettingsPanel() {
                 onClick={() => resetDefaultInstance(row.driver)}
               />
             ) : null;
+          // Le « + » vit sous la dernière carte de SON fournisseur (idée
+          // fondateur 29/07) : ajouter un compte Claude se fait depuis
+          // Claude, pas depuis un dialogue qui redemande lequel.
+          const estDernierDuDriver = rows[index + 1]?.driver !== row.driver;
           return (
+            <Fragment key={row.instanceId}>
             <ProviderInstanceCard
               key={row.instanceId}
               instanceId={row.instanceId}
@@ -1530,12 +1537,32 @@ export function ProviderSettingsPanel() {
               }
               isUpdating={showInlineUpdateButton ? isDriverUpdateRunning : undefined}
             />
+            {estDernierDuDriver ? (
+              <button
+                type="button"
+                onClick={() => setAddInstanceDriver(row.driver)}
+                className="mb-1 flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-dashed border-border/60 py-2 text-[13px] text-muted-foreground transition-colors hover:border-border hover:bg-accent/40 hover:text-foreground"
+              >
+                <PlusIcon className="size-3.5" />
+                Ajouter un compte {driverOption?.label ?? String(row.driver)}
+              </button>
+            ) : null}
+            </Fragment>
           );
         })}
       </SettingsSection>
 
       {isAddInstanceDialogOpen ? (
         <AddProviderInstanceDialog open onOpenChange={setIsAddInstanceDialogOpen} />
+      ) : null}
+      {addInstanceDriver !== null ? (
+        <AddProviderInstanceDialog
+          open
+          initialDriver={addInstanceDriver}
+          onOpenChange={(ouvert) => {
+            if (!ouvert) setAddInstanceDriver(null);
+          }}
+        />
       ) : null}
     </SettingsPageContainer>
   );
