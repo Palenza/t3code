@@ -3,13 +3,16 @@ import { useCallback, useState } from "react";
 import { useRouter } from "@tanstack/react-router";
 import { BrushIcon, GripVerticalIcon, MoreHorizontalIcon, PlusIcon } from "lucide-react";
 
+import { Popover, PopoverPopup, PopoverTrigger } from "../ui/popover";
+
 import { settlePromise } from "@t3tools/client-runtime/state/runtime";
 
 import { readLocalApi } from "../../localApi";
 import { cn } from "../../lib/utils";
 import { useSidebarSpacesStore, type SidebarSpace } from "../../sidebarSpacesStore";
 import { makeSidebarThemeFromColors, sidebarThemeBackground } from "../../sidebarThemeStore";
-import { SpaceIcon } from "./SpaceIconPicker";
+import { SpaceIcon, SpaceIconPicker } from "./SpaceIconPicker";
+import { SpaceThemePanel } from "./SpaceThemePanel";
 
 /**
  * Le tableau des Espaces — la vue « Spaces » d'Arc, répliquée.
@@ -30,6 +33,7 @@ export function SpacesBoard({ onFermer }: { onFermer: () => void }) {
   const deleteSpace = useSidebarSpacesStore((state) => state.deleteSpace);
   const reorderSpaces = useSidebarSpacesStore((state) => state.reorderSpaces);
   const setActiveSpace = useSidebarSpacesStore((state) => state.setActiveSpace);
+  const setSpaceEmoji = useSidebarSpacesStore((state) => state.setSpaceEmoji);
   const createSpace = useSidebarSpacesStore((state) => state.createSpace);
   const router = useRouter();
 
@@ -105,7 +109,27 @@ export function SpacesBoard({ onFermer }: { onFermer: () => void }) {
             style={{ background: fond }}
           >
             <div className="flex items-center gap-2 px-3 pt-3 pb-1">
-              <SpaceIcon valeur={space.emoji} className="shrink-0 text-[14px]" />
+              {/* L'icône n'est pas une décoration : chez Arc elle OUVRE le
+                  sélecteur. La mienne ne réagissait à rien. */}
+              <Popover>
+                <PopoverTrigger
+                  render={
+                    <button
+                      type="button"
+                      aria-label={`Changer l'icône de ${space.name}`}
+                      className="shrink-0 cursor-pointer rounded-md p-0.5 transition-colors hover:bg-black/5"
+                    >
+                      <SpaceIcon valeur={space.emoji} className="text-[14px]" />
+                    </button>
+                  }
+                />
+                <PopoverPopup className="p-0">
+                  <SpaceIconPicker
+                    valeur={space.emoji}
+                    onChange={(valeur) => setSpaceEmoji(space.id, valeur)}
+                  />
+                </PopoverPopup>
+              </Popover>
               {renommage?.id === space.id ? (
                 <input
                   autoFocus
@@ -128,18 +152,39 @@ export function SpacesBoard({ onFermer }: { onFermer: () => void }) {
                 // 12 px mesurés, et volontairement PÂLE : l'encre du titre
                 // relève à 74 de luminance quand celle des entrées tombe à 19
                 // — le nom de l'espace s'efface derrière son contenu.
-                <span className="min-w-0 flex-1 truncate text-[12px] font-semibold text-black/45">
+                <button
+                  type="button"
+                  onClick={() => setRenommage({ id: space.id, valeur: space.name })}
+                  // Le renommage passe par le NOM : le pinceau, lui, ouvre les
+                  // couleurs — c'est ce que fait Arc, et c'est ce que le
+                  // pinceau annonce.
+                  className="min-w-0 flex-1 cursor-text truncate text-left text-[12px] font-semibold text-black/45"
+                >
                   {space.name}
-                </span>
+                </button>
               )}
-              <button
-                type="button"
-                aria-label={`Renommer ${space.name}`}
-                onClick={() => setRenommage({ id: space.id, valeur: space.name })}
-                className="shrink-0 cursor-pointer rounded-md p-1 text-black/40 transition-colors hover:bg-black/5 hover:text-black/70"
-              >
-                <BrushIcon className="size-4" />
-              </button>
+              <Popover>
+                <PopoverTrigger
+                  render={
+                    <button
+                      type="button"
+                      aria-label={`Couleurs de ${space.name}`}
+                      className="shrink-0 cursor-pointer rounded-md p-1 text-black/40 transition-colors hover:bg-black/5 hover:text-black/70"
+                    >
+                      <BrushIcon className="size-4" />
+                    </button>
+                  }
+                />
+                <PopoverPopup
+                  // Le panneau porte son propre verre — la surface du popup ne
+                  // doit pas l'assombrir (même réglage que dans la sidebar).
+                  className="border-0! bg-transparent! p-0 shadow-2xl before:hidden"
+                  viewportClassName="p-0 [--viewport-inline-padding:0px]"
+                >
+                  {/* Ciblé : on repeint CETTE colonne, pas l'espace courant. */}
+                  <SpaceThemePanel spaceId={space.id} />
+                </PopoverPopup>
+              </Popover>
             </div>
 
             {/* Gouttière MESURÉE : l'icône démarre à 17 px du bord, fait 20 px
@@ -170,10 +215,7 @@ export function SpacesBoard({ onFermer }: { onFermer: () => void }) {
                     >
                       {/* La pastille de 20 px qui précède chaque entrée : c'est
                           elle qui pose la gouttière de 45 px du libellé. */}
-                      <span
-                        aria-hidden
-                        className="size-5 shrink-0 rounded-[5px] bg-black/12"
-                      />
+                      <span aria-hidden className="size-5 shrink-0 rounded-[5px] bg-black/12" />
                       <span className="truncate">{threadId ?? threadKey}</span>
                     </button>
                   );

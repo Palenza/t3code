@@ -157,7 +157,12 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
     if (now - spaceSwipeLastFireRef.current < 450) return;
     spaceSwipeAccumRef.current += event.deltaX;
     if (Math.abs(spaceSwipeAccumRef.current) < 110) return;
-    const direction = spaceSwipeAccumRef.current > 0 ? 1 : -1;
+    // ATTENTION AU SIGNE. Avec le défilement naturel de macOS, deux doigts qui
+    // partent vers la DROITE produisent un deltaX NÉGATIF : le contenu suit les
+    // doigts, donc la fenêtre recule. Je lisais ce signe tel quel, et tout le
+    // geste marchait à l'envers. La variable porte désormais le sens PHYSIQUE
+    // du geste, pas le signe brut : +1 = les doigts vont vers la droite.
+    const versLaDroite = spaceSwipeAccumRef.current < 0 ? 1 : -1;
     spaceSwipeAccumRef.current = 0;
     spaceSwipeLastFireRef.current = now;
     // Deux doigts vers la DROITE ouvrent la bibliothèque — mais SEULEMENT
@@ -167,11 +172,11 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
     // surprise (précision fondateur 30/07). Le geste garde donc un seul
     // sens : vers la droite on REMONTE — d'espace en espace jusqu'à la vue
     // principale, puis d'un cran de plus jusqu'à la bibliothèque.
-    if (direction > 0 && useSidebarSpacesStore.getState().activeSpaceId === null) {
+    if (versLaDroite > 0 && useSidebarSpacesStore.getState().activeSpaceId === null) {
       useBibliothequeStore.getState().ouvrir("espaces");
       return;
     }
-    useSidebarSpacesStore.getState().cycleSpace(direction);
+    useSidebarSpacesStore.getState().cycleSpace(versLaDroite);
   }, []);
   const sidebarProviderStyle = {
     "--sidebar-width": `${sidebarWidth}px`,

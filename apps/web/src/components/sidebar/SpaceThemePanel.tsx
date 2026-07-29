@@ -1,6 +1,14 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 
-import { ChevronLeftIcon, ChevronRightIcon, MinusIcon, MoonIcon, PlusIcon, SparklesIcon, SunIcon } from "lucide-react";
+import {
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  MinusIcon,
+  MoonIcon,
+  PlusIcon,
+  SparklesIcon,
+  SunIcon,
+} from "lucide-react";
 
 import { cn } from "../../lib/utils";
 import { useSidebarSpacesStore } from "../../sidebarSpacesStore";
@@ -119,7 +127,11 @@ function hexToHsl(hex: string): { h: number; s: number; l: number } {
   const d = max - min;
   const s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
   const h =
-    max === r ? ((g - b) / d + (g < b ? 6 : 0)) * 60 : max === g ? ((b - r) / d + 2) * 60 : ((r - g) / d + 4) * 60;
+    max === r
+      ? ((g - b) / d + (g < b ? 6 : 0)) * 60
+      : max === g
+        ? ((b - r) / d + 2) * 60
+        : ((r - g) / d + 4) * 60;
   return { h, s: s * 100, l: l * 100 };
 }
 
@@ -148,14 +160,21 @@ function wheelPositionOf(hex: string): { x: number; y: number } {
   };
 }
 
-export function SpaceThemePanel() {
+/**
+ * `spaceId` vise un espace PRÉCIS plutôt que l'espace courant. Le tableau des
+ * espaces en a besoin : on y ouvre le pinceau de la colonne « Pirate » alors
+ * qu'on est posé dans « Design », et sans ça on repeindrait le mauvais.
+ * Absent, le panneau garde son comportement d'origine — l'espace actif.
+ */
+export function SpaceThemePanel({ spaceId }: { readonly spaceId?: string } = {}) {
   const spaces = useSidebarSpacesStore((state) => state.spaces);
   const activeSpaceId = useSidebarSpacesStore((state) => state.activeSpaceId);
+  const cibleId = spaceId ?? activeSpaceId;
   const setSpaceTheme = useSidebarSpacesStore((state) => state.setSpaceTheme);
   const defaultTheme = useSidebarThemeStore((state) => state.theme);
   const setDefaultTheme = useSidebarThemeStore((state) => state.setTheme);
 
-  const activeSpace = spaces.find((space) => space.id === activeSpaceId) ?? null;
+  const activeSpace = spaces.find((space) => space.id === cibleId) ?? null;
   const current: SidebarTheme =
     (activeSpace ? activeSpace.theme : defaultTheme) ?? makeSidebarThemeFromColors(["#f2a3c0"]);
   const apply = useCallback(
@@ -400,12 +419,7 @@ export function SpaceThemePanel() {
       {/* Le SOCLE : nuancier + vague + molette sur un verre plus dense que la
           toile — c'est ce qui les fait lire comme un pupitre sous une fenêtre
           (captures Arc 30/07), au lieu d'une seule plaque uniforme. */}
-      <div
-        className={cn(
-          "flex flex-col",
-          isDarkCanvas ? "bg-neutral-900/45" : "bg-white/55",
-        )}
-      >
+      <div className={cn("flex flex-col", isDarkCanvas ? "bg-neutral-900/45" : "bg-white/55")}>
         {/* Le nuancier : page 1 des UNIS (un rond = la dominante), flèche →
             page des GRADIENTS (un rond = les trois d'un coup). */}
         <div className="flex items-center gap-1.5 px-3 pt-2.5 pb-1">
@@ -414,7 +428,10 @@ export function SpaceThemePanel() {
             aria-label="Couleurs unies"
             disabled={swatchPage === 0}
             onClick={() => setSwatchPage(0)}
-            className={cn("flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-md transition-colors disabled:cursor-default disabled:opacity-30", mutedControl)}
+            className={cn(
+              "flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-md transition-colors disabled:cursor-default disabled:opacity-30",
+              mutedControl,
+            )}
           >
             <ChevronLeftIcon className="size-4" />
           </button>
@@ -453,7 +470,10 @@ export function SpaceThemePanel() {
             aria-label="Gradients préréglés"
             disabled={swatchPage === 1}
             onClick={() => setSwatchPage(1)}
-            className={cn("flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-md transition-colors disabled:cursor-default disabled:opacity-30", mutedControl)}
+            className={cn(
+              "flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-md transition-colors disabled:cursor-default disabled:opacity-30",
+              mutedControl,
+            )}
           >
             <ChevronRightIcon className="size-4" />
           </button>
@@ -466,7 +486,11 @@ export function SpaceThemePanel() {
             value={current.intensity}
             onChange={(intensity) => apply({ ...current, intensity })}
           />
-          <GrainDial dark={isDarkCanvas} value={current.grain} onChange={(grain) => apply({ ...current, grain })} />
+          <GrainDial
+            dark={isDarkCanvas}
+            value={current.grain}
+            onChange={(grain) => apply({ ...current, grain })}
+          />
         </div>
       </div>
     </div>
@@ -615,7 +639,10 @@ function GrainDial(props: { dark: boolean; value: number; onChange: (value: numb
     >
       <span
         aria-hidden
-        className={cn("absolute left-1/2 top-1/2 size-7 -translate-x-1/2 -translate-y-1/2 rounded-full opacity-0 transition-opacity group-hover:opacity-100", props.dark ? "bg-white/15" : "bg-black/10")}
+        className={cn(
+          "absolute left-1/2 top-1/2 size-7 -translate-x-1/2 -translate-y-1/2 rounded-full opacity-0 transition-opacity group-hover:opacity-100",
+          props.dark ? "bg-white/15" : "bg-black/10",
+        )}
       />
       {Array.from({ length: DOTS }, (_, index) => {
         const dotAngle = (index / DOTS) * 360;
@@ -623,7 +650,10 @@ function GrainDial(props: { dark: boolean; value: number; onChange: (value: numb
           <span
             key={index}
             aria-hidden
-            className={cn("absolute left-1/2 top-1/2 size-[3px] rounded-full", props.dark ? "bg-white/40" : "bg-black/30")}
+            className={cn(
+              "absolute left-1/2 top-1/2 size-[3px] rounded-full",
+              props.dark ? "bg-white/40" : "bg-black/30",
+            )}
             style={{
               transform: `translate(-50%, -50%) rotate(${dotAngle}deg) translateY(-21px)`,
             }}
@@ -632,7 +662,10 @@ function GrainDial(props: { dark: boolean; value: number; onChange: (value: numb
       })}
       <span
         aria-hidden
-        className={cn("absolute left-1/2 top-1/2 h-3 w-[3px] -translate-x-1/2 rounded-full", props.dark ? "bg-white/80" : "bg-black/60")}
+        className={cn(
+          "absolute left-1/2 top-1/2 h-3 w-[3px] -translate-x-1/2 rounded-full",
+          props.dark ? "bg-white/80" : "bg-black/60",
+        )}
         style={{ transform: `translate(-50%, -50%) rotate(${angle}deg) translateY(-13px)` }}
       />
     </div>

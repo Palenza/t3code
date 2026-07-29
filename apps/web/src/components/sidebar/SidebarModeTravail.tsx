@@ -18,6 +18,30 @@ interface ModeDisponible {
 }
 
 /**
+ * Traduit des motifs de chemin en une phrase française.
+ *
+ * Le repli garde le motif brut plutôt que d'inventer : un périmètre inconnu
+ * affiché de travers ferait croire à une protection qui n'est pas celle-là.
+ */
+function decrirePerimetre(motifs: ReadonlyArray<string>): string {
+  const connus: ReadonlyArray<readonly [string, string]> = [
+    ["**/*.md", "les fichiers de documentation"],
+    ["docs/**", "le dossier de documentation"],
+    ["**/*.test.ts", "les fichiers de test"],
+    ["**/*.tsx", "les fichiers d'interface"],
+  ];
+  const phrases = motifs.map(
+    (motif) => connus.find(([cle]) => cle === motif)?.[1] ?? `« ${motif} »`,
+  );
+  const uniques = [...new Set(phrases)];
+  const liste =
+    uniques.length <= 1
+      ? (uniques[0] ?? "")
+      : `${uniques.slice(0, -1).join(", ")} et ${uniques.at(-1)}`;
+  return `Écrit librement dans ${liste}`;
+}
+
+/**
  * Le mode de travail — et surtout, ce qu'il INTERDIT.
  *
  * Chaque mode annonce son périmètre en clair, parce que c'est le seul détail
@@ -54,51 +78,48 @@ export function SidebarModeTravail() {
     void relire();
   }, [relire]);
 
-  const poser = useCallback(
-    async (slug: string | null) => {
-      try {
-        const reponse = await fetch(resolvePrimaryEnvironmentHttpUrl(MODE_PATH), {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ slug }),
-        });
-        const corps = (await reponse.json()) as {
-          pose?: boolean;
-          comptes?: number;
-          raison?: string;
-        };
-        if (corps.pose !== true) {
-          toastManager.add(
-            stackedThreadToast({
-              type: "error",
-              title: "Mode non appliqué",
-              description: corps.raison ?? "Le serveur local a refusé.",
-            }),
-          );
-          return;
-        }
-        setActif(slug);
-        setOuvert(false);
-        // Le nombre de comptes touchés est DIT : un mode qui ne s'applique à
-        // rien (aucun compte avec dossier propre) ressemblerait à un succès.
+  const poser = useCallback(async (slug: string | null) => {
+    try {
+      const reponse = await fetch(resolvePrimaryEnvironmentHttpUrl(MODE_PATH), {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ slug }),
+      });
+      const corps = (await reponse.json()) as {
+        pose?: boolean;
+        comptes?: number;
+        raison?: string;
+      };
+      if (corps.pose !== true) {
         toastManager.add(
           stackedThreadToast({
-            type: corps.comptes === 0 ? "error" : "info",
-            title: corps.comptes === 0 ? "Mode sans effet" : "Mode appliqué",
-            description:
-              corps.comptes === 0
-                ? "Aucun compte n'a de dossier de configuration propre — rien n'a été restreint."
-                : `${corps.comptes} compte${(corps.comptes ?? 0) > 1 ? "s" : ""} concerné${(corps.comptes ?? 0) > 1 ? "s" : ""}.`,
+            type: "error",
+            title: "Mode non appliqué",
+            description: corps.raison ?? "Le serveur local a refusé.",
           }),
         );
-      } catch {
-        toastManager.add(
-          stackedThreadToast({ type: "error", title: "Le serveur local n'a pas répondu" }),
-        );
+        return;
       }
-    },
-    [],
-  );
+      setActif(slug);
+      setOuvert(false);
+      // Le nombre de comptes touchés est DIT : un mode qui ne s'applique à
+      // rien (aucun compte avec dossier propre) ressemblerait à un succès.
+      toastManager.add(
+        stackedThreadToast({
+          type: corps.comptes === 0 ? "error" : "info",
+          title: corps.comptes === 0 ? "Mode sans effet" : "Mode appliqué",
+          description:
+            corps.comptes === 0
+              ? "Aucun compte n'a de dossier de configuration propre — rien n'a été restreint."
+              : `${corps.comptes} compte${(corps.comptes ?? 0) > 1 ? "s" : ""} concerné${(corps.comptes ?? 0) > 1 ? "s" : ""}.`,
+        }),
+      );
+    } catch {
+      toastManager.add(
+        stackedThreadToast({ type: "error", title: "Le serveur local n'a pas répondu" }),
+      );
+    }
+  }, []);
 
   if (disponibles.length === 0) return null;
   const modeActif = disponibles.find((mode) => mode.slug === actif) ?? null;
@@ -143,7 +164,11 @@ export function SidebarModeTravail() {
               <span className="text-xs text-muted-foreground">{mode.role}</span>
               {mode.perimetre.length > 0 ? (
                 <span className="text-xs text-muted-foreground">
-                  Écrit librement dans {mode.perimetre.join(", ")} — approbation demandée ailleurs
+                  {/* Les motifs bruts (`**​/*.md`, `docs/**`) s'affichaient tels
+                      quels. Des étoiles et des barres obliques ne disent rien à
+                      qui n'écrit pas de code — et c'est justement la personne
+                      qui doit décider si ce mode la protège. */}
+                  {decrirePerimetre(mode.perimetre)} — approbation demandée ailleurs
                 </span>
               ) : mode.slug === "revue" ? (
                 <span className="text-xs text-muted-foreground">Aucune écriture possible</span>
