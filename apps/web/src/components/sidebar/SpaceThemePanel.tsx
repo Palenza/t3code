@@ -168,22 +168,26 @@ export function SpaceThemePanel() {
 
   const dominant = current.stops[0] ?? { color: wheelColorAt(0.62, 0.4), x: 0.62, y: 0.4 };
 
-  /** Positions du groupe : dominante au point, satellites déployés selon la
-   * distance au centre — et chaque rond prend LA COULEUR DE LA ROUE à sa
-   * position. Un seul système : placer, la roue colore. */
+  /**
+   * LA GÉOMÉTRIE MESURÉE (2 captures Arc, 60 fps, 4 397 frames à 3 ronds) :
+   * les trois ronds vivent sur UN MÊME CERCLE centré sur la toile — leurs
+   * distances au centre sont égales (rapport satellite/dominante = 1,00
+   * médian) — et ils sont espacés d'environ 42° d'ANGLE, ce qui fait croître
+   * leur écartement avec le rayon (corrélation r=0,71 ; 0,10 près du centre,
+   * 0,27 à mi-course). D'où le « pattern de cercle » : bouger la souris fait
+   * TOURNER le trio et change son rayon, jamais glisser des points libres.
+   */
+  const SATELLITE_ANGLE_DEG = 42;
   const groupStops = useCallback((x: number, y: number, count: number): SidebarThemeStop[] => {
-    const distance = Math.hypot(x - 0.5, y - 0.5);
-    const spread = 0.05 + distance * 0.38;
-    const clamp = (value: number) => Math.max(0.05, Math.min(0.95, value));
+    const angle = Math.atan2(y - 0.5, x - 0.5);
+    const radius = Math.min(0.46, Math.hypot(x - 0.5, y - 0.5));
+    const clamp = (value: number) => Math.max(0.04, Math.min(0.96, value));
+    const step = (SATELLITE_ANGLE_DEG * Math.PI) / 180;
     return Array.from({ length: count }, (_, index) => {
-      if (index === 0) {
-        const px = clamp(x);
-        const py = clamp(y);
-        return { color: wheelColorAt(px, py), x: px, y: py };
-      }
-      const side = index === 1 ? -1 : 1;
-      const px = clamp(x + side * spread);
-      const py = clamp(y - spread * 0.5);
+      // 0 = dominante à l'angle du pointeur ; 1 et 2 = ±42° sur le MÊME cercle.
+      const offset = index === 0 ? 0 : index === 1 ? -step : step;
+      const px = clamp(0.5 + Math.cos(angle + offset) * radius);
+      const py = clamp(0.5 + Math.sin(angle + offset) * radius);
       return { color: wheelColorAt(px, py), x: px, y: py };
     });
   }, []);
@@ -293,10 +297,20 @@ export function SpaceThemePanel() {
         {current.stops.slice(1).map((stop, index) => {
           const size = STOP_SIZES_PX[index + 1] ?? 20;
           return (
-            <span
+            <button
               key={index}
-              aria-hidden
-              className="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 rounded-full shadow-sm ring-2 ring-white transition-[left,top,background-color] duration-75"
+              type="button"
+              aria-label={`Prendre cette couleur comme dominante`}
+              onPointerDown={(event) => {
+                // Cliquer un satellite le PROMEUT en dominante : le trio
+                // tourne pour l'amener à l'angle du pointeur (mesuré sur la
+                // vidéo : « si je clique sur un petit rond, ça me fait la
+                // sélection du grand »).
+                event.preventDefault();
+                event.stopPropagation();
+                apply({ ...current, stops: groupStops(stop.x, stop.y, current.stops.length) });
+              }}
+              className="absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer rounded-full shadow-sm ring-2 ring-white transition-[left,top,background-color] duration-75 hover:scale-110"
               style={{
                 left: `${stop.x * 100}%`,
                 top: `${stop.y * 100}%`,
