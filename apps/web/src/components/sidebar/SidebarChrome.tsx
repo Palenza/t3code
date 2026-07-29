@@ -68,6 +68,16 @@ function SidebarBrand({ onBackdrop }: { onBackdrop: boolean }) {
       >
         Code
       </span>
+      {/* Le canal du fork, dit à sa place : « T3 Code Raptor ». En braise
+          cuivre sur le bandeau griffé, pour prolonger l'icône. */}
+      <span
+        className={cn(
+          "truncate text-[11px] font-semibold uppercase tracking-[0.14em]",
+          onBackdrop ? "text-[#ff9d4d]" : "text-muted-foreground/70",
+        )}
+      >
+        Raptor
+      </span>
     </Link>
   );
 }

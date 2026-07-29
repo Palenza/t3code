@@ -46,11 +46,15 @@ export function SidebarStageBackdrop({ variant }: { variant: SidebarStageBackdro
 }
 
 export function StageBackdropArt({ variant }: { variant: SidebarStageBackdropVariant }) {
-  return variant === "nightly" ? <NightlySkyArt /> : <DevBlueprintArt />;
+  // Fork Raptor (29/07) : la même matière que l'icône — ardoise griffée,
+  // braise cuivre. Le ciel étoilé amont ne dit plus qui on est.
+  void variant;
+  return <RaptorSlateArt />;
 }
 
 export function StageBackdropButtonArt({ variant }: { variant: SidebarStageBackdropVariant }) {
-  return variant === "nightly" ? <NightlySkyArt compact /> : <DevBlueprintArt compact />;
+  void variant;
+  return <RaptorSlateArt compact />;
 }
 
 const NIGHTLY_STARS: ReadonlyArray<{
@@ -83,6 +87,57 @@ const NIGHTLY_SPARKLES: ReadonlyArray<{ x: number; y: number }> = [
   { x: 160, y: 36 },
   { x: 246, y: 26 },
 ];
+
+function RaptorSlateArt({ compact = false }: { compact?: boolean }) {
+  const idPrefix = useId().replaceAll(":", "");
+  const ardoiseId = `${idPrefix}-raptor-ardoise`;
+  const cuivreId = `${idPrefix}-raptor-cuivre`;
+  const braiseId = `${idPrefix}-raptor-braise`;
+  // Trois griffures : des lames en pointe aux deux bouts, jamais des traits
+  // d'épaisseur constante — c'est ce qui fait « griffe » et non « rayure ».
+  const griffe = (x: number, largeur: number, decalage: number) =>
+    `M${x} 96 Q${x + largeur * 0.5} 52 ${x + largeur + decalage} -6 ` +
+    `L${x + largeur + decalage + 9} -6 Q${x + largeur * 0.5 + 7} 54 ${x + 8} 96 Z`;
+  return (
+    <svg
+      className="h-full w-full"
+      fill="none"
+      preserveAspectRatio="xMinYMin slice"
+      viewBox={compact ? "96 0 8192 96" : STAGE_BACKDROP_VIEW_BOX}
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <defs>
+        <linearGradient id={ardoiseId} x1="0" y1="0" x2="420" y2="96" gradientUnits="userSpaceOnUse" spreadMethod="reflect">
+          <stop stopColor="#0a0a0c" />
+          <stop offset="0.55" stopColor="#17181c" />
+          <stop offset="1" stopColor="#232428" />
+        </linearGradient>
+        <radialGradient id={cuivreId} cx="0" cy="0" r="1" gradientTransform="translate(330 92) rotate(-28) scale(300 150)" gradientUnits="userSpaceOnUse">
+          <stop stopColor="#ff8a3d" stopOpacity="0.85" />
+          <stop offset="0.45" stopColor="#c2521a" stopOpacity="0.45" />
+          <stop offset="1" stopColor="#c2521a" stopOpacity="0" />
+        </radialGradient>
+        <linearGradient id={braiseId} x1="150" y1="96" x2="230" y2="0" gradientUnits="userSpaceOnUse">
+          <stop stopColor="#ff9d4d" stopOpacity="0.95" />
+          <stop offset="1" stopColor="#ff5a1f" stopOpacity="0.35" />
+        </linearGradient>
+      </defs>
+      <rect width="8192" height="96" fill={`url(#${ardoiseId})`} />
+      <rect width="8192" height="96" fill={`url(#${cuivreId})`} />
+      {/* La braise sous la déchirure, puis la déchirure elle-même. */}
+      <g opacity="0.9">
+        <path d={griffe(150, 44, 10)} fill={`url(#${braiseId})`} />
+        <path d={griffe(196, 40, 12)} fill={`url(#${braiseId})`} opacity="0.85" />
+        <path d={griffe(238, 36, 14)} fill={`url(#${braiseId})`} opacity="0.7" />
+      </g>
+      <g>
+        <path d={griffe(154, 44, 10)} fill="#050506" />
+        <path d={griffe(200, 40, 12)} fill="#050506" />
+        <path d={griffe(242, 36, 14)} fill="#050506" />
+      </g>
+    </svg>
+  );
+}
 
 function NightlySkyArt({ compact = false }: { compact?: boolean }) {
   const idPrefix = useId().replaceAll(":", "");
