@@ -5586,11 +5586,19 @@ function ChatViewContent(props: ChatViewProps) {
   }, [onProviderModelSelect]);
   // Automatic relay (founder decision, 28/07/2026): at the CRITICAL level the
   // other subscription takes over without a click — and never silently, a
-  // toast says exactly what moved. A thread that has already started stays on
-  // its account (its transcript lives in that account's config directory, and
-  // the continuation guard above would refuse anyway): there, the relay sets
-  // the sticky selection so the NEXT thread starts on the target account.
+  // toast says exactly what moved. Since the transcript migration (29/07,
+  // « je veux garder le même thread ») the CURRENT thread follows too: the
+  // server copies its transcript to the target account on the next turn.
   const autoRelayedAlertIdRef = useRef<string | null>(null);
+  // A relay decided on stale readings once sent a turn to a walled account
+  // (« Run on Compte A » au mur, 29/07). Before choosing a target, refresh
+  // every candidate's usage once per alert and give the figures a beat to
+  // land — the effect re-runs on fresh statuses, or on the grace timer.
+  const refreshedForAlertIdRef = useRef<string | null>(null);
+  const [relayRefreshTick, setRelayRefreshTick] = useState(0);
+  const refreshProvidersForRelay = useAtomCommand(serverEnvironment.refreshProviders, {
+    reportFailure: false,
+  });
   useEffect(() => {
     if (
       !shouldAutoRelay({
@@ -5603,15 +5611,28 @@ function ChatViewContent(props: ChatViewProps) {
     ) {
       return;
     }
+    if (refreshedForAlertIdRef.current !== quotaAlert.id) {
+      refreshedForAlertIdRef.current = quotaAlert.id;
+      if (primaryEnvironment) {
+        void refreshProvidersForRelay({
+          environmentId: primaryEnvironment.environmentId,
+          input: {},
+        });
+        const graceTimer = window.setTimeout(() => setRelayRefreshTick((tick) => tick + 1), 2_000);
+        return () => window.clearTimeout(graceTimer);
+      }
+    }
     autoRelayedAlertIdRef.current = quotaAlert.id;
     const targetName = quotaSwitchTarget.displayName?.trim() || quotaSwitchTarget.instanceId;
     const currentModel = activeThread?.modelSelection?.model ?? "";
-    if (activeThread && activeThread.session === null) {
+    if (activeThread) {
+      // Works for drafts AND started threads alike: on a started Claude
+      // thread the server migrates the transcript at the next turn.
       providerModelSelectRef.current?.(quotaSwitchTarget.instanceId, currentModel);
       toastManager.add({
         type: "warning",
         title: `Auto relay — running on ${targetName}`,
-        description: `${quotaAlert.title}. The next turn runs on the other subscription.`,
+        description: `${quotaAlert.title}. This thread continues on the other subscription.`,
       });
       return;
     }
@@ -5631,7 +5652,7 @@ function ChatViewContent(props: ChatViewProps) {
     toastManager.add({
       type: "warning",
       title: `Auto relay — new threads start on ${targetName}`,
-      description: `${quotaAlert.title}. This thread stays on its account; new threads start on the other subscription.`,
+      description: `${quotaAlert.title}. New threads start on the other subscription.`,
     });
   }, [
     quotaAlert,
@@ -5640,6 +5661,9 @@ function ChatViewContent(props: ChatViewProps) {
     providerStatuses,
     settings,
     setStickyComposerModelSelection,
+    primaryEnvironment,
+    refreshProvidersForRelay,
+    relayRefreshTick,
   ]);
 
   const onEnvModeChange = useCallback(

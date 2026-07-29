@@ -73,6 +73,10 @@ import * as McpProviderSession from "../../mcp/McpProviderSession.ts";
 import { resolveClaudeSdkExecutablePath } from "../Drivers/ClaudeExecutable.ts";
 import { makeClaudeEnvironment } from "../Drivers/ClaudeHome.ts";
 import {
+  detectClaudeUsageLimitRefusal,
+  synthesizedUsageLimitRateLimitPayload,
+} from "../claudeUsageLimitRefusal.ts";
+import {
   getClaudeModelCapabilities,
   isClaudeUltracodeEffort,
   normalizeClaudeCliEffort,
@@ -201,6 +205,8 @@ interface ClaudeSessionContext {
   lastKnownTotalProcessedTokens: number | undefined;
   lastAssistantUuid: string | undefined;
   lastThreadStartedId: string | undefined;
+  /** One synthesized rejected-rate-limit event per turn, never a burst. */
+  usageLimitRefusalEmittedForTurnId: string | undefined;
   stopped: boolean;
 }
 
@@ -2547,6 +2553,40 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
       yield* backfillAssistantTextBlocksFromSnapshot(context, message);
     }
 
+    // « You've hit your session limit » arrives as PLAIN TEXT and nothing
+    // else — no rate_limit_event, so without this the quota store, banner
+    // and auto-relay all stay blind to the one refusal that matters most
+    // (constaté live 29/07). Synthesize the event a real refusal would
+    // carry; one per turn.
+    const refusalTurnId = context.turnState?.turnId;
+    if (refusalTurnId !== undefined && context.usageLimitRefusalEmittedForTurnId !== refusalTurnId) {
+      const refusal = detectClaudeUsageLimitRefusal(extractTextContent(message.message?.content));
+      if (refusal !== null) {
+        context.usageLimitRefusalEmittedForTurnId = refusalTurnId;
+        const stamp = yield* makeEventStamp();
+        yield* offerRuntimeEvent({
+          eventId: stamp.eventId,
+          provider: PROVIDER,
+          createdAt: stamp.createdAt,
+          threadId: context.session.threadId,
+          turnId: asCanonicalTurnId(refusalTurnId),
+          type: "account.rate-limits.updated",
+          payload: synthesizedUsageLimitRateLimitPayload(refusal),
+          providerRefs: nativeProviderRefs(context),
+          raw: {
+            source: "claude.sdk.message" as const,
+            method: "claude/assistant/usage-limit-refusal",
+            payload: message,
+          },
+        });
+        // The account API knows the reset time and percentages the text
+        // only hints at — same fire-and-forget refresh as real events.
+        if (options?.refreshAccountUsage) {
+          yield* Effect.forkDetach(options.refreshAccountUsage);
+        }
+      }
+    }
+
     context.lastAssistantUuid = message.uuid;
     yield* updateResumeCursor(context);
   });
@@ -3661,6 +3701,7 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
         lastKnownTotalProcessedTokens: undefined,
         lastAssistantUuid: resumeState?.resumeSessionAt,
         lastThreadStartedId: undefined,
+        usageLimitRefusalEmittedForTurnId: undefined,
         stopped: false,
       };
       yield* Ref.set(contextRef, context);
