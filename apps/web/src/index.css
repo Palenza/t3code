@@ -1620,3 +1620,14 @@ label:has(> select#reasoning-effort) select {
   opacity: 0.3;
   pointer-events: none;
 }
+
+/* Voile de sidebar actif (thème d'espace/projet) : les libellés du sidebar
+ * amont sont peints en `text-*-foreground/50…/85`, c'est-à-dire une encre
+ * SEMI-TRANSPARENTE. Sur un fond neutre c'est élégant ; sur un voile coloré
+ * le fond transparaît et le texte devient un fantôme — mesuré sur la capture
+ * du 29/07 : contraste 1,6 sur magenta, illisible. Sous voile, l'encre
+ * reprend son opacité pleine, décidée par le contraste (voir
+ * `sidebarThemeInk`). Retirer l'attribut restaure le rendu amont exact. */
+[data-app-sidebar][data-wash-ink] :is([class*="text-muted-foreground/"], [class*="text-sidebar-muted-foreground/"], [class*="text-sidebar-foreground/"], [class*="text-foreground/"]) {
+  color: var(--sidebar-muted-foreground);
+}

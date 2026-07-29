@@ -114,15 +114,32 @@ describe("sidebarThemeGrainOpacity", () => {
 });
 
 describe("sidebarThemeInk", () => {
-  it("switches to white ink under the measured luminance threshold (vidéo Arc)", () => {
-    // Deux relevés réels de la vidéo 60 fps : bleu nuit → texte blanc,
-    // rose pâle → texte sombre. Le seuil (~0,53) vit dans la fonction.
+  it("switches at the luminance measured on Arc (0,40), not at a guess", () => {
+    // Le cas qui a tout révélé (T4 filmé 29/07) : sur magenta saturé,
+    // l'encre CLAIRE gagne le contraste (5,4:1, lisible) — ce qui rendait
+    // le texte fantôme (1,6:1 mesuré) n'était pas ce choix mais l'opacité
+    // 50-70 % des libellés, désormais rendue pleine sous voile.
     expect(
-      sidebarThemeInk(theme({ stops: [{ color: "#30347c", x: 0.5, y: 0.5 }] }), "dark"),
+      sidebarThemeInk(
+        theme({ stops: [{ color: "#cc00cc", x: 0.5, y: 0.5 }], intensity: 1, appearance: "dark" }),
+        "dark",
+      ),
     ).toBe("light-ink");
+    // Doré d'Arc (L≈0,54, au-dessus du seuil) : encre sombre — exactement
+    // ce que montre la capture pleine résolution.
     expect(
-      sidebarThemeInk(theme({ stops: [{ color: "#f2ccbe", x: 0.5, y: 0.5 }], appearance: "light" }), "light"),
+      sidebarThemeInk(
+        theme({ stops: [{ color: "#e8b45a", x: 0.5, y: 0.5 }], intensity: 1, appearance: "light" }),
+        "light",
+      ),
     ).toBe("dark-ink");
+    // Vraie nuit (bleu profond à fond) : là seulement, l'encre claire gagne.
+    expect(
+      sidebarThemeInk(
+        theme({ stops: [{ color: "#0b1030", x: 0.5, y: 0.5 }], intensity: 1, appearance: "dark" }),
+        "dark",
+      ),
+    ).toBe("light-ink");
   });
 
   it("follows the blend base when no valid stop exists", () => {

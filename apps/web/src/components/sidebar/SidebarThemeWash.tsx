@@ -37,19 +37,33 @@ export function SidebarThemeWash() {
   useEffect(() => {
     const sidebar = document.querySelector<HTMLElement>("[data-app-sidebar]");
     if (sidebar === null || washInk === null) return;
+    // L'attribut arme la règle CSS qui rend leur opacité PLEINE aux
+    // libellés semi-transparents (index.css) ; les tokens donnent l'encre.
+    sidebar.dataset["washInk"] = washInk;
     if (washInk === "dark-ink") {
-      sidebar.style.setProperty("--sidebar-foreground", "oklch(0.29 0.03 262)");
-      sidebar.style.setProperty("--sidebar-muted-foreground", "oklch(0.47 0.03 262)");
-      sidebar.style.setProperty("--sidebar-border", "oklch(0.29 0.03 262 / 14%)");
+      sidebar.style.setProperty("--sidebar-foreground", "oklch(0.20 0.02 262)");
+      sidebar.style.setProperty("--sidebar-muted-foreground", "oklch(0.32 0.02 262)");
+      sidebar.style.setProperty("--sidebar-border", "oklch(0.20 0.02 262 / 18%)");
+      sidebar.style.setProperty("--foreground", "oklch(0.20 0.02 262)");
+      sidebar.style.setProperty("--muted-foreground", "oklch(0.32 0.02 262)");
     } else {
-      sidebar.style.setProperty("--sidebar-foreground", "oklch(0.972 0.004 262)");
-      sidebar.style.setProperty("--sidebar-muted-foreground", "oklch(0.78 0.01 262)");
-      sidebar.style.setProperty("--sidebar-border", "oklch(0.972 0.004 262 / 14%)");
+      sidebar.style.setProperty("--sidebar-foreground", "oklch(0.99 0.002 262)");
+      sidebar.style.setProperty("--sidebar-muted-foreground", "oklch(0.93 0.004 262)");
+      sidebar.style.setProperty("--sidebar-border", "oklch(0.99 0.002 262 / 22%)");
+      sidebar.style.setProperty("--foreground", "oklch(0.99 0.002 262)");
+      sidebar.style.setProperty("--muted-foreground", "oklch(0.93 0.004 262)");
     }
     return () => {
-      sidebar.style.removeProperty("--sidebar-foreground");
-      sidebar.style.removeProperty("--sidebar-muted-foreground");
-      sidebar.style.removeProperty("--sidebar-border");
+      delete sidebar.dataset["washInk"];
+      for (const token of [
+        "--sidebar-foreground",
+        "--sidebar-muted-foreground",
+        "--sidebar-border",
+        "--foreground",
+        "--muted-foreground",
+      ]) {
+        sidebar.style.removeProperty(token);
+      }
     };
   }, [washInk]);
 

@@ -215,12 +215,19 @@ export function sidebarThemeBackground(
 }
 
 /**
- * L'encre qui garde le texte NET sur le voile — la règle d'Arc mesurée sur
- * la vidéo fondateur (10 761 frames, 5 bascules observées) : le texte
- * devient blanc quand la luminance du voile passe SOUS ~0,53, sombre
- * au-dessus — quelle que soit l'apparence choisie. On approxime le voile
- * par la moyenne des pastilles mélangée à la base au même dosage que le
- * fond (`kept`).
+ * L'encre qui garde le texte NET sur le voile.
+ *
+ * Mesuré, puis CORRIGÉ (T4 filmé le 29/07 : magenta saturé + encre claire =
+ * contraste 1,0, texte littéralement invisible sur 2 777 frames ; Arc, lui,
+ * pose une encre SOMBRE sur son doré). La règle n'est pas un seuil de
+ * luminance choisi à la main : c'est le CONTRASTE WCAG qui tranche. Le point
+ * d'égalité entre encre claire et encre sombre est à luminance ≈ 0,179 —
+ * au-dessus, le sombre gagne toujours, ce qui explique qu'Arc soit sombre
+ * sur presque toutes les couleurs et clair seulement sur les vraies nuits.
+ *
+ * On approxime la luminance du voile par la moyenne des pastilles mélangée
+ * à la base au dosage du fond (`kept`), puis on retourne l'encre qui donne
+ * le meilleur rapport de contraste.
  */
 export function sidebarThemeInk(
   theme: SidebarTheme,
@@ -233,16 +240,28 @@ export function sidebarThemeInk(
   }
   const kept = (25 + clamp01(theme.intensity) * 65) / 100;
   const base = resolved === "dark" ? [14, 17, 22] : [247, 249, 252];
+  // Luminance relative WCAG : linéarisation sRGB par canal, pas la moyenne
+  // brute — un magenta pur et un vert pur de même moyenne ne pèsent pas du
+  // tout pareil pour l'œil.
+  const linear = (value: number) => {
+    const c = value / 255;
+    return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  };
   const channel = (offset: number) => {
     const average =
       stops.reduce(
         (sum, stop) => sum + Number.parseInt(stop.color.slice(1 + offset, 3 + offset), 16),
         0,
       ) / stops.length;
-    return (average * kept + base[offset / 2]! * (1 - kept)) / 255;
+    return linear(average * kept + base[offset / 2]! * (1 - kept));
   };
   const luma = 0.2126 * channel(0) + 0.7152 * channel(2) + 0.0722 * channel(4);
-  return luma < 0.53 ? "light-ink" : "dark-ink";
+  // SEUIL MESURÉ CHEZ ARC (797 frames pleine résolution, encre relevée par
+  // percentile sur les pixels de texte) : sous L≈0,25 l'encre est claire à
+  // 97 %, dès L≈0,40 elle est sombre à 98-100 %. Arc garde donc le clair un
+  // peu au-delà du pur optimum de contraste (0,179) — c'est un choix de
+  // goût, on le copie plutôt que de « corriger » leur design.
+  return luma < 0.4 ? "light-ink" : "dark-ink";
 }
 
 export function sidebarThemeGrainOpacity(theme: SidebarTheme): number {

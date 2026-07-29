@@ -244,8 +244,12 @@ export function SpaceThemePanel() {
     // captures : Arc n'a jamais un bas sombre sous une toile claire.
     <div
       className={cn(
-        "flex w-[340px] flex-col rounded-lg backdrop-blur-xl transition-colors",
-        isDarkCanvas ? "bg-neutral-900/78" : "bg-[#f6efe6]/85",
+        // VRAI liquid glass (reproche fondateur : « on ne voit pas à
+        // travers ») : le verre est MINCE — 34 % de teinte, le flou et la
+        // saturation font le reste, comme Arc. Au-delà de ~50 % ce n'est
+        // plus du verre, c'est un panneau peint.
+        "flex w-[340px] flex-col rounded-lg backdrop-blur-2xl backdrop-saturate-150 transition-colors",
+        isDarkCanvas ? "bg-neutral-900/34" : "bg-white/34",
       )}
     >
       {/* La toile-palette : tout le haut du panneau, pointillée, sans
@@ -255,8 +259,8 @@ export function SpaceThemePanel() {
         className={cn(
           "relative h-[360px] touch-none rounded-t-lg bg-[radial-gradient(circle,var(--dot)_1px,transparent_1px)] bg-[size:9px_9px]",
           isDarkCanvas
-            ? "[--dot:color-mix(in_oklab,white_15%,transparent)]"
-            : "[--dot:color-mix(in_oklab,black_13%,transparent)]",
+            ? "[--dot:color-mix(in_oklab,white_22%,transparent)]"
+            : "[--dot:color-mix(in_oklab,black_18%,transparent)]",
         )}
         onPointerMove={(event) => {
           if (draggingRef.current) moveGroup(event.clientX, event.clientY);
