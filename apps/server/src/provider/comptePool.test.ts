@@ -15,13 +15,13 @@ const MAINTENANT = Date.parse("2026-07-29T22:00:00.000Z");
 const id = (valeur: string) => valeur as ProviderInstanceId;
 const sain = (valeur: string): SanteCompte => ({ instanceId: id(valeur), etat: "ok" });
 
-const quotas = (...pourcents: ReadonlyArray<number>): ServerProviderRateLimits =>
-  ({
-    windows: pourcents.map((utilization, index) => ({
-      kind: `fenetre-${index}`,
-      utilization,
-    })),
-  }) as ServerProviderRateLimits;
+const quotas = (...pourcents: ReadonlyArray<number>): ServerProviderRateLimits => ({
+  observedAt: "2026-07-29T21:59:00.000Z",
+  windows: pourcents.map((utilization, index) => ({
+    kind: `fenetre-${index}`,
+    utilization,
+  })),
+});
 
 describe("classement des échecs", () => {
   it("un jeton révoqué est MORT, pas en refroidissement", () => {
