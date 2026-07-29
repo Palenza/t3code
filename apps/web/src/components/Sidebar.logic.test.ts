@@ -168,7 +168,7 @@ describe("resolveSidebarStageBadgeLabel", () => {
     expect(
       resolveSidebarStageBadgeLabel({
         primaryServerVersion: "0.0.28-nightly.20260616.12",
-        fallbackStageLabel: "Alpha",
+        fallbackStageLabel: "Raptor",
       }),
     ).toBe("Nightly");
   });
@@ -177,9 +177,9 @@ describe("resolveSidebarStageBadgeLabel", () => {
     expect(
       resolveSidebarStageBadgeLabel({
         primaryServerVersion: "0.0.27",
-        fallbackStageLabel: "Alpha",
+        fallbackStageLabel: "Raptor",
       }),
-    ).toBe("Alpha");
+    ).toBe("Raptor");
   });
 
   it("returns the fallback label when the primary server version is missing", () => {
@@ -195,9 +195,9 @@ describe("resolveSidebarStageBadgeLabel", () => {
     expect(
       resolveSidebarStageBadgeLabel({
         primaryServerVersion: "0.0.28-nightly.20260616",
-        fallbackStageLabel: "Alpha",
+        fallbackStageLabel: "Raptor",
       }),
-    ).toBe("Alpha");
+    ).toBe("Raptor");
   });
 });
 

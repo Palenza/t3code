@@ -10,7 +10,7 @@ import {
 describe("resolveSidebarStageBackdropVariant", () => {
   // Décision fork (28/07/2026) : le ciel étoilé Nightly sur TOUS les canaux —
   // notre build du quotidien est « Alpha », que l'amont laisse sans habillage.
-  it.each(["Alpha", "Dev", "Nightly", "quelconque"])(
+  it.each(["Raptor", "Dev", "Nightly", "quelconque"])(
     "gives every channel the nightly sky (%s)",
     (stageLabel) => {
       expect(resolveSidebarStageBackdropVariant(stageLabel)).toBe("nightly");

@@ -233,8 +233,19 @@ export function buildThreadTitlePrompt(input: ThreadTitlePromptInput) {
 }
 
 export interface ThreadGroupingPromptInput {
-  /** Les fils à ranger : un identifiant + son titre, rien de plus. */
-  readonly threads: ReadonlyArray<{ readonly id: string; readonly title: string }>;
+  /**
+   * Les fils à ranger : un identifiant + son titre, rien de plus.
+   *
+   * `settled` marque les fils DORMANTS (rangés, terminés). Ils comptent
+   * autant que les actifs — c'est même là que le désordre s'accumule chez
+   * quelqu'un qui utilise l'app depuis des mois (retour fondateur 29/07) —
+   * mais leur état ne change JAMAIS : ranger n'est pas réveiller.
+   */
+  readonly threads: ReadonlyArray<{
+    readonly id: string;
+    readonly title: string;
+    readonly settled?: boolean | undefined;
+  }>;
 }
 
 /**
@@ -246,7 +257,12 @@ export interface ThreadGroupingPromptInput {
  */
 export function buildThreadGroupingPrompt(input: ThreadGroupingPromptInput) {
   const listing = input.threads
-    .map((thread) => `${thread.id}\t${thread.title.replace(/\s+/g, " ").slice(0, 140)}`)
+    .map(
+      (thread) =>
+        `${thread.id}\t${thread.settled === true ? "[dormant] " : ""}${thread.title
+          .replace(/\s+/g, " ")
+          .slice(0, 140)}`,
+    )
     .join("\n");
   const prompt = [
     "You group a developer's open conversation threads by THEME, the way Arc's Tidy groups browser tabs.",
@@ -257,6 +273,7 @@ export function buildThreadGroupingPrompt(input: ThreadGroupingPromptInput) {
     "- Name each group like a folder a human would create: 2-4 words, no punctuation, in the language of the titles.",
     "- Use each thread id at most once. Never invent an id.",
     "- If nothing groups meaningfully, return an empty groups array — say so rather than forcing groups.",
+    "- [dormant] threads are settled/archived work. Group them like any other: they carry the most history. Never treat dormancy as a theme, and never let it split an otherwise coherent group.",
     "",
     "Return a JSON object with key: groups — an array of objects with keys: name, threadIds.",
     "",

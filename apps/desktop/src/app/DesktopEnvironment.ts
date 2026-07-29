@@ -86,7 +86,9 @@ function resolveDesktopAppStageLabel(input: {
     return "Dev";
   }
 
-  return isNightlyDesktopVersion(input.appVersion) ? "Nightly" : "Alpha";
+  // Le fork ne s'appelle plus « Alpha » : décision fondateur 29/07, son
+  // canal local est RAPTOR.
+  return isNightlyDesktopVersion(input.appVersion) ? "Nightly" : "Raptor";
 }
 
 function resolveDesktopAppBranding(input: {

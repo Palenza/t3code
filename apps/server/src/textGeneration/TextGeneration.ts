@@ -73,7 +73,12 @@ export interface ThreadTitleGenerationResult {
 
 export interface ThreadGroupingInput {
   cwd: string;
-  threads: ReadonlyArray<{ readonly id: string; readonly title: string }>;
+  /** `settled` = fil dormant : rangé aussi, et il LE RESTE (29/07). */
+  threads: ReadonlyArray<{
+    readonly id: string;
+    readonly title: string;
+    readonly settled?: boolean | undefined;
+  }>;
   /** What model and provider to use for generation. */
   modelSelection: ModelSelection;
 }

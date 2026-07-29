@@ -83,11 +83,12 @@ function useSidebarStageLabel() {
 }
 
 function T3Wordmark() {
-  // Fork identity: the glyph says T4. The T keeps the upstream drawing; the 4
-  // is a squared geometric digit matching its weight.
+  // Fork identity (29/07 au soir) : le glyphe redit T3 — le fork garde le nom
+  // amont, son canal s'appelle RAPTOR. Le T est le dessin amont ; le 3 est
+  // tracé à la même graisse.
   return (
     <svg
-      aria-label="T4"
+      aria-label="T3"
       className="h-2.5 w-auto shrink-0"
       viewBox="15.5309 37 94.3941 56.96"
       xmlns="http://www.w3.org/2000/svg"
@@ -97,9 +98,8 @@ function T3Wordmark() {
         fill="currentColor"
       />
       <path
-        d="M84 93V81.5H65.5V70.5L87.5 37H101V69.5H108.5V81.5H101V93H84ZM84 69.5V51.5L72.5 69.5H84Z"
+        d="M69 93.96C63.6 93.96 59.2 92.6 55.8 89.88C52.4 87.16 50.5 83.24 50.1 78.12H62.9C63.2 80.36 64.02 82.02 65.36 83.1C66.7 84.18 68.5 84.72 70.76 84.72C73.16 84.72 75.02 84.1 76.34 82.86C77.66 81.62 78.32 79.94 78.32 77.82C78.32 75.5 77.56 73.76 76.04 72.6C74.52 71.44 72.28 70.86 69.32 70.86H65.9V61.98H69.32C71.88 61.98 73.82 61.42 75.14 60.3C76.46 59.18 77.12 57.6 77.12 55.56C77.12 53.64 76.54 52.14 75.38 51.06C74.22 49.98 72.6 49.44 70.52 49.44C68.44 49.44 66.8 49.98 65.6 51.06C64.4 52.14 63.68 53.68 63.44 55.68H50.82C51.18 50.8 52.98 47.02 56.22 44.34C59.46 41.66 63.72 40.32 69 40.32C74.6 40.32 79.02 41.68 82.26 44.4C85.5 47.12 87.12 50.78 87.12 55.38C87.12 58.02 86.44 60.3 85.08 62.22C83.72 64.14 81.84 65.46 79.44 66.18V66.42C82.32 67.06 84.56 68.44 86.16 70.56C87.76 72.68 88.56 75.28 88.56 78.36C88.56 83.16 86.82 86.94 83.34 89.7C79.86 92.54 74.98 93.96 69 93.96Z"
         fill="currentColor"
-        fillRule="evenodd"
       />
     </svg>
   );

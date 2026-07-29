@@ -32,7 +32,16 @@ const RangerRequest = Schema.Struct({
   cwd: Schema.String,
   instanceId: Schema.String,
   model: Schema.String,
-  threads: Schema.Array(Schema.Struct({ id: Schema.String, title: Schema.String })),
+  // `settled` : le fil est dormant. Il entre dans le rangement comme les
+  // autres — c'est là que le désordre s'accumule — et il reste dormant : le
+  // client ne change QUE son espace d'appartenance.
+  threads: Schema.Array(
+    Schema.Struct({
+      id: Schema.String,
+      title: Schema.String,
+      settled: Schema.optional(Schema.Boolean),
+    }),
+  ),
 });
 
 /** Au-delà, le prompt devient trop long pour rester net et rapide. */
