@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 
 import { useRouter } from "@tanstack/react-router";
 import { BrushIcon, GripVerticalIcon, MoreHorizontalIcon, PlusIcon } from "lucide-react";
@@ -7,9 +7,14 @@ import { Popover, PopoverPopup, PopoverTrigger } from "../ui/popover";
 
 import { settlePromise } from "@t3tools/client-runtime/state/runtime";
 
+import { scopedThreadKey, scopeThreadRef } from "@t3tools/client-runtime/environment";
+import type { EnvironmentId } from "@t3tools/contracts";
+
 import { readLocalApi } from "../../localApi";
 import { cn } from "../../lib/utils";
 import { useSidebarSpacesStore, type SidebarSpace } from "../../sidebarSpacesStore";
+import { useProjects, useThreadShells } from "../../state/entities";
+import { ProjectFavicon } from "../ProjectFavicon";
 import { makeSidebarThemeFromColors, sidebarThemeBackground } from "../../sidebarThemeStore";
 import { SpaceIcon, SpaceIconPicker } from "./SpaceIconPicker";
 import { SpaceThemePanel } from "./SpaceThemePanel";
@@ -36,6 +41,33 @@ export function SpacesBoard({ onFermer }: { onFermer: () => void }) {
   const setSpaceEmoji = useSidebarSpacesStore((state) => state.setSpaceEmoji);
   const createSpace = useSidebarSpacesStore((state) => state.createSpace);
   const router = useRouter();
+  const threadShells = useThreadShells();
+
+  /**
+   * Le TITRE d'un fil, par sa clé.
+   *
+   * Sans ça, chaque ligne affichait son identifiant brut —
+   * « c6ffa76d-6431-475f-98a7-dbc… ». Un tableau censé montrer d'un coup
+   * d'œil ce qu'on a rangé, et où, ne montrait rien du tout.
+   */
+  const projects = useProjects();
+  const fichesParCle = useMemo(() => {
+    const racineParProjet = new Map(
+      projects.map((projet) => [`${projet.environmentId}:${projet.id}`, projet.workspaceRoot]),
+    );
+    const parCle = new Map<
+      string,
+      { readonly titre: string; readonly environmentId: EnvironmentId; readonly cwd: string }
+    >();
+    for (const shell of threadShells) {
+      parCle.set(scopedThreadKey(scopeThreadRef(shell.environmentId, shell.id)), {
+        titre: shell.title,
+        environmentId: shell.environmentId,
+        cwd: racineParProjet.get(`${shell.environmentId}:${shell.projectId}`) ?? "",
+      });
+    }
+    return parCle;
+  }, [projects, threadShells]);
 
   const [renommage, setRenommage] = useState<{ id: string; valeur: string } | null>(null);
   const [glisse, setGlisse] = useState<string | null>(null);
@@ -196,6 +228,7 @@ export function SpacesBoard({ onFermer }: { onFermer: () => void }) {
               ) : (
                 fils.map((threadKey) => {
                   const [environmentId, threadId] = threadKey.split(":");
+                  const fiche = fichesParCle.get(threadKey);
                   return (
                     <button
                       key={threadKey}
@@ -214,9 +247,23 @@ export function SpacesBoard({ onFermer }: { onFermer: () => void }) {
                       className="flex h-[41px] w-full cursor-pointer items-center gap-2 rounded-lg text-left text-[11px] font-semibold text-black/80 transition-colors hover:bg-black/8"
                     >
                       {/* La pastille de 20 px qui précède chaque entrée : c'est
-                          elle qui pose la gouttière de 45 px du libellé. */}
-                      <span aria-hidden className="size-5 shrink-0 rounded-[5px] bg-black/12" />
-                      <span className="truncate">{threadId ?? threadKey}</span>
+                          elle qui pose la gouttière de 45 px du libellé. Arc y
+                          met le favicon du site ; ici celui du projet. Le carré
+                          gris ne subsiste que si le projet est inconnu — il ne
+                          prétend alors à rien. */}
+                      {fiche === undefined ? (
+                        <span aria-hidden className="size-5 shrink-0 rounded-[5px] bg-black/12" />
+                      ) : (
+                        <ProjectFavicon
+                          environmentId={fiche.environmentId}
+                          cwd={fiche.cwd}
+                          className="size-5 shrink-0 rounded-[5px]"
+                        />
+                      )}
+                      {/* L'identifiant ne reste qu'en dernier recours — un fil
+                          d'un autre environnement, pas encore chargé ici. Mieux
+                          vaut une clé qu'une ligne vide, mais c'est un aveu. */}
+                      <span className="truncate">{fiche?.titre ?? threadId ?? threadKey}</span>
                     </button>
                   );
                 })
@@ -249,7 +296,10 @@ export function SpacesBoard({ onFermer }: { onFermer: () => void }) {
             theme: makeSidebarThemeFromColors(["#4caf7d", "#5db3f0"]),
           });
         }}
-        className="mt-[45vh] flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full bg-white/70 text-black/60 shadow-sm transition-colors hover:bg-white"
+        // Centré sur la HAUTEUR des colonnes, pas posé à 45 % de la fenêtre :
+        // avec une seule colonne il partait bien plus bas que son voisinage.
+        // `self-center` le cale sur la ligne, `mt-0` annule l'ancien décalage.
+        className="mt-0 flex size-8 shrink-0 cursor-pointer items-center justify-center self-center rounded-full bg-white/70 text-black/60 shadow-sm transition-colors hover:bg-white"
       >
         <PlusIcon className="size-4" />
       </button>
