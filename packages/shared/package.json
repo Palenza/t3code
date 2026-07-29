@@ -3,6 +3,10 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./modesTravail": {
+      "types": "./src/modesTravail.ts",
+      "import": "./src/modesTravail.ts"
+    },
     "./promesses": {
       "types": "./src/promesses.ts",
       "import": "./src/promesses.ts"
