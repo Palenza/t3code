@@ -98,6 +98,8 @@ import {
   type ThreadColor,
 } from "../threadCustomizationStore";
 import { useSidebarThemeStore } from "../sidebarThemeStore";
+import { useSidebarSpacesStore } from "../sidebarSpacesStore";
+import { SidebarFavoritesGrid, SidebarSpacesBar } from "./sidebar/SidebarSpaces";
 import { SortableThreadItem } from "./sidebar/SortableThreadItem";
 import { useThreadSelectionStore } from "../threadSelectionStore";
 import { useThreadActions } from "../hooks/useThreadActions";
@@ -1235,6 +1237,9 @@ export default function SidebarV2() {
   useEffect(() => {
     setActiveThemeProjectKey(projectScopeKey);
   }, [projectScopeKey, setActiveThemeProjectKey]);
+  // Espaces façon Arc : le filtre des listes + le voile suivent l'espace.
+  const activeSpaceId = useSidebarSpacesStore((state) => state.activeSpaceId);
+  const spaceAssignments = useSidebarSpacesStore((state) => state.assignments);
   const scopedProjectGroup = useMemo(
     () =>
       projectScopeKey === null
@@ -1438,7 +1443,13 @@ export default function SidebarV2() {
       (thread) =>
         thread.archivedAt === null &&
         (scopedProjectKeys === null ||
-          scopedProjectKeys.has(`${thread.environmentId}:${thread.projectId}`)),
+          scopedProjectKeys.has(`${thread.environmentId}:${thread.projectId}`)) &&
+        // Espace actif (façon Arc) : la vue « tout » (null) montre tout ;
+        // un espace ne montre que les fils qu'on y a rangés.
+        (activeSpaceId === null ||
+          spaceAssignments[
+            scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id))
+          ] === activeSpaceId),
     );
     const active: EnvironmentThreadShell[] = [];
     const snoozed: EnvironmentThreadShell[] = [];
@@ -1480,12 +1491,14 @@ export default function SidebarV2() {
       snoozeNow: preciseNow,
     };
   }, [
+    activeSpaceId,
     autoSettleAfterDays,
     changeRequestStateByKey,
     nowMinute,
     scopedProjectKeys,
     serverConfigs,
     snoozeWakeTick,
+    spaceAssignments,
     threads,
   ]);
 
@@ -2102,6 +2115,13 @@ export default function SidebarV2() {
         const isSnoozed = snoozedThreadKeysRef.current.has(threadKey);
         // Presets resolve at menu-open time (same as the popover).
         const snoozePresets = resolveSnoozePresets(new Date());
+        // Espaces/favoris lus à l'ouverture du menu, jamais figés au render.
+        const spacesState = useSidebarSpacesStore.getState();
+        const spacesForMenu = spacesState.spaces;
+        const threadSpaceId = spacesState.assignments[threadKey] ?? null;
+        const isFavorite = spacesState.favorites.some(
+          (favorite) => favorite.threadKey === threadKey,
+        );
         const clicked = await settlePromise(() =>
           api.contextMenu.show(
             [
@@ -2147,6 +2167,27 @@ export default function SidebarV2() {
                   { id: "color:none", label: "Aucune" },
                 ],
               },
+              ...(spacesForMenu.length > 0
+                ? [
+                    {
+                      id: "space",
+                      label: "Espace",
+                      children: [
+                        ...spacesForMenu.map((space) => ({
+                          id: `space:${space.id}`,
+                          label:
+                            `${space.emoji} ${space.name}` +
+                            (threadSpaceId === space.id ? " ✓" : ""),
+                        })),
+                        { id: "space:none", label: "Aucun" },
+                      ],
+                    },
+                  ]
+                : []),
+              {
+                id: "favorite",
+                label: isFavorite ? "Retirer des favoris" : "Ajouter aux favoris",
+              },
               { id: "mark-unread", label: "Mark unread" },
               { id: "delete", label: "Delete", destructive: true, icon: "trash" },
             ],
@@ -2154,6 +2195,22 @@ export default function SidebarV2() {
           ),
         );
         if (clicked._tag === "Failure") return;
+        if (clicked.value?.startsWith("space:")) {
+          const choice = clicked.value.slice("space:".length);
+          useSidebarSpacesStore
+            .getState()
+            .assignThread(threadKey, choice === "none" ? null : choice);
+          return;
+        }
+        if (clicked.value === "favorite") {
+          useSidebarSpacesStore.getState().toggleFavorite({
+            threadKey,
+            environmentId: thread.environmentId,
+            threadId: thread.id,
+            title: thread.title || "Sans titre",
+          });
+          return;
+        }
         if (clicked.value?.startsWith("color:")) {
           const choice = clicked.value.slice("color:".length);
           useThreadCustomizationStore
@@ -2357,6 +2414,7 @@ export default function SidebarV2() {
   return (
     <>
       <SidebarChromeHeader isElectron={isElectron} />
+      <SidebarFavoritesGrid />
       <SidebarContent
         className="gap-0"
         fixedHeader={
@@ -2918,6 +2976,7 @@ export default function SidebarV2() {
           </DialogFooter>
         </DialogPopup>
       </Dialog>
+      <SidebarSpacesBar />
       <SidebarChromeFooter />
     </>
   );

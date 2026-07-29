@@ -1,4 +1,5 @@
 import { useTheme } from "../../hooks/useTheme";
+import { activeSpaceTheme, useSidebarSpacesStore } from "../../sidebarSpacesStore";
 import {
   resolveSidebarTheme,
   SIDEBAR_THEME_GRAIN_URL,
@@ -17,9 +18,12 @@ import {
  * byte-for-byte the upstream one.
  */
 export function SidebarThemeWash() {
-  const theme = useSidebarThemeStore((state) =>
+  // Résolution : thème de l'ESPACE actif > thème du projet > thème défaut.
+  const spaceTheme = useSidebarSpacesStore(activeSpaceTheme);
+  const fallbackTheme = useSidebarThemeStore((state) =>
     resolveSidebarTheme(state, state.activeProjectKey),
   );
+  const theme = spaceTheme ?? fallbackTheme;
   const { resolvedTheme } = useTheme();
   if (theme === null) {
     return null;

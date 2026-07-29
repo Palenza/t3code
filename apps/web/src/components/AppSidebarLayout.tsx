@@ -3,10 +3,12 @@ import * as Schema from "effect/Schema";
 import {
   useCallback,
   useEffect,
+  useRef,
   useState,
   useSyncExternalStore,
   type CSSProperties,
   type ReactNode,
+  type WheelEvent as ReactWheelEvent,
 } from "react";
 import { useLocation, useNavigate } from "@tanstack/react-router";
 
@@ -17,6 +19,7 @@ import { cn, isMacPlatform } from "../lib/utils";
 import { primaryServerKeybindingsAtom } from "../state/server";
 import { useSidebarV2Enabled } from "../hooks/useSettings";
 import ThreadSidebar from "./Sidebar";
+import { useSidebarSpacesStore } from "../sidebarSpacesStore";
 import { SidebarEdgePeek, useSidebarPeekStore } from "./sidebar/SidebarEdgePeek";
 import { SidebarThemeWash } from "./sidebar/SidebarThemeWash";
 import ThreadSidebarV2 from "./SidebarV2";
@@ -142,6 +145,25 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
   const endSidebarPeek = useCallback(() => {
     useSidebarPeekStore.getState().setPeek(false);
   }, []);
+  // Swipe deux doigts sur la sidebar (façon Arc) : le deltaX horizontal du
+  // trackpad cumule jusqu'au seuil, puis bascule d'espace — avec un temps
+  // mort pour qu'un long geste ne saute pas trois espaces d'un coup.
+  const spaceSwipeAccumRef = useRef(0);
+  const spaceSwipeLastFireRef = useRef(0);
+  const handleSidebarWheel = useCallback((event: ReactWheelEvent<HTMLDivElement>) => {
+    if (Math.abs(event.deltaX) <= Math.abs(event.deltaY)) {
+      spaceSwipeAccumRef.current = 0;
+      return;
+    }
+    const now = Date.now();
+    if (now - spaceSwipeLastFireRef.current < 450) return;
+    spaceSwipeAccumRef.current += event.deltaX;
+    if (Math.abs(spaceSwipeAccumRef.current) < 110) return;
+    const direction = spaceSwipeAccumRef.current > 0 ? 1 : -1;
+    spaceSwipeAccumRef.current = 0;
+    spaceSwipeLastFireRef.current = now;
+    useSidebarSpacesStore.getState().cycleSpace(direction);
+  }, []);
   const sidebarProviderStyle = {
     "--sidebar-width": `${sidebarWidth}px`,
     ...(isMacosDesktop && !isWindowFullscreen
@@ -194,6 +216,7 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
         data-app-sidebar=""
         data-sidebar-version={useSidebarV2Theme ? "v2" : "v1"}
         onMouseLeave={sidebarPeek ? endSidebarPeek : undefined}
+        onWheel={handleSidebarWheel}
         // `sidebar-inner` (the opaque bg-sidebar layer) must be its own
         // stacking context, otherwise the theme wash's -z-10 escapes to THIS
         // context and paints underneath that opaque background — invisible.

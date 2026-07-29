@@ -4,6 +4,7 @@ import { MinusIcon, MoonIcon, PaletteIcon, PlusIcon, SparklesIcon, SunIcon } fro
 
 import { cn } from "../../lib/utils";
 import { useTheme } from "../../hooks/useTheme";
+import { useSidebarSpacesStore } from "../../sidebarSpacesStore";
 import {
   DEFAULT_STOP_POSITIONS,
   MAX_SIDEBAR_THEME_STOPS,
@@ -40,18 +41,32 @@ export function ThemeSettingsPanel() {
   const clearProjectTheme = useSidebarThemeStore((state) => state.clearProjectTheme);
   const { resolvedTheme } = useTheme();
 
-  const [scope, setScope] = useState<"default" | "project">(() =>
-    activeProjectKey !== null && themesByProject[activeProjectKey] !== undefined
+  const spaces = useSidebarSpacesStore((state) => state.spaces);
+  const activeSpaceId = useSidebarSpacesStore((state) => state.activeSpaceId);
+  const setSpaceTheme = useSidebarSpacesStore((state) => state.setSpaceTheme);
+  const activeSpace = spaces.find((space) => space.id === activeSpaceId) ?? null;
+
+  const [scope, setScope] = useState<"default" | "project" | "space">(() => {
+    if (activeSpaceId !== null) return "space";
+    return activeProjectKey !== null && themesByProject[activeProjectKey] !== undefined
       ? "project"
-      : "default",
-  );
+      : "default";
+  });
   const projectScopeAvailable = activeProjectKey !== null;
-  const effectiveScope = scope === "project" && projectScopeAvailable ? "project" : "default";
+  const spaceScopeAvailable = activeSpace !== null;
+  const effectiveScope =
+    scope === "space" && spaceScopeAvailable
+      ? "space"
+      : scope === "project" && projectScopeAvailable
+        ? "project"
+        : "default";
 
   const storedTheme =
-    effectiveScope === "project" && activeProjectKey !== null
-      ? (themesByProject[activeProjectKey] ?? null)
-      : defaultTheme;
+    effectiveScope === "space"
+      ? (activeSpace?.theme ?? null)
+      : effectiveScope === "project" && activeProjectKey !== null
+        ? (themesByProject[activeProjectKey] ?? null)
+        : defaultTheme;
   const active = storedTheme !== null;
   const current = storedTheme ?? DEFAULT_THEME;
 
@@ -60,21 +75,29 @@ export function ThemeSettingsPanel() {
 
   const apply = useCallback(
     (next: SidebarTheme) => {
+      if (effectiveScope === "space" && activeSpace !== null) {
+        setSpaceTheme(activeSpace.id, next);
+        return;
+      }
       if (effectiveScope === "project" && activeProjectKey !== null) {
         setProjectTheme(activeProjectKey, next);
         return;
       }
       setTheme(next);
     },
-    [activeProjectKey, effectiveScope, setProjectTheme, setTheme],
+    [activeProjectKey, activeSpace, effectiveScope, setProjectTheme, setSpaceTheme, setTheme],
   );
   const disable = useCallback(() => {
+    if (effectiveScope === "space" && activeSpace !== null) {
+      setSpaceTheme(activeSpace.id, null);
+      return;
+    }
     if (effectiveScope === "project" && activeProjectKey !== null) {
       clearProjectTheme(activeProjectKey);
       return;
     }
     clearTheme();
-  }, [activeProjectKey, clearProjectTheme, clearTheme, effectiveScope]);
+  }, [activeProjectKey, activeSpace, clearProjectTheme, clearTheme, effectiveScope, setSpaceTheme]);
 
   const patch = (partial: Partial<SidebarTheme>) => apply({ ...current, ...partial });
   const patchStop = (index: number, stop: Partial<SidebarThemeStop>) => {
@@ -157,6 +180,24 @@ export function ThemeSettingsPanel() {
               )}
             >
               Current project
+            </button>
+            <button
+              type="button"
+              disabled={!spaceScopeAvailable}
+              onClick={() => setScope("space")}
+              title={
+                spaceScopeAvailable
+                  ? undefined
+                  : "Ouvre d'abord un espace (la barre d'icônes en bas de la sidebar)."
+              }
+              className={cn(
+                "cursor-pointer border-l border-border/60 px-3 py-1.5 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-45",
+                effectiveScope === "space"
+                  ? "bg-accent text-foreground"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {activeSpace ? `Espace ${activeSpace.emoji} ${activeSpace.name}` : "Espace"}
             </button>
           </div>
 
@@ -346,19 +387,29 @@ export function ThemeSettingsPanel() {
         <div className="flex items-center gap-3 px-3 pt-4 pb-2 sm:px-4">
           {!active ? (
             <Button size="sm" onClick={() => apply(current)}>
-              {effectiveScope === "project" ? "Enable for this project" : "Enable theme"}
+              {effectiveScope === "space"
+                ? "Enable for this space"
+                : effectiveScope === "project"
+                  ? "Enable for this project"
+                  : "Enable theme"}
             </Button>
           ) : (
             <Button size="sm" variant="outline" onClick={disable}>
-              {effectiveScope === "project" ? "Remove project theme" : "No theme"}
+              {effectiveScope === "space"
+                ? "Remove space theme"
+                : effectiveScope === "project"
+                  ? "Remove project theme"
+                  : "No theme"}
             </Button>
           )}
           <p className="text-xs text-muted-foreground/70">
             {active
               ? "Live on the sidebar."
-              : effectiveScope === "project"
-                ? "This project follows the default theme."
-                : "Off — the sidebar keeps the default look."}
+              : effectiveScope === "space"
+                ? "This space follows the project or default theme."
+                : effectiveScope === "project"
+                  ? "This project follows the default theme."
+                  : "Off — the sidebar keeps the default look."}
           </p>
         </div>
       </SettingsSection>
