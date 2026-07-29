@@ -252,8 +252,12 @@ export function SpaceThemePanel() {
         // travers ») : le verre est MINCE — 34 % de teinte, le flou et la
         // saturation font le reste, comme Arc. Au-delà de ~50 % ce n'est
         // plus du verre, c'est un panneau peint.
-        "flex w-[340px] flex-col rounded-lg backdrop-blur-2xl backdrop-saturate-150 transition-colors",
-        isDarkCanvas ? "bg-neutral-900/34" : "bg-white/34",
+        // Le verre d'Arc n'est pas uniforme (captures 30/07) : la TOILE laisse
+        // passer le fond presque net, le SOCLE des contrôles est laiteux. Ce
+        // contraste est ce qui fait lire l'un comme une fenêtre et l'autre
+        // comme un pupitre — un verre unique donnait une plaque plate.
+        "flex w-[340px] flex-col overflow-hidden rounded-lg backdrop-blur-2xl backdrop-saturate-150 transition-colors",
+        isDarkCanvas ? "bg-neutral-900/28" : "bg-white/28",
       )}
     >
       {/* La toile-palette : tout le haut du panneau, pointillée, sans
@@ -376,67 +380,77 @@ export function SpaceThemePanel() {
         </div>
       </div>
 
-      {/* Le nuancier : page 1 des UNIS (un rond = la dominante), flèche →
-          page des GRADIENTS (un rond = les trois d'un coup). */}
-      <div className="flex items-center gap-1.5 px-3 pt-2.5 pb-1">
-        <button
-          type="button"
-          aria-label="Couleurs unies"
-          disabled={swatchPage === 0}
-          onClick={() => setSwatchPage(0)}
-          className={cn("flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-md transition-colors disabled:cursor-default disabled:opacity-30", mutedControl)}
-        >
-          <ChevronLeftIcon className="size-4" />
-        </button>
-        <div className="flex flex-1 items-center justify-between">
-          {swatchPage === 0
-            ? SOLID_SWATCHES.map((color) => (
-                <button
-                  key={color}
-                  type="button"
-                  aria-label={`Couleur ${color}`}
-                  onClick={() => applySolid(color)}
-                  className="size-6 cursor-pointer rounded-full ring-1 ring-black/10 transition-transform hover:scale-110"
-                  style={{
-                    backgroundColor: isDarkCanvas
-                      ? `color-mix(in oklab, ${color} 72%, black)`
-                      : color,
-                  }}
-                />
-              ))
-            : GRADIENT_SWATCHES.map((trio) => (
-                <button
-                  key={trio.join("-")}
-                  type="button"
-                  aria-label={`Gradient ${trio.join(", ")}`}
-                  onClick={() => applyGradient(trio)}
-                  className="size-6 cursor-pointer rounded-full ring-1 ring-black/10 transition-transform hover:scale-110"
-                  style={{
-                    background: `linear-gradient(135deg, ${trio[0]} 0%, ${trio[1]} 50%, ${trio[2]} 100%)`,
-                    ...(isDarkCanvas ? { filter: "brightness(0.78)" } : {}),
-                  }}
-                />
-              ))}
+      {/* Le SOCLE : nuancier + vague + molette sur un verre plus dense que la
+          toile — c'est ce qui les fait lire comme un pupitre sous une fenêtre
+          (captures Arc 30/07), au lieu d'une seule plaque uniforme. */}
+      <div
+        className={cn(
+          "flex flex-col",
+          isDarkCanvas ? "bg-neutral-900/45" : "bg-white/55",
+        )}
+      >
+        {/* Le nuancier : page 1 des UNIS (un rond = la dominante), flèche →
+            page des GRADIENTS (un rond = les trois d'un coup). */}
+        <div className="flex items-center gap-1.5 px-3 pt-2.5 pb-1">
+          <button
+            type="button"
+            aria-label="Couleurs unies"
+            disabled={swatchPage === 0}
+            onClick={() => setSwatchPage(0)}
+            className={cn("flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-md transition-colors disabled:cursor-default disabled:opacity-30", mutedControl)}
+          >
+            <ChevronLeftIcon className="size-4" />
+          </button>
+          <div className="flex flex-1 items-center justify-between">
+            {swatchPage === 0
+              ? SOLID_SWATCHES.map((color) => (
+                  <button
+                    key={color}
+                    type="button"
+                    aria-label={`Couleur ${color}`}
+                    onClick={() => applySolid(color)}
+                    className="size-6 cursor-pointer rounded-full ring-1 ring-black/10 transition-transform hover:scale-110"
+                    style={{
+                      backgroundColor: isDarkCanvas
+                        ? `color-mix(in oklab, ${color} 72%, black)`
+                        : color,
+                    }}
+                  />
+                ))
+              : GRADIENT_SWATCHES.map((trio) => (
+                  <button
+                    key={trio.join("-")}
+                    type="button"
+                    aria-label={`Gradient ${trio.join(", ")}`}
+                    onClick={() => applyGradient(trio)}
+                    className="size-6 cursor-pointer rounded-full ring-1 ring-black/10 transition-transform hover:scale-110"
+                    style={{
+                      background: `linear-gradient(135deg, ${trio[0]} 0%, ${trio[1]} 50%, ${trio[2]} 100%)`,
+                      ...(isDarkCanvas ? { filter: "brightness(0.78)" } : {}),
+                    }}
+                  />
+                ))}
+          </div>
+          <button
+            type="button"
+            aria-label="Gradients préréglés"
+            disabled={swatchPage === 1}
+            onClick={() => setSwatchPage(1)}
+            className={cn("flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-md transition-colors disabled:cursor-default disabled:opacity-30", mutedControl)}
+          >
+            <ChevronRightIcon className="size-4" />
+          </button>
         </div>
-        <button
-          type="button"
-          aria-label="Gradients préréglés"
-          disabled={swatchPage === 1}
-          onClick={() => setSwatchPage(1)}
-          className={cn("flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-md transition-colors disabled:cursor-default disabled:opacity-30", mutedControl)}
-        >
-          <ChevronRightIcon className="size-4" />
-        </button>
-      </div>
 
-      {/* La vague d'intensité + la molette de grain. */}
-      <div className="flex items-center gap-4 px-4 pt-1 pb-3.5">
-        <IntensityWave
-          dark={isDarkCanvas}
-          value={current.intensity}
-          onChange={(intensity) => apply({ ...current, intensity })}
-        />
-        <GrainDial dark={isDarkCanvas} value={current.grain} onChange={(grain) => apply({ ...current, grain })} />
+        {/* La vague d'intensité + la molette de grain. */}
+        <div className="flex items-center gap-4 px-4 pt-1 pb-3.5">
+          <IntensityWave
+            dark={isDarkCanvas}
+            value={current.intensity}
+            onChange={(intensity) => apply({ ...current, intensity })}
+          />
+          <GrainDial dark={isDarkCanvas} value={current.grain} onChange={(grain) => apply({ ...current, grain })} />
+        </div>
       </div>
     </div>
   );
@@ -456,11 +470,25 @@ function IntensityWave(props: { dark: boolean; value: number; onChange: (value: 
     const rect = rail.getBoundingClientRect();
     props.onChange(Math.max(0, Math.min(1, (clientX - rect.left) / rect.width)));
   };
+  /**
+   * La vague d'Arc, relue sur les captures du 30/07 : elle ondule à PLEINE
+   * amplitude jusqu'à la poignée, puis se couche en ligne DROITE après.
+   *
+   * La version d'avant faisait varier l'amplitude sur toute la largeur — la
+   * vague restait donc molle partout à faible valeur, alors que chez Arc une
+   * poignée à gauche donne une longue ligne plate et une poignée à droite une
+   * vague pleine sur presque tout le rail. C'est la LONGUEUR ondulée qui dit
+   * la valeur, pas la hauteur des creux.
+   */
   const wavePath = useMemo(() => {
-    const amplitude = 0.8 + Math.max(0, Math.min(1, props.value)) * 7.2;
+    const valeur = Math.max(0, Math.min(1, props.value));
+    const bascule = valeur * 160;
     const points: string[] = [];
     for (let x = 0; x <= 160; x += 2) {
-      const y = 14 - Math.sin((x / 22) * Math.PI * 2) * amplitude;
+      // Un fondu court juste après la poignée : Arc ne coupe pas l'onde net,
+      // elle s'éteint sur quelques pixels.
+      const attenuation = x <= bascule ? 1 : Math.max(0, 1 - (x - bascule) / 26);
+      const y = 14 - Math.sin((x / 22) * Math.PI * 2) * 8 * attenuation;
       points.push(`${x === 0 ? "M" : "L"}${x} ${y.toFixed(1)}`);
     }
     return points.join(" ");
