@@ -5,7 +5,6 @@ import { ChevronLeftIcon, ChevronRightIcon, MinusIcon, MoonIcon, PlusIcon, Spark
 import { cn } from "../../lib/utils";
 import { useSidebarSpacesStore } from "../../sidebarSpacesStore";
 import {
-  MAX_SIDEBAR_THEME_STOPS,
   makeSidebarThemeFromColors,
   useSidebarThemeStore,
   type SidebarTheme,
@@ -13,49 +12,116 @@ import {
 } from "../../sidebarThemeStore";
 
 /**
- * L'éditeur de thème flottant, réplique du panneau d'Arc (captures fondateur
- * 29/07, décortiquées point par point) : toile pointillée qui suit le mode
- * (✨ auto / ☀️ clair / 🌙 sombre), pastilles DÉPLAÇABLES à tailles
- * décroissantes (la première domine le mélange), − / + pour en retirer ou
- * ajouter, une rangée de PALETTES paginée — chaque rond est un trio prêt à
- * poser, pas une couleur seule —, la VAGUE d'intensité, et la MOLETTE de
- * grain. Il édite l'espace ACTIF quand il y en a un, sinon le thème par
- * défaut de la sidebar.
+ * L'éditeur de thème d'Arc, reconstruit sur les ~24 captures fondateur
+ * (3e passe — la bonne). Ce que les captures enseignent :
+ *
+ * LA TOILE EST UNE PALETTE INVISIBLE. Déplacer le GROS rond ne déplace pas
+ * qu'un point : ça MODULE sa couleur — horizontalement la teinte dérive,
+ * verticalement elle s'éclaircit jusqu'au délavé ou fonce. Et les deux
+ * satellites ne portent jamais la même couleur : ils sont recalculés en
+ * HARMONIE (teintes voisines ±40°) à chaque geste. Un seul geste = position,
+ * nuance et accords.
+ *
+ * TROIS RONDS MAXIMUM. La première page du nuancier = couleurs UNIES : un
+ * clic pose UNE dominante (les satellites existants se réaccordent) ; « + »
+ * ajoute un satellite harmonique, jusqu'à trois. La flèche → page des
+ * GRADIENTS : un clic pose les trois ronds d'un coup.
  */
 
-/** Chaque palette = un TRIO assorti ; cliquer la pose entière sur la toile. */
-const SPACE_THEME_PALETTES: ReadonlyArray<readonly [string, string, string]> = [
-  // Page 1 — les classiques d'Arc : pastels francs, un rond par famille.
-  ["#f5ead9", "#e8d9c8", "#d8c5b2"],
-  ["#f2a3c0", "#f7c59f", "#fbe3a3"],
-  ["#9b6fc3", "#c39ad9", "#e2c8ef"],
-  ["#e4572e", "#f28f6b", "#f9c5ad"],
-  ["#f28c28", "#f7b32b", "#fbd87f"],
-  ["#c6d92e", "#8fd14f", "#4caf7d"],
-  ["#2e9e6b", "#5bc98c", "#a3e6c0"],
-  ["#5db3f0", "#4fd1c5", "#8ee6d9"],
-  ["#3f51b5", "#7986cb", "#b3bdea"],
-  // Page 2 — les mélanges que le fondateur a cités, et des nuits.
-  ["#fbd87f", "#f28c28", "#f2a3c0"],
+const MAX_ARC_STOPS = 3;
+
+/** Page 1 — couleurs unies, un rond = une dominante. */
+const SOLID_SWATCHES: ReadonlyArray<string> = [
+  "#f2ead9",
+  "#f2a3c0",
+  "#9b6fc3",
+  "#ef8a70",
+  "#fbd87f",
+  "#a5d977",
+  "#4fd1c5",
+  "#5b8def",
+  "#6b5b95",
+];
+
+/** Page 2 — gradients : un rond pose les TROIS couleurs préréglées. */
+const GRADIENT_SWATCHES: ReadonlyArray<readonly [string, string, string]> = [
+  ["#fbd87f", "#f2977a", "#f2a3c0"],
   ["#4caf7d", "#fbd87f", "#e4572e"],
   ["#4a7fd4", "#4caf7d", "#a8e6a3"],
   ["#5db3f0", "#2e9e6b", "#4fd1c5"],
   ["#8e5bd4", "#f2a3c0", "#5db3f0"],
-  ["#8d5a3b", "#c98d5f", "#f2dcc0"],
-  ["#5a6b8c", "#8295b5", "#b8c4d9"],
+  ["#f2a3c0", "#9b6fc3", "#5b8def"],
+  ["#f28c28", "#e4572e", "#c2185b"],
   ["#2b2f55", "#4a3f78", "#7a5299"],
-  ["#1c2530", "#54677a", "#d5dde5"],
+  ["#8d5a3b", "#c98d5f", "#f2dcc0"],
 ];
-const PALETTES_PER_PAGE = 9;
 
-/** Les tailles d'Arc : la première pastille pèse visiblement plus lourd. */
-const STOP_SIZES_PX = [44, 30, 24, 22, 20, 18] as const;
+/** Les tailles d'Arc : la dominante pèse, les satellites suivent. */
+const STOP_SIZES_PX = [44, 26, 22] as const;
 
 const APPEARANCE_CHOICES = [
   { value: "auto", icon: SparklesIcon, label: "Suivre le système" },
   { value: "light", icon: SunIcon, label: "Toujours clair" },
   { value: "dark", icon: MoonIcon, label: "Toujours sombre" },
 ] as const;
+
+// ---------------------------------------------------------------- couleur
+// La palette invisible parle en HSL ; le store parle en hex. Conversions
+// locales, en flottant pendant le drag pour ne jamais accumuler d'arrondis.
+
+function hexToHsl(hex: string): { h: number; s: number; l: number } {
+  const value = hex.replace("#", "");
+  const r = Number.parseInt(value.slice(0, 2), 16) / 255;
+  const g = Number.parseInt(value.slice(2, 4), 16) / 255;
+  const b = Number.parseInt(value.slice(4, 6), 16) / 255;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const l = (max + min) / 2;
+  if (max === min) {
+    return { h: 0, s: 0, l: l * 100 };
+  }
+  const d = max - min;
+  const s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+  const h =
+    max === r ? ((g - b) / d + (g < b ? 6 : 0)) * 60 : max === g ? ((b - r) / d + 2) * 60 : ((r - g) / d + 4) * 60;
+  return { h, s: s * 100, l: l * 100 };
+}
+
+function hslToHex(h: number, s: number, l: number): string {
+  const hue = ((h % 360) + 360) % 360;
+  const sat = Math.max(0, Math.min(100, s)) / 100;
+  const light = Math.max(0, Math.min(100, l)) / 100;
+  const chroma = (1 - Math.abs(2 * light - 1)) * sat;
+  const x = chroma * (1 - Math.abs(((hue / 60) % 2) - 1));
+  const m = light - chroma / 2;
+  const [r, g, b] =
+    hue < 60
+      ? [chroma, x, 0]
+      : hue < 120
+        ? [x, chroma, 0]
+        : hue < 180
+          ? [0, chroma, x]
+          : hue < 240
+            ? [0, x, chroma]
+            : hue < 300
+              ? [x, 0, chroma]
+              : [chroma, 0, x];
+  const toHex = (channel: number) =>
+    Math.round((channel + m) * 255)
+      .toString(16)
+      .padStart(2, "0");
+  return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+}
+
+/** Les accords d'Arc : des voisines (±40°), jamais la même teinte. */
+function harmonize(dominantHex: string, count: number): string[] {
+  const { h, s, l } = hexToHsl(dominantHex);
+  const satellites = [
+    hslToHex(h - 40, Math.min(100, s + 4), Math.min(88, l + 7)),
+    hslToHex(h + 40, Math.min(100, s + 4), Math.max(20, l - 6)),
+  ];
+  return satellites.slice(0, Math.max(0, count));
+}
 
 export function SpaceThemePanel() {
   const spaces = useSidebarSpacesStore((state) => state.spaces);
@@ -66,8 +132,7 @@ export function SpaceThemePanel() {
 
   const activeSpace = spaces.find((space) => space.id === activeSpaceId) ?? null;
   const current: SidebarTheme =
-    (activeSpace ? activeSpace.theme : defaultTheme) ??
-    makeSidebarThemeFromColors([SPACE_THEME_PALETTES[1]![0], SPACE_THEME_PALETTES[1]![1]]);
+    (activeSpace ? activeSpace.theme : defaultTheme) ?? makeSidebarThemeFromColors(["#f2a3c0"]);
   const apply = useCallback(
     (next: SidebarTheme) => {
       if (activeSpace) {
@@ -79,99 +144,109 @@ export function SpaceThemePanel() {
     [activeSpace, setDefaultTheme, setSpaceTheme],
   );
 
-  const [palettePage, setPalettePage] = useState(0);
-  const pageCount = Math.ceil(SPACE_THEME_PALETTES.length / PALETTES_PER_PAGE);
-  const visiblePalettes = useMemo(
-    () =>
-      SPACE_THEME_PALETTES.slice(
-        palettePage * PALETTES_PER_PAGE,
-        (palettePage + 1) * PALETTES_PER_PAGE,
-      ),
-    [palettePage],
-  );
+  const [swatchPage, setSwatchPage] = useState(0);
 
   // ------------------------------------------------------------- la toile
   const canvasRef = useRef<HTMLDivElement | null>(null);
-  const draggingGroupRef = useRef(false);
+  const dragRef = useRef<{
+    lastX: number;
+    lastY: number;
+    color: { h: number; s: number; l: number };
+  } | null>(null);
 
-  // LE geste d'Arc (corrigé sur les ~20 captures fondateur, 2e passe) : les
-  // couleurs ne se déplacent pas une à une — c'est UN GROUPE. On saisit le
-  // GROS rond (la dominante), les satellites suivent en formation, et leur
-  // ÉCARTEMENT dépend de la position : au centre de la toile ils se replient
-  // sous la dominante (une seule couleur au voile), en s'éloignant ils se
-  // déploient et le mélange s'ouvre. Un seul geste = position ET dosage.
-  const groupStopsAround = useCallback(
+  const dominant = current.stops[0] ?? { color: "#f2a3c0", x: 0.5, y: 0.42 };
+
+  /** Positions du groupe : dominante au point, satellites déployés selon la
+   * distance au centre (repliés au centre = une seule couleur au voile). */
+  const groupStops = useCallback(
     (x: number, y: number, colors: ReadonlyArray<string>): SidebarThemeStop[] => {
-      const distanceFromCenter = Math.hypot(x - 0.5, y - 0.5);
-      const spread = 0.02 + distanceFromCenter * 0.5;
-      const lift = spread * 0.45;
-      const clamp = (value: number) => Math.max(0.04, Math.min(0.96, value));
+      const distance = Math.hypot(x - 0.5, y - 0.5);
+      const spread = 0.03 + distance * 0.42;
+      const clamp = (value: number) => Math.max(0.05, Math.min(0.95, value));
       return colors.map((color, index) => {
         if (index === 0) return { color, x: clamp(x), y: clamp(y) };
         const side = index === 1 ? -1 : 1;
-        return { color, x: clamp(x + side * spread), y: clamp(y - lift) };
+        return { color, x: clamp(x + side * spread), y: clamp(y - spread * 0.5) };
       });
     },
     [],
   );
 
-  const moveGroupToPointer = useCallback(
+  const moveGroup = useCallback(
     (clientX: number, clientY: number) => {
       const canvas = canvasRef.current;
-      if (canvas === null || !draggingGroupRef.current) return;
+      const drag = dragRef.current;
+      if (canvas === null || drag === null) return;
       const rect = canvas.getBoundingClientRect();
       const x = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
       const y = Math.max(0, Math.min(1, (clientY - rect.top) / rect.height));
-      apply({
-        ...current,
-        stops: groupStopsAround(
-          x,
-          y,
-          current.stops.map((stop) => stop.color),
-        ),
-      });
+      // LA PALETTE INVISIBLE : le déplacement MODULE la couleur — la teinte
+      // dérive horizontalement, la lumière suit la verticale (monter =
+      // éclaircir jusqu'au délavé, descendre = foncer). En delta, pas en
+      // absolu : le jaune reste de la famille du jaune tant qu'on ne
+      // traverse pas la toile entière.
+      drag.color.h += (x - drag.lastX) * 160;
+      drag.color.l = Math.max(16, Math.min(90, drag.color.l - (y - drag.lastY) * 110));
+      drag.lastX = x;
+      drag.lastY = y;
+      const dominantHex = hslToHex(drag.color.h, drag.color.s, drag.color.l);
+      const colors = [dominantHex, ...harmonize(dominantHex, current.stops.length - 1)];
+      apply({ ...current, stops: groupStops(x, y, colors) });
     },
-    [apply, current, groupStopsAround],
+    [apply, current, groupStops],
   );
 
-  const dominant = current.stops[0] ?? { color: "#5db3f0", x: 0.5, y: 0.45 };
+  const beginDrag = useCallback(
+    (clientX: number, clientY: number) => {
+      const canvas = canvasRef.current;
+      if (canvas === null) return;
+      const rect = canvas.getBoundingClientRect();
+      dragRef.current = {
+        lastX: Math.max(0, Math.min(1, (clientX - rect.left) / rect.width)),
+        lastY: Math.max(0, Math.min(1, (clientY - rect.top) / rect.height)),
+        color: hexToHsl(dominant.color),
+      };
+    },
+    [dominant.color],
+  );
+
+  const applySolid = useCallback(
+    (color: string) => {
+      // Un rond uni = LA dominante change ; les satellites présents se
+      // réaccordent autour d'elle, la composition reste.
+      const colors = [color, ...harmonize(color, current.stops.length - 1)];
+      apply({ ...current, stops: groupStops(dominant.x, dominant.y, colors) });
+    },
+    [apply, current, dominant.x, dominant.y, groupStops],
+  );
+
+  const applyGradient = useCallback(
+    (trio: readonly [string, string, string]) => {
+      // Un gradient = les trois ronds d'un coup, préréglés.
+      apply({ ...current, stops: groupStops(dominant.x, dominant.y, trio) });
+    },
+    [apply, current, dominant.x, dominant.y, groupStops],
+  );
 
   const addStop = useCallback(() => {
-    if (current.stops.length >= MAX_SIDEBAR_THEME_STOPS) return;
-    const palette = SPACE_THEME_PALETTES[(current.stops.length * 5 + 3) % SPACE_THEME_PALETTES.length]!;
-    apply({
-      ...current,
-      stops: groupStopsAround(dominant.x, dominant.y, [
-        ...current.stops.map((stop) => stop.color),
-        palette[0],
-      ]),
-    });
-  }, [apply, current, dominant.x, dominant.y, groupStopsAround]);
+    if (current.stops.length >= MAX_ARC_STOPS) return;
+    const colors = [
+      dominant.color,
+      ...harmonize(dominant.color, current.stops.length),
+    ];
+    apply({ ...current, stops: groupStops(dominant.x, dominant.y, colors) });
+  }, [apply, current, dominant.color, dominant.x, dominant.y, groupStops]);
   const removeStop = useCallback(() => {
     if (current.stops.length <= 1) return;
     apply({
       ...current,
-      stops: groupStopsAround(
+      stops: groupStops(
         dominant.x,
         dominant.y,
         current.stops.slice(0, -1).map((stop) => stop.color),
       ),
     });
-  }, [apply, current, dominant.x, dominant.y, groupStopsAround]);
-
-  const applyPalette = useCallback(
-    (color: string) => {
-      // « Ça tourne » (verbatim fondateur) : la couleur cliquée devient la
-      // DOMINANTE, les autres reculent d'un rang vers les satellites. Trois
-      // clics successifs composent donc le trio entier, sans rien défaire.
-      const rotated = [color, ...current.stops.map((stop) => stop.color)].slice(
-        0,
-        Math.max(3, Math.min(current.stops.length, MAX_SIDEBAR_THEME_STOPS)),
-      );
-      apply({ ...current, stops: groupStopsAround(dominant.x, dominant.y, rotated) });
-    },
-    [apply, current, dominant.x, dominant.y, groupStopsAround],
-  );
+  }, [apply, current, dominant.x, dominant.y, groupStops]);
 
   const isDarkCanvas =
     current.appearance === "dark" ||
@@ -179,29 +254,38 @@ export function SpaceThemePanel() {
       typeof window !== "undefined" &&
       window.matchMedia("(prefers-color-scheme: dark)").matches);
 
+  const mutedControl = isDarkCanvas
+    ? "text-white/50 hover:text-white/80"
+    : "text-neutral-400 hover:text-neutral-600";
+
   return (
-    <div className="flex w-72 flex-col">
-      {/* La toile pointillée, en liquid glass : translucide, elle laisse le
-          voile transparaître (« la carte a un peu liquid glass ») — jamais
-          un blanc opaque qui éblouit. */}
+    // Le PANNEAU ENTIER suit le mode édité (☀️ = crème translucide, 🌙 =
+    // nuit translucide) — nuancier, vague et molette compris, comme sur les
+    // captures : Arc n'a jamais un bas sombre sous une toile claire.
+    <div
+      className={cn(
+        "flex w-[340px] flex-col rounded-lg backdrop-blur-xl transition-colors",
+        isDarkCanvas ? "bg-neutral-900/78" : "bg-[#f6efe6]/85",
+      )}
+    >
+      {/* La toile-palette : tout le haut du panneau, pointillée, sans
+          sous-carte encadrée. */}
       <div
         ref={canvasRef}
         className={cn(
-          "relative m-2 h-64 touch-none rounded-xl bg-[radial-gradient(circle,var(--dot)_1px,transparent_1px)] bg-[size:8px_8px] transition-colors",
+          "relative h-[360px] touch-none rounded-t-lg bg-[radial-gradient(circle,var(--dot)_1px,transparent_1px)] bg-[size:9px_9px]",
           isDarkCanvas
-            ? "bg-neutral-900/45 [--dot:color-mix(in_oklab,white_16%,transparent)]"
-            : "bg-white/45 [--dot:color-mix(in_oklab,black_14%,transparent)]",
+            ? "[--dot:color-mix(in_oklab,white_15%,transparent)]"
+            : "[--dot:color-mix(in_oklab,black_13%,transparent)]",
         )}
         onPointerMove={(event) => {
-          if (draggingGroupRef.current) {
-            moveGroupToPointer(event.clientX, event.clientY);
-          }
+          if (dragRef.current !== null) moveGroup(event.clientX, event.clientY);
         }}
         onPointerUp={() => {
-          draggingGroupRef.current = false;
+          dragRef.current = null;
         }}
       >
-        <div className="absolute inset-x-0 top-2 flex items-center justify-center gap-1">
+        <div className="absolute inset-x-0 top-3 flex items-center justify-center gap-2">
           {APPEARANCE_CHOICES.map(({ value, icon: Icon, label }) => (
             <button
               key={value}
@@ -214,26 +298,21 @@ export function SpaceThemePanel() {
                 current.appearance === value
                   ? isDarkCanvas
                     ? "bg-white/15 text-white"
-                    : "bg-black/10 text-neutral-800"
-                  : isDarkCanvas
-                    ? "text-white/50 hover:text-white/80"
-                    : "text-neutral-400 hover:text-neutral-600",
+                    : "bg-black/10 text-neutral-700"
+                  : mutedControl,
               )}
             >
               <Icon className="size-4" />
             </button>
           ))}
         </div>
-        {/* Les satellites suivent, ils ne se saisissent pas : un seul geste
-            pilote tout le groupe. Rendus AVANT la dominante pour glisser
-            dessous quand le groupe se replie au centre. */}
         {current.stops.slice(1).map((stop, index) => {
-          const size = STOP_SIZES_PX[index + 1] ?? 18;
+          const size = STOP_SIZES_PX[index + 1] ?? 20;
           return (
             <span
               key={index}
               aria-hidden
-              className="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 rounded-full shadow-sm ring-2 ring-white transition-[left,top,width,height] duration-75"
+              className="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 rounded-full shadow-sm ring-2 ring-white transition-[left,top,background-color] duration-75"
               style={{
                 left: `${stop.x * 100}%`,
                 top: `${stop.y * 100}%`,
@@ -246,10 +325,10 @@ export function SpaceThemePanel() {
         })}
         <button
           type="button"
-          aria-label="Déplacer le mélange — les satellites suivent"
+          aria-label="Mélanger — la position module la couleur, les satellites s'accordent"
           onPointerDown={(event) => {
             event.preventDefault();
-            draggingGroupRef.current = true;
+            beginDrag(event.clientX, event.clientY);
             try {
               event.currentTarget.setPointerCapture(event.pointerId);
             } catch {
@@ -257,14 +336,12 @@ export function SpaceThemePanel() {
             }
           }}
           onPointerMove={(event) => {
-            if (draggingGroupRef.current) {
-              moveGroupToPointer(event.clientX, event.clientY);
-            }
+            if (dragRef.current !== null) moveGroup(event.clientX, event.clientY);
           }}
           onPointerUp={() => {
-            draggingGroupRef.current = false;
+            dragRef.current = null;
           }}
-          className="absolute -translate-x-1/2 -translate-y-1/2 cursor-grab rounded-full shadow-md ring-[3px] ring-white active:cursor-grabbing"
+          className="absolute -translate-x-1/2 -translate-y-1/2 cursor-grab rounded-full shadow-md ring-[3px] ring-white transition-[background-color] duration-75 active:cursor-grabbing"
           style={{
             left: `${dominant.x * 100}%`,
             top: `${dominant.y * 100}%`,
@@ -273,31 +350,27 @@ export function SpaceThemePanel() {
             backgroundColor: dominant.color,
           }}
         />
-        <div className="absolute inset-x-0 bottom-2 flex items-center justify-center gap-3">
+        <div className="absolute inset-x-0 bottom-2.5 flex items-center justify-center gap-4">
           <button
             type="button"
-            aria-label="Retirer une pastille"
+            aria-label="Retirer un rond"
             disabled={current.stops.length <= 1}
             onClick={removeStop}
             className={cn(
               "flex size-6 cursor-pointer items-center justify-center rounded-md transition-colors disabled:cursor-default disabled:opacity-30",
-              isDarkCanvas
-                ? "text-white/50 hover:text-white/80"
-                : "text-neutral-400 hover:text-neutral-600",
+              mutedControl,
             )}
           >
             <MinusIcon className="size-4" />
           </button>
           <button
             type="button"
-            aria-label="Ajouter une pastille"
-            disabled={current.stops.length >= MAX_SIDEBAR_THEME_STOPS}
+            aria-label="Ajouter un rond"
+            disabled={current.stops.length >= MAX_ARC_STOPS}
             onClick={addStop}
             className={cn(
               "flex size-6 cursor-pointer items-center justify-center rounded-md transition-colors disabled:cursor-default disabled:opacity-30",
-              isDarkCanvas
-                ? "text-white/50 hover:text-white/80"
-                : "text-neutral-400 hover:text-neutral-600",
+              mutedControl,
             )}
           >
             <PlusIcon className="size-4" />
@@ -305,67 +378,78 @@ export function SpaceThemePanel() {
         </div>
       </div>
 
-      {/* Les palettes : un rond = un trio, posé entier d'un clic. */}
-      <div className="flex items-center gap-1 px-3 pb-1">
+      {/* Le nuancier : page 1 des UNIS (un rond = la dominante), flèche →
+          page des GRADIENTS (un rond = les trois d'un coup). */}
+      <div className="flex items-center gap-1.5 px-3 pt-2.5 pb-1">
         <button
           type="button"
-          aria-label="Palettes précédentes"
-          disabled={palettePage === 0}
-          onClick={() => setPalettePage((page) => Math.max(0, page - 1))}
-          className="flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:text-foreground disabled:cursor-default disabled:opacity-30"
+          aria-label="Couleurs unies"
+          disabled={swatchPage === 0}
+          onClick={() => setSwatchPage(0)}
+          className={cn("flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-md transition-colors disabled:cursor-default disabled:opacity-30", mutedControl)}
         >
           <ChevronLeftIcon className="size-4" />
         </button>
         <div className="flex flex-1 items-center justify-between">
-          {visiblePalettes.map((palette) => (
-            <button
-              key={palette.join("-")}
-              type="button"
-              aria-label={`Couleur ${palette[0]}`}
-              onClick={() => applyPalette(palette[0])}
-              className="size-6 cursor-pointer rounded-full ring-1 ring-black/10 transition-transform hover:scale-110"
-              style={{
-                // Un rond = UNE couleur, et « ça tourne » : elle devient la
-                // dominante, les précédentes reculent vers les satellites.
-                // En mode sombre, le nuancier s'assombrit avec le panneau.
-                backgroundColor: isDarkCanvas
-                  ? `color-mix(in oklab, ${palette[0]} 72%, black)`
-                  : palette[0],
-              }}
-            />
-          ))}
+          {swatchPage === 0
+            ? SOLID_SWATCHES.map((color) => (
+                <button
+                  key={color}
+                  type="button"
+                  aria-label={`Couleur ${color}`}
+                  onClick={() => applySolid(color)}
+                  className="size-6 cursor-pointer rounded-full ring-1 ring-black/10 transition-transform hover:scale-110"
+                  style={{
+                    backgroundColor: isDarkCanvas
+                      ? `color-mix(in oklab, ${color} 72%, black)`
+                      : color,
+                  }}
+                />
+              ))
+            : GRADIENT_SWATCHES.map((trio) => (
+                <button
+                  key={trio.join("-")}
+                  type="button"
+                  aria-label={`Gradient ${trio.join(", ")}`}
+                  onClick={() => applyGradient(trio)}
+                  className="size-6 cursor-pointer rounded-full ring-1 ring-black/10 transition-transform hover:scale-110"
+                  style={{
+                    background: `linear-gradient(135deg, ${trio[0]} 0%, ${trio[1]} 50%, ${trio[2]} 100%)`,
+                    ...(isDarkCanvas ? { filter: "brightness(0.78)" } : {}),
+                  }}
+                />
+              ))}
         </div>
         <button
           type="button"
-          aria-label="Palettes suivantes"
-          disabled={palettePage >= pageCount - 1}
-          onClick={() => setPalettePage((page) => Math.min(pageCount - 1, page + 1))}
-          className="flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:text-foreground disabled:cursor-default disabled:opacity-30"
+          aria-label="Gradients préréglés"
+          disabled={swatchPage === 1}
+          onClick={() => setSwatchPage(1)}
+          className={cn("flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-md transition-colors disabled:cursor-default disabled:opacity-30", mutedControl)}
         >
           <ChevronRightIcon className="size-4" />
         </button>
       </div>
 
-      {/* La vague d'intensité + la molette de grain, comme Arc. */}
-      <div className="flex items-center gap-4 px-4 pt-1 pb-3">
+      {/* La vague d'intensité + la molette de grain. */}
+      <div className="flex items-center gap-4 px-4 pt-1 pb-3.5">
         <IntensityWave
+          dark={isDarkCanvas}
           value={current.intensity}
           onChange={(intensity) => apply({ ...current, intensity })}
         />
-        <GrainDial value={current.grain} onChange={(grain) => apply({ ...current, grain })} />
+        <GrainDial dark={isDarkCanvas} value={current.grain} onChange={(grain) => apply({ ...current, grain })} />
       </div>
     </div>
   );
 }
 
 /**
- * Le slider d'Arc, décortiqué image par image (vidéo fondateur 29/07) : la
- * sinusoïde n'est pas un rail décoratif — SON AMPLITUDE EST LA VALEUR. À
- * zéro la ligne est presque plate et le voile est délavé ; à fond la vague
- * est pleine et la couleur assume. Le contrôle mime son effet : c'est ça,
- * le « archi bien fait ».
+ * Le slider d'Arc : la sinusoïde n'est pas un rail décoratif — SON AMPLITUDE
+ * EST LA VALEUR. Presque plate quand la couleur est délavée, pleine quand
+ * elle assume. La pilule reste la poignée de position.
  */
-function IntensityWave(props: { value: number; onChange: (value: number) => void }) {
+function IntensityWave(props: { dark: boolean; value: number; onChange: (value: number) => void }) {
   const railRef = useRef<HTMLDivElement | null>(null);
   const draggingRef = useRef(false);
   const valueFromPointer = (clientX: number) => {
@@ -375,8 +459,6 @@ function IntensityWave(props: { value: number; onChange: (value: number) => void
     props.onChange(Math.max(0, Math.min(1, (clientX - rect.left) / rect.width)));
   };
   const wavePath = useMemo(() => {
-    // Période 22 px sur 160 px, centrée sur y=14 ; l'amplitude suit la
-    // valeur : 0,8 px (presque plat, jamais mort) → 8 px (pleine vague).
     const amplitude = 0.8 + Math.max(0, Math.min(1, props.value)) * 7.2;
     const points: string[] = [];
     for (let x = 0; x <= 160; x += 2) {
@@ -401,12 +483,10 @@ function IntensityWave(props: { value: number; onChange: (value: number) => void
       onPointerDown={(event) => {
         draggingRef.current = true;
         valueFromPointer(event.clientX);
-        // Capture APRÈS le seek, et sans jamais l'exiger : un pointeur déjà
-        // levé (ou synthétique) fait échouer la capture, pas le réglage.
         try {
           event.currentTarget.setPointerCapture(event.pointerId);
         } catch {
-          // Le drag continuera tant que le pointeur reste au-dessus.
+          // Sans capture, le drag vit tant que le pointeur reste au-dessus.
         }
       }}
       onPointerMove={(event) => {
@@ -421,7 +501,7 @@ function IntensityWave(props: { value: number; onChange: (value: number) => void
         <path
           d={wavePath}
           fill="none"
-          stroke="color-mix(in oklab, var(--color-muted-foreground) 55%, transparent)"
+          stroke={props.dark ? "rgb(255 255 255 / 0.45)" : "rgb(60 60 65 / 0.5)"}
           strokeWidth="3.5"
           strokeLinecap="round"
         />
@@ -435,15 +515,11 @@ function IntensityWave(props: { value: number; onChange: (value: number) => void
   );
 }
 
-/**
- * La molette de grain : un cadran de points, un index qui tourne. Glisser
- * verticalement (ou molette) ajuste — le geste circulaire exact d'Arc
- * demanderait plus qu'il ne rend.
- */
-function GrainDial(props: { value: number; onChange: (value: number) => void }) {
+/** La molette de grain : cadran pointillé, index qui tourne, disque central
+ * révélé au survol. Drag vertical (+ flèches clavier). */
+function GrainDial(props: { dark: boolean; value: number; onChange: (value: number) => void }) {
   const draggingRef = useRef<{ startY: number; startValue: number } | null>(null);
   const DOTS = 12;
-  // L'index balaie de -135° (valeur 0) à +135° (valeur 1).
   const angle = -135 + props.value * 270;
   return (
     <div
@@ -478,7 +554,7 @@ function GrainDial(props: { value: number; onChange: (value: number) => void }) 
     >
       <span
         aria-hidden
-        className="absolute left-1/2 top-1/2 size-7 -translate-x-1/2 -translate-y-1/2 rounded-full bg-muted-foreground/15 opacity-0 transition-opacity group-hover:opacity-100"
+        className={cn("absolute left-1/2 top-1/2 size-7 -translate-x-1/2 -translate-y-1/2 rounded-full opacity-0 transition-opacity group-hover:opacity-100", props.dark ? "bg-white/15" : "bg-black/10")}
       />
       {Array.from({ length: DOTS }, (_, index) => {
         const dotAngle = (index / DOTS) * 360;
@@ -486,7 +562,7 @@ function GrainDial(props: { value: number; onChange: (value: number) => void }) 
           <span
             key={index}
             aria-hidden
-            className="absolute left-1/2 top-1/2 size-[3px] rounded-full bg-muted-foreground/40"
+            className={cn("absolute left-1/2 top-1/2 size-[3px] rounded-full", props.dark ? "bg-white/40" : "bg-black/30")}
             style={{
               transform: `translate(-50%, -50%) rotate(${dotAngle}deg) translateY(-21px)`,
             }}
@@ -495,7 +571,7 @@ function GrainDial(props: { value: number; onChange: (value: number) => void }) 
       })}
       <span
         aria-hidden
-        className="absolute left-1/2 top-1/2 h-3 w-[3px] -translate-x-1/2 rounded-full bg-muted-foreground"
+        className={cn("absolute left-1/2 top-1/2 h-3 w-[3px] -translate-x-1/2 rounded-full", props.dark ? "bg-white/80" : "bg-black/60")}
         style={{ transform: `translate(-50%, -50%) rotate(${angle}deg) translateY(-13px)` }}
       />
     </div>

@@ -184,9 +184,19 @@ export function SidebarSpacesBar() {
           <TooltipPopup side="top">Modifier les couleurs</TooltipPopup>
         </Tooltip>
         <PopoverPopup
-          side="top"
-          align="end"
-          className="p-0"
+          // À CÔTÉ de la SIDEBAR ENTIÈRE, par-dessus la page — jamais DANS
+          // la colonne (reproche fondateur : « ça apparaît à l'intérieur de
+          // la colonne, c'est affreux ; sur Arc ça apparaît à côté »).
+          // L'ancre est la sidebar elle-même, pas le petit bouton.
+          anchor={() => document.querySelector("[data-app-sidebar]")}
+          side="right"
+          // Centré verticalement contre la sidebar, comme Arc — ancré en bas
+          // il débordait de l'écran et coupait nuancier et vague.
+          align="center"
+          sideOffset={14}
+          // Le panneau porte son propre verre (clair ou nuit selon ☀️/🌙) —
+          // la surface par défaut du popup ne doit pas assombrir dessous.
+          className="border-0! bg-transparent! p-0 shadow-2xl before:hidden"
           viewportClassName="p-0 [--viewport-inline-padding:0px]"
         >
           <SpaceThemePanel />

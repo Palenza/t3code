@@ -1,7 +1,10 @@
+import { useEffect } from "react";
+
 import { useTheme } from "../../hooks/useTheme";
 import { activeSpaceTheme, useSidebarSpacesStore } from "../../sidebarSpacesStore";
 import {
   resolveSidebarTheme,
+  resolveSidebarThemeAppearance,
   SIDEBAR_THEME_GRAIN_URL,
   sidebarThemeBackground,
   sidebarThemeGrainOpacity,
@@ -25,6 +28,32 @@ export function SidebarThemeWash() {
   );
   const theme = spaceTheme ?? fallbackTheme;
   const { resolvedTheme } = useTheme();
+  const washAppearance = theme === null ? null : resolveSidebarThemeAppearance(theme, resolvedTheme);
+
+  // La règle d'Arc que le fondateur a exigée (« pas de mode clair qui rend
+  // les textes illisibles ») : le TEXTE suit le VOILE, jamais le thème
+  // global de l'app. Un voile clair (☀️) impose l'encre sombre même quand
+  // l'app est en sombre — et inversement. Les tokens vivent sur l'élément
+  // sidebar (ancêtre des textes), posés/retirés ici.
+  useEffect(() => {
+    const sidebar = document.querySelector<HTMLElement>("[data-app-sidebar]");
+    if (sidebar === null || washAppearance === null) return;
+    if (washAppearance === "light") {
+      sidebar.style.setProperty("--sidebar-foreground", "oklch(0.29 0.03 262)");
+      sidebar.style.setProperty("--sidebar-muted-foreground", "oklch(0.47 0.03 262)");
+      sidebar.style.setProperty("--sidebar-border", "oklch(0.29 0.03 262 / 14%)");
+    } else {
+      sidebar.style.setProperty("--sidebar-foreground", "oklch(0.972 0.004 262)");
+      sidebar.style.setProperty("--sidebar-muted-foreground", "oklch(0.78 0.01 262)");
+      sidebar.style.setProperty("--sidebar-border", "oklch(0.972 0.004 262 / 14%)");
+    }
+    return () => {
+      sidebar.style.removeProperty("--sidebar-foreground");
+      sidebar.style.removeProperty("--sidebar-muted-foreground");
+      sidebar.style.removeProperty("--sidebar-border");
+    };
+  }, [washAppearance]);
+
   if (theme === null) {
     return null;
   }
