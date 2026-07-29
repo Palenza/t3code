@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { MinusIcon, MoonIcon, PaletteIcon, PlusIcon, SparklesIcon, SunIcon } from "lucide-react";
 
@@ -70,8 +70,16 @@ export function ThemeSettingsPanel() {
   const active = storedTheme !== null;
   const current = storedTheme ?? DEFAULT_THEME;
 
-  const [selectedStopIndex, setSelectedStopIndex] = useState(0);
-  const selectedStop = current.stops[Math.min(selectedStopIndex, current.stops.length - 1)];
+  // Clamped where it is USED, not just displayed: a scope switch can shrink
+  // the stop list under a high stored index, and writing through the raw
+  // index would silently patch nothing (trouvaille essaim 29/07).
+  const [rawStopIndex, setSelectedStopIndex] = useState(0);
+  const selectedStopIndex = Math.max(0, Math.min(rawStopIndex, current.stops.length - 1));
+  const selectedStop = current.stops[selectedStopIndex];
+  useEffect(() => {
+    // A new scope is a new canvas — start from its first stop, predictably.
+    setSelectedStopIndex(0);
+  }, [effectiveScope]);
 
   const apply = useCallback(
     (next: SidebarTheme) => {

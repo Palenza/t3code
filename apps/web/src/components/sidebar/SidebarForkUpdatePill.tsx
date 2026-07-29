@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { DownloadIcon, Loader2Icon } from "lucide-react";
 
@@ -9,11 +9,15 @@ import { stackedThreadToast, toastManager } from "../ui/toast";
 const ETAT_PATH = "/api/fork-update/etat";
 const LANCER_PATH = "/api/fork-update/lancer";
 const POLL_MS = 30 * 60 * 1000;
+/** While a rebuild runs, its end (success restarts the app; failure must be
+ * SAID) is worth watching closely — not once every thirty minutes. */
+const BUILDING_POLL_MS = 5_000;
 
 interface ForkUpdateEtat {
   readonly behind: number | null;
   readonly latestSubject: string | null;
   readonly building: boolean;
+  readonly lastRebuildExitCode?: number | null;
 }
 
 /**
@@ -27,6 +31,11 @@ interface ForkUpdateEtat {
 export function SidebarForkUpdatePill() {
   const [etat, setEtat] = useState<ForkUpdateEtat | null>(null);
   const [launching, setLaunching] = useState(false);
+  // Failure detection spans polls: `building` was true, now it is false and
+  // the server remembers a non-zero exit — the rebuild died and the app was
+  // NOT replaced. Without this toast the only symptom is 30 min of silence
+  // (trouvaille essaim 29/07).
+  const wasBuildingRef = useRef(false);
 
   const refresh = useCallback(async () => {
     try {
@@ -37,17 +46,37 @@ export function SidebarForkUpdatePill() {
         setEtat(null);
         return;
       }
-      setEtat((await response.json()) as ForkUpdateEtat);
+      const next = (await response.json()) as ForkUpdateEtat;
+      if (
+        wasBuildingRef.current &&
+        !next.building &&
+        typeof next.lastRebuildExitCode === "number" &&
+        next.lastRebuildExitCode !== 0
+      ) {
+        toastManager.add(
+          stackedThreadToast({
+            type: "error",
+            title: "Update échouée",
+            description: `Le rebuild s'est arrêté (code ${next.lastRebuildExitCode}). L'app n'a pas changé — voir ~/.t3/logs/t3-maj.log.`,
+          }),
+        );
+      }
+      wasBuildingRef.current = next.building;
+      setEtat(next);
     } catch {
       setEtat(null);
     }
   }, []);
 
+  const building = (etat?.building ?? false) || launching;
   useEffect(() => {
     void refresh();
-    const interval = window.setInterval(() => void refresh(), POLL_MS);
+    const interval = window.setInterval(
+      () => void refresh(),
+      building ? BUILDING_POLL_MS : POLL_MS,
+    );
     return () => window.clearInterval(interval);
-  }, [refresh]);
+  }, [refresh, building]);
 
   const launch = useCallback(async () => {
     setLaunching(true);
@@ -65,6 +94,7 @@ export function SidebarForkUpdatePill() {
               "Pull + rebuild local (quelques minutes). La nouvelle app s'ouvre toute seule à la fin — ferme celle-ci à ce moment-là.",
           }),
         );
+        wasBuildingRef.current = true;
         setEtat((previous) => (previous === null ? null : { ...previous, building: true }));
         return;
       }
@@ -92,7 +122,6 @@ export function SidebarForkUpdatePill() {
     return null;
   }
 
-  const building = etat.building || launching;
   return (
     <button
       type="button"
@@ -100,8 +129,8 @@ export function SidebarForkUpdatePill() {
       onClick={() => void launch()}
       title={etat.latestSubject ?? undefined}
       className={cn(
-        "mb-1 flex w-full cursor-pointer items-center gap-2 rounded-lg border border-blue-400/30 bg-blue-500/15 px-3 py-2 text-left text-xs font-medium text-blue-100 transition-colors",
-        building ? "cursor-default opacity-80" : "hover:bg-blue-500/25",
+        "mb-1 flex w-full cursor-pointer items-center gap-2 rounded-lg border border-primary/25 bg-primary/12 px-3 py-2 text-left text-xs font-medium text-primary transition-colors",
+        building ? "cursor-default opacity-80" : "hover:bg-primary/20",
       )}
     >
       {building ? (

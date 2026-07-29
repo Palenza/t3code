@@ -5595,6 +5595,11 @@ function ChatViewContent(props: ChatViewProps) {
   // every candidate's usage once per alert and give the figures a beat to
   // land — the effect re-runs on fresh statuses, or on the grace timer.
   const refreshedForAlertIdRef = useRef<string | null>(null);
+  // The refreshed figures deserve a real beat to LAND. Deadline instant, not
+  // a one-shot timer: the effect re-runs on every providerStatuses emission,
+  // and the first (possibly unrelated) one used to cancel the grace timer and
+  // relay on stale figures anyway (trouvaille essaim 29/07).
+  const relayNotBeforeRef = useRef(0);
   const [relayRefreshTick, setRelayRefreshTick] = useState(0);
   const refreshProvidersForRelay = useAtomCommand(serverEnvironment.refreshProviders, {
     reportFailure: false,
@@ -5611,21 +5616,71 @@ function ChatViewContent(props: ChatViewProps) {
     ) {
       return;
     }
-    if (refreshedForAlertIdRef.current !== quotaAlert.id) {
+    // Only mark the alert refreshed when a refresh actually went out: with no
+    // primary environment there is nothing to ask, and the relay proceeds on
+    // the figures at hand rather than silently consuming the one refresh.
+    if (refreshedForAlertIdRef.current !== quotaAlert.id && primaryEnvironment) {
       refreshedForAlertIdRef.current = quotaAlert.id;
-      if (primaryEnvironment) {
-        void refreshProvidersForRelay({
-          environmentId: primaryEnvironment.environmentId,
-          input: {},
-        });
-        const graceTimer = window.setTimeout(() => setRelayRefreshTick((tick) => tick + 1), 2_000);
-        return () => window.clearTimeout(graceTimer);
-      }
+      relayNotBeforeRef.current = Date.now() + 2_000;
+      void refreshProvidersForRelay({
+        environmentId: primaryEnvironment.environmentId,
+        input: {},
+      });
+    }
+    const remainingGraceMs = relayNotBeforeRef.current - Date.now();
+    if (remainingGraceMs > 0) {
+      // Still inside the grace window — wake up when it ends. Every re-run in
+      // the window reschedules; the last timer standing fires the decision.
+      const graceTimer = window.setTimeout(
+        () => setRelayRefreshTick((tick) => tick + 1),
+        remainingGraceMs,
+      );
+      return () => window.clearTimeout(graceTimer);
     }
     autoRelayedAlertIdRef.current = quotaAlert.id;
     const targetName = quotaSwitchTarget.displayName?.trim() || quotaSwitchTarget.instanceId;
     const currentModel = activeThread?.modelSelection?.model ?? "";
     if (activeThread) {
+      // A STARTED thread on a non-Claude driver cannot hop accounts — its
+      // resume state is not portable (only Claude transcripts are migrated).
+      // Saying "this thread continues elsewhere" there would be a lie, and
+      // the silent guard inside onProviderModelSelect would also drop the
+      // relay entirely. Instead: new threads get the sticky target, and the
+      // toast says exactly what moved and what stayed (essaim 29/07).
+      const startedInstanceId = activeThread.session?.providerInstanceId ?? null;
+      const startedEntry =
+        startedInstanceId === null
+          ? undefined
+          : providerStatuses.find((snapshot) => snapshot.instanceId === startedInstanceId);
+      const targetEntry = providerStatuses.find(
+        (snapshot) => snapshot.instanceId === quotaSwitchTarget.instanceId,
+      );
+      const threadCannotHop =
+        startedEntry !== undefined &&
+        String(startedEntry.driver) !== "claudeAgent" &&
+        Boolean(startedEntry.continuation?.groupKey) &&
+        Boolean(targetEntry?.continuation?.groupKey) &&
+        startedEntry.continuation?.groupKey !== targetEntry?.continuation?.groupKey;
+      if (threadCannotHop) {
+        const stickyModel = resolveAppModelSelectionForInstance(
+          quotaSwitchTarget.instanceId,
+          settings,
+          providerStatuses,
+          currentModel,
+        );
+        if (stickyModel) {
+          setStickyComposerModelSelection({
+            instanceId: quotaSwitchTarget.instanceId,
+            model: stickyModel,
+          });
+        }
+        toastManager.add({
+          type: "warning",
+          title: `Auto relay — new threads start on ${targetName}`,
+          description: `${quotaAlert.title}. This thread stays on its account (its session cannot move); new threads start on ${targetName}.`,
+        });
+        return;
+      }
       // Works for drafts AND started threads alike: on a started Claude
       // thread the server migrates the transcript at the next turn.
       providerModelSelectRef.current?.(quotaSwitchTarget.instanceId, currentModel);

@@ -207,14 +207,28 @@ export const presentProviderRateLimits = (input: {
   const gauges = rateLimits.windows
     .map((window): RateLimitGauge => {
       const utilization = window.utilization;
+      // A "rejected" whose own reset time has PASSED is a wall that no longer
+      // exists: showing it — and worse, letting the relay logic treat the
+      // account as walled — would freeze one refusal into a permanent state.
+      // The severity is dropped; the percentage (if any) speaks for itself.
+      // With no reset time we cannot judge, so the severity stands — the
+      // server-side merge handles that case from the account API's figures.
+      const rejectionExpired =
+        window.severity === "rejected" &&
+        window.resetsAtEpoch !== undefined &&
+        (() => {
+          const instant = resolveResetInstant(window.resetsAtEpoch);
+          return instant !== null && instant <= input.now;
+        })();
+      const effective = rejectionExpired ? { ...window, severity: undefined } : window;
       return {
         kind: window.kind,
         label: formatWindowLabel(window.kind),
         percentLabel: utilization === undefined ? null : `${Math.round(utilization)}%`,
         barPercent: utilization === undefined ? null : Math.max(0, Math.min(100, utilization)),
-        tone: resolveTone(window),
+        tone: resolveTone(effective),
         resetLabel: formatReset({ resetsAtEpoch: window.resetsAtEpoch, now: input.now }),
-        severityLabel: formatSeverityLabel(window.severity),
+        severityLabel: formatSeverityLabel(effective.severity),
       };
     })
     // A row naming a window and saying nothing else about it is a line of

@@ -154,6 +154,42 @@ describe("mergeRateLimitWindows", () => {
     ]);
   });
 
+  it("drops a stored rejected when the account API reports the window well below the wall (essaim 29/07)", () => {
+    // The refusal detector can be fooled, and a real wall ends at its reset:
+    // either way, an API reading at 12% proves the wall is not there. Keeping
+    // the rejected would silently remove a healthy account from the relay.
+    const merged = mergeRateLimitWindows(
+      [{ kind: "five_hour", severity: "rejected", resetsAtEpoch: 1_753_000_000 }],
+      [{ kind: "five_hour", utilization: 12, resetsAtEpoch: 1_753_020_000 }],
+    );
+
+    expect(merged).toEqual([
+      { kind: "five_hour", utilization: 12, resetsAtEpoch: 1_753_020_000 },
+    ]);
+  });
+
+  it("keeps a stored rejected while the API still reports high utilization", () => {
+    // 97% does not contradict the wall — near the ceiling, the rejected is
+    // the more precise of the two readings and must survive the merge.
+    const merged = mergeRateLimitWindows(
+      [{ kind: "five_hour", severity: "rejected" }],
+      [{ kind: "five_hour", utilization: 97 }],
+    );
+
+    expect(merged).toEqual([{ kind: "five_hour", severity: "rejected", utilization: 97 }]);
+  });
+
+  it("keeps a stored rejected when the incoming window carries no utilization", () => {
+    const merged = mergeRateLimitWindows(
+      [{ kind: "five_hour", severity: "rejected" }],
+      [{ kind: "five_hour", resetsAtEpoch: 1_753_020_000 }],
+    );
+
+    expect(merged).toEqual([
+      { kind: "five_hour", severity: "rejected", resetsAtEpoch: 1_753_020_000 },
+    ]);
+  });
+
   it("keeps a stable order so gauges do not reshuffle between updates", () => {
     const merged = mergeRateLimitWindows(
       [

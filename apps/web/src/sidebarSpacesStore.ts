@@ -62,7 +62,10 @@ interface SidebarSpacesState {
   /** Espace suivant/précédent, la vue « tout » (null) fait partie du cycle. */
   cycleSpace: (direction: 1 | -1) => void;
   assignThread: (threadKey: string, spaceId: string | null) => void;
-  toggleFavorite: (favorite: SidebarFavorite) => void;
+  /** "full" = cap atteint, rien n'a bougé — l'appelant le DIT (jamais muet). */
+  toggleFavorite: (favorite: SidebarFavorite) => "added" | "removed" | "full";
+  /** Un fil supprimé ne laisse ni favori fantôme ni rangement orphelin. */
+  purgeThread: (threadKey: string) => void;
 }
 
 const makeSpaceId = (): string =>
@@ -123,16 +126,27 @@ export const useSidebarSpacesStore = create<SidebarSpacesState>()(
           }
           return { assignments: { ...state.assignments, [threadKey]: spaceId } };
         }),
-      toggleFavorite: (favorite) =>
+      toggleFavorite: (favorite) => {
+        const state = get();
+        if (state.favorites.some((f) => f.threadKey === favorite.threadKey)) {
+          set({
+            favorites: state.favorites.filter((f) => f.threadKey !== favorite.threadKey),
+          });
+          return "removed";
+        }
+        if (state.favorites.length >= MAX_SIDEBAR_FAVORITES) {
+          return "full";
+        }
+        set({ favorites: [...state.favorites, favorite] });
+        return "added";
+      },
+      purgeThread: (threadKey) =>
         set((state) => {
-          const existing = state.favorites.some((f) => f.threadKey === favorite.threadKey);
-          if (existing) {
-            return { favorites: state.favorites.filter((f) => f.threadKey !== favorite.threadKey) };
-          }
-          if (state.favorites.length >= MAX_SIDEBAR_FAVORITES) {
-            return state;
-          }
-          return { favorites: [...state.favorites, favorite] };
+          const { [threadKey]: _removed, ...assignments } = state.assignments;
+          return {
+            assignments,
+            favorites: state.favorites.filter((f) => f.threadKey !== threadKey),
+          };
         }),
     }),
     { name: "t3code:sidebar-spaces:v1" },

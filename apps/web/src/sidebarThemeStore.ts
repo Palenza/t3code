@@ -37,6 +37,12 @@ export interface SidebarTheme {
 
 export const MAX_SIDEBAR_THEME_STOPS = 6;
 
+// Declared BEFORE the store: `migrate` runs during the synchronous hydration
+// that `create()` itself triggers, and a `const` below it is still in its
+// temporal dead zone at that instant — the v1 migration would throw and the
+// stored theme would be lost on the next write (trouvaille essaim 29/07).
+const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
+
 /** Pastels façon palette Arc — point de départ, pas une limite. */
 export const SIDEBAR_THEME_PRESETS: ReadonlyArray<string> = [
   "#f4eef0",
@@ -160,7 +166,6 @@ export function resolveSidebarTheme(
   return state.theme;
 }
 
-const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
 const clamp01 = (value: number): number =>
   Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : 0;
 

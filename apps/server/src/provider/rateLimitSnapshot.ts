@@ -175,30 +175,46 @@ export const mergeRateLimitWindows = (
   }
   for (const window of incoming) {
     const known = byKind.get(window.kind);
-    byKind.set(
-      window.kind,
-      known === undefined
-        ? window
-        : {
-            ...known,
-            ...window,
-            // Spreading is not enough: an absent key and a key set to
-            // `undefined` are different to the spread operator only if the key
-            // is missing entirely, and these objects are built with
-            // conditional spreads. Restating each optional field keeps a
-            // source that says nothing about it from erasing what the other
-            // knew.
-            ...(window.utilization === undefined && known.utilization !== undefined
-              ? { utilization: known.utilization }
-              : {}),
-            ...(window.severity === undefined && known.severity !== undefined
-              ? { severity: known.severity }
-              : {}),
-            ...(window.resetsAtEpoch === undefined && known.resetsAtEpoch !== undefined
-              ? { resetsAtEpoch: known.resetsAtEpoch }
-              : {}),
-          },
-    );
+    if (known === undefined) {
+      byKind.set(window.kind, window);
+      continue;
+    }
+    const merged: ServerProviderRateLimitWindow = {
+      ...known,
+      ...window,
+      // Spreading is not enough: an absent key and a key set to
+      // `undefined` are different to the spread operator only if the key
+      // is missing entirely, and these objects are built with
+      // conditional spreads. Restating each optional field keeps a
+      // source that says nothing about it from erasing what the other
+      // knew.
+      ...(window.utilization === undefined && known.utilization !== undefined
+        ? { utilization: known.utilization }
+        : {}),
+      ...(window.severity === undefined && known.severity !== undefined
+        ? { severity: known.severity }
+        : {}),
+      ...(window.resetsAtEpoch === undefined && known.resetsAtEpoch !== undefined
+        ? { resetsAtEpoch: known.resetsAtEpoch }
+        : {}),
+    };
+    // A stored "rejected" must not outlive the reality it described: when the
+    // account API reports this window comfortably BELOW the wall, the wall is
+    // over (or never was — the refusal detector can be fooled by lookalike
+    // text). Without this, one stale/false rejected sticks forever and
+    // silently removes a healthy account from the relay rotation
+    // (trouvaille essaim 29/07).
+    if (
+      merged.severity === "rejected" &&
+      window.severity === undefined &&
+      window.utilization !== undefined &&
+      window.utilization < 50
+    ) {
+      const { severity: _expired, ...withoutSeverity } = merged;
+      byKind.set(window.kind, withoutSeverity);
+      continue;
+    }
+    byKind.set(window.kind, merged);
   }
   return [...byKind.values()];
 };

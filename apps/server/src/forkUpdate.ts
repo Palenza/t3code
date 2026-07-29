@@ -7,7 +7,11 @@ import * as NodePath from "node:path";
 import * as Effect from "effect/Effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 
-import { isLoopbackRemoteAddress, readRemoteAddress } from "./tableauLocalProxy.ts";
+import {
+  isLoopbackRemoteAddress,
+  isSameAppBrowserRequest,
+  readRemoteAddress,
+} from "./tableauLocalProxy.ts";
 
 /**
  * Fork self-update WITHOUT an Apple Developer signature (décision fondateur
@@ -48,6 +52,14 @@ const runGit = (args: ReadonlyArray<string>): Effect.Effect<string | null> =>
 
 /** One rebuild at a time — the pill turns into "building…" meanwhile. */
 let rebuildRunning = false;
+/**
+ * Exit code of the LAST rebuild this server process saw finish; null before
+ * any, and null again while one runs. A successful rebuild normally replaces
+ * the app (this process dies with it), so a non-zero value here is precisely
+ * the signal that matters: the rebuild failed and the app is still the old
+ * one — the client turns that into a loud toast instead of 30 min of silence.
+ */
+let lastRebuildExitCode: number | null = null;
 
 export function isForkRebuildRunning(): boolean {
   return rebuildRunning;
@@ -60,6 +72,9 @@ export const forkUpdateEtatRouteLayer = HttpRouter.add(
     const request = yield* HttpServerRequest.HttpServerRequest;
     if (!isLoopbackRemoteAddress(readRemoteAddress(request.source))) {
       return HttpServerResponse.text("Local machine only.", { status: 403 });
+    }
+    if (!isSameAppBrowserRequest(request.headers)) {
+      return HttpServerResponse.text("Cross-site requests are refused.", { status: 403 });
     }
     // A fetch that fails (offline, repo moved) degrades to comparing against
     // the last-known remote ref — still honest, just possibly stale.
@@ -76,6 +91,7 @@ export const forkUpdateEtatRouteLayer = HttpRouter.add(
         behind: behind !== null && Number.isFinite(behind) ? behind : null,
         latestSubject: subjectOutput === null ? null : subjectOutput.trim(),
         building: rebuildRunning,
+        lastRebuildExitCode,
         repo: FORK_REPO,
       },
       { headers: { "cache-control": "no-store" } },
@@ -91,10 +107,17 @@ export const forkUpdateLancerRouteLayer = HttpRouter.add(
     if (!isLoopbackRemoteAddress(readRemoteAddress(request.source))) {
       return HttpServerResponse.text("Local machine only.", { status: 403 });
     }
+    if (!isSameAppBrowserRequest(request.headers)) {
+      return HttpServerResponse.text("Cross-site requests are refused.", { status: 403 });
+    }
     if (rebuildRunning) {
       return HttpServerResponse.jsonUnsafe({ started: false, reason: "already-running" });
     }
-    const started = yield* Effect.sync(() => {
+    // `spawn` fails ASYNCHRONOUSLY (a missing `t3-maj` emits `error` on the
+    // next tick), so answering right after the call would report started:true
+    // for a command that never ran (trouvaille essaim 29/07). The response
+    // waits for the child's own verdict: `spawn` fired or `error` fired.
+    const started = yield* Effect.callback<boolean>((resume) => {
       try {
         NodeFS.mkdirSync(NodePath.dirname(UPDATE_LOG), { recursive: true });
         const log = NodeFS.openSync(UPDATE_LOG, "a");
@@ -106,18 +129,23 @@ export const forkUpdateLancerRouteLayer = HttpRouter.add(
           stdio: ["ignore", log, log],
         });
         rebuildRunning = true;
-        child.on("exit", () => {
+        lastRebuildExitCode = null;
+        child.on("spawn", () => {
+          resume(Effect.succeed(true));
+        });
+        child.on("exit", (code) => {
           rebuildRunning = false;
+          lastRebuildExitCode = code ?? -1;
         });
         child.on("error", () => {
           rebuildRunning = false;
+          resume(Effect.succeed(false));
         });
         child.unref();
         NodeFS.closeSync(log);
-        return true;
       } catch {
         rebuildRunning = false;
-        return false;
+        resume(Effect.succeed(false));
       }
     });
     if (!started) {

@@ -40,6 +40,25 @@ describe("claudeUsageLimitRefusal", () => {
     expect(detectClaudeUsageLimitRefusal("All done — no limits were involved.")).toBeNull();
   });
 
+  it("never trips on SHORT sentences that quote or explain the refusal (essaim 29/07)", () => {
+    expect(
+      detectClaudeUsageLimitRefusal(
+        'Done — the banner now shows "You\'ve hit your session limit".',
+      ),
+    ).toBeNull();
+    expect(
+      detectClaudeUsageLimitRefusal('Let me check where "Session limit reached" is parsed.'),
+    ).toBeNull();
+    expect(
+      detectClaudeUsageLimitRefusal("Because you've hit your session limit on that account."),
+    ).toBeNull();
+    expect(detectClaudeUsageLimitRefusal("Session limit reached hier, c'est reparti")).toEqual({
+      // Anchored start + no quotes: indistinguishable from a real refusal —
+      // accepted knowingly, the reset-expiry rule limits the blast radius.
+      windowKind: "five_hour",
+    });
+  });
+
   it("synthesizes the exact payload shape the normalizer reads", () => {
     expect(synthesizedUsageLimitRateLimitPayload({ windowKind: "five_hour" })).toEqual({
       rateLimits: {

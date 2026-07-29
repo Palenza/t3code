@@ -100,20 +100,34 @@ export const copyClaudeTranscriptToInstance = Effect.fn("copyClaudeTranscriptToI
     const targetDir = path.join(claudeProjectsRoot(toHome, osHomedir), projectDirName);
     const targetFile = path.join(targetDir, `${sessionId}.jsonl`);
 
-    const targetExists = yield* fileSystem
-      .exists(targetFile)
-      .pipe(Effect.orElseSucceed(() => false));
-    if (targetExists) {
-      return true;
-    }
-    const sourceExists = yield* fileSystem
-      .exists(sourceFile)
-      .pipe(Effect.orElseSucceed(() => false));
-    if (!sourceExists) {
+    // Modification times, not mere existence: on the SECOND switch back to an
+    // instance the target file exists but is stale — it stopped growing when
+    // the thread moved away. Skipping there would resume a frozen history and
+    // the thread would forget everything said since (trouvaille essaim 29/07).
+    // A missing file reads as -Infinity: absent target → copy, absent source →
+    // the source-side handling below.
+    const modifiedMs = (file: string) =>
+      fileSystem.stat(file).pipe(
+        Effect.map((info) =>
+          info.mtime._tag === "Some" ? info.mtime.value.getTime() : Number.NEGATIVE_INFINITY,
+        ),
+        Effect.orElseSucceed(() => Number.NEGATIVE_INFINITY),
+      );
+    const sourceModifiedMs = yield* modifiedMs(sourceFile);
+    const targetModifiedMs = yield* modifiedMs(targetFile);
+    if (sourceModifiedMs === Number.NEGATIVE_INFINITY) {
+      if (targetModifiedMs !== Number.NEGATIVE_INFINITY) {
+        // The target already holds the only copy there is — nothing to bring.
+        return true;
+      }
       yield* Effect.logWarning("claude transcript copy skipped: source transcript not found", {
         sourceFile,
       });
       return false;
+    }
+    if (targetModifiedMs >= sourceModifiedMs) {
+      // The target is at least as recent as the source: nothing new to carry.
+      return true;
     }
     return yield* fileSystem.makeDirectory(targetDir, { recursive: true }).pipe(
       Effect.andThen(fileSystem.copyFile(sourceFile, targetFile)),

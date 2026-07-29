@@ -42,6 +42,41 @@ export function isLoopbackRemoteAddress(remoteAddress: string | null | undefined
   return LOOPBACK_ADDRESSES.has(remoteAddress.trim().toLowerCase());
 }
 
+const LOCAL_ORIGIN_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
+
+/**
+ * CSRF guard for the loopback-gated routes (trouvaille essaim 29/07): the
+ * loopback check alone lets any WEBSITE open in a local browser reach these
+ * endpoints — the request originates from the browser process, so its socket
+ * IS loopback. Browsers label such requests themselves: `sec-fetch-site:
+ * cross-site` and/or a foreign `origin` header. Those are refused.
+ *
+ * What must keep working: the app's own renderer (same-origin in the packaged
+ * app, same-site between the dev web port and the server port) and plain
+ * local tooling like curl, which sends neither header and is already covered
+ * by the loopback gate.
+ */
+export function isSameAppBrowserRequest(headers: {
+  readonly [key: string]: string | ReadonlyArray<string> | undefined;
+}): boolean {
+  const single = (value: string | ReadonlyArray<string> | undefined): string | undefined =>
+    Array.isArray(value) ? value[0] : (value as string | undefined);
+  const fetchSite = single(headers["sec-fetch-site"])?.trim().toLowerCase();
+  if (fetchSite !== undefined && fetchSite !== "") {
+    return fetchSite === "same-origin" || fetchSite === "same-site" || fetchSite === "none";
+  }
+  const origin = single(headers["origin"])?.trim();
+  if (origin === undefined || origin === "" || origin === "null") {
+    // No browser markings at all: not a cross-site browser request.
+    return origin !== "null";
+  }
+  try {
+    return LOCAL_ORIGIN_HOSTS.has(new URL(origin).hostname.toLowerCase());
+  } catch {
+    return false;
+  }
+}
+
 const decodeJsonString = Schema.decodeUnknownEffect(Schema.UnknownFromJsonString);
 
 export function readRemoteAddress(source: unknown): string | undefined {
@@ -64,6 +99,9 @@ export const tableauLocalProxyRouteLayer = HttpRouter.add(
     const request = yield* HttpServerRequest.HttpServerRequest;
     if (!isLoopbackRemoteAddress(readRemoteAddress(request.source))) {
       return HttpServerResponse.text("Local machine only.", { status: 403 });
+    }
+    if (!isSameAppBrowserRequest(request.headers)) {
+      return HttpServerResponse.text("Cross-site requests are refused.", { status: 403 });
     }
 
     const httpClient = yield* HttpClient.HttpClient;

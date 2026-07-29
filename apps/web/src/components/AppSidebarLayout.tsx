@@ -142,9 +142,6 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
       : false;
   });
   const sidebarPeek = useSidebarPeekStore((store) => store.peek);
-  const endSidebarPeek = useCallback(() => {
-    useSidebarPeekStore.getState().setPeek(false);
-  }, []);
   // Swipe deux doigts sur la sidebar (façon Arc) : le deltaX horizontal du
   // trackpad cumule jusqu'au seuil, puis bascule d'espace — avec un temps
   // mort pour qu'un long geste ne saute pas trois espaces d'un coup.
@@ -215,7 +212,6 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
         collapsible="offcanvas"
         data-app-sidebar=""
         data-sidebar-version={useSidebarV2Theme ? "v2" : "v1"}
-        onMouseLeave={sidebarPeek ? endSidebarPeek : undefined}
         onWheel={handleSidebarWheel}
         // `sidebar-inner` (the opaque bg-sidebar layer) must be its own
         // stacking context, otherwise the theme wash's -z-10 escapes to THIS

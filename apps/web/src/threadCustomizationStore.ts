@@ -46,12 +46,56 @@ export const useThreadCustomizationStore = create<ThreadCustomizationState>()(
         }),
       applySectionOrder: (section, orderedThreadKeys) =>
         set((state) => ({
-          orderBySection: { ...state.orderBySection, [section]: orderedThreadKeys },
+          orderBySection: {
+            ...state.orderBySection,
+            [section]: mergeSectionOrder(state.orderBySection[section] ?? [], orderedThreadKeys),
+          },
         })),
     }),
     { name: "t3code:thread-customization:v1" },
   ),
 );
+
+/**
+ * Folds a newly arranged (possibly PARTIAL) order into the stored one.
+ *
+ * The arranged list is whatever was visible during the drag — under an active
+ * space that is one space's threads, not the whole sidebar. Replacing the
+ * stored order with it would erase every other space's manual ranking in one
+ * gesture (trouvaille essaim 29/07). Instead: the arranged keys take their new
+ * relative order in the exact positions the stored order held them, keys the
+ * store has never seen slot in next to their new neighbours, and every key
+ * outside the arrangement keeps its position untouched.
+ */
+export function mergeSectionOrder(
+  previous: ReadonlyArray<string>,
+  ordered: ReadonlyArray<string>,
+): string[] {
+  if (previous.length === 0) {
+    return [...ordered];
+  }
+  const orderedSet = new Set(ordered);
+  const previousSet = new Set(previous);
+  const replacements = ordered.filter((key) => previousSet.has(key));
+  let slot = 0;
+  const merged = previous.map((key) =>
+    orderedSet.has(key) ? (replacements[slot++] ?? key) : key,
+  );
+  // Keys arranged just now that the stored order has never ranked: each goes
+  // right before the first of its FOLLOWERS (in the new arrangement) already
+  // present, so it lands where the user dropped it, not at an edge.
+  const fresh = ordered.filter((key) => !previousSet.has(key));
+  for (const key of fresh.toReversed()) {
+    const followers = new Set(ordered.slice(ordered.indexOf(key) + 1));
+    const anchorIndex = merged.findIndex((candidate) => followers.has(candidate));
+    if (anchorIndex === -1) {
+      merged.push(key);
+    } else {
+      merged.splice(anchorIndex, 0, key);
+    }
+  }
+  return merged;
+}
 
 /**
  * Applies a manual order to a section's default (recency) order.

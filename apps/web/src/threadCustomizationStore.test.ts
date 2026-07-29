@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { reorderSection, sortWithManualOrder } from "./threadCustomizationStore";
+import { mergeSectionOrder, reorderSection, sortWithManualOrder } from "./threadCustomizationStore";
 
 const keyOf = (thread: { key: string }) => thread.key;
 const threads = (...keys: string[]) => keys.map((key) => ({ key }));
@@ -49,5 +49,37 @@ describe("reorderSection", () => {
   it("returns the list unchanged when the move is a no-op or unknown", () => {
     expect(reorderSection(["a", "b"], "a", "a")).toEqual(["a", "b"]);
     expect(reorderSection(["a", "b"], "x", "a")).toEqual(["a", "b"]);
+  });
+});
+
+describe("mergeSectionOrder", () => {
+  it("adopts the arrangement wholesale when nothing was stored", () => {
+    expect(mergeSectionOrder([], ["b", "a"])).toEqual(["b", "a"]);
+  });
+
+  it("reorders a PARTIAL arrangement in place without touching outside keys (essaim 29/07)", () => {
+    // The drag happened under an active space showing only b and d. The other
+    // spaces' ranking (a, c, e) must survive in its exact positions.
+    expect(mergeSectionOrder(["a", "b", "c", "d", "e"], ["d", "b"])).toEqual([
+      "a",
+      "d",
+      "c",
+      "b",
+      "e",
+    ]);
+  });
+
+  it("replaces the full order when the arrangement covers every stored key", () => {
+    expect(mergeSectionOrder(["a", "b", "c"], ["c", "a", "b"])).toEqual(["c", "a", "b"]);
+  });
+
+  it("slots a never-ranked key next to its new neighbours", () => {
+    // n was dropped between b and a inside the space view; the stored order
+    // has never seen it. It must land there, not at an edge.
+    expect(mergeSectionOrder(["a", "b", "c"], ["b", "n", "a"])).toEqual(["b", "n", "a", "c"]);
+  });
+
+  it("appends a never-ranked key arranged last among its section", () => {
+    expect(mergeSectionOrder(["a", "b"], ["a", "b", "n"])).toEqual(["a", "b", "n"]);
   });
 });

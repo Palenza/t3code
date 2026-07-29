@@ -327,6 +327,12 @@ export const makeTranscribeCppEngine = Effect.fn("makeTranscribeCppEngine")(func
   };
 
   const spawnReaper = Effect.fn("TranscribeCppEngine.spawnReaper")(function* (loaded: LoadedModel) {
+    // An infinite idle timeout means "keep the model warm forever" (the
+    // startup preload uses it). The loop below could never fire its close —
+    // it would just wake every 15 s for the lifetime of the process — so it
+    // is not forked at all. The override is fixed at engine construction, so
+    // this model can never later need a reaper it does not have.
+    if (!Number.isFinite(loaded.idleTimeoutMs)) return;
     yield* Effect.gen(function* () {
       while (true) {
         yield* Effect.sleep(reapInterval);

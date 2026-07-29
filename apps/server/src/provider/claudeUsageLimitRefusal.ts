@@ -22,16 +22,30 @@ export interface ClaudeUsageLimitRefusal {
  */
 const MAX_REFUSAL_TEXT_LENGTH = 200;
 
+/**
+ * ANCHORED at the very start of the message: the CLI's refusal IS the whole
+ * message (« You've hit your session limit · resets… »). A sentence that
+ * merely quotes or explains the phrase mid-text (« Done — the banner now
+ * shows "You've hit your session limit" ») must never synthesize a rejected
+ * event — that would flag a healthy account and mislead the auto-relay
+ * (trouvaille essaim 29/07).
+ */
 const REFUSAL_PATTERNS: readonly RegExp[] = [
-  /\bhit your\b[^.]*\blimit\b/i,
-  /\b(session|usage|weekly|5-hour|five-hour|opus)\s+limit reached\b/i,
+  /^you'?ve hit your\b[^.\n]*\blimit\b/i,
+  /^(session|usage|weekly|5-hour|five-hour|opus)\s+limit reached\b/i,
 ];
+
+/** A quote mark anywhere = someone TALKING ABOUT the refusal, not the CLI. */
+const QUOTATION_HINT = /["«»`“”]/;
 
 const WEEKLY_HINT = /\bweek(?:ly)?\b|\bseven[\s-]day\b|\b7[\s-]day\b/i;
 
 export function detectClaudeUsageLimitRefusal(text: string): ClaudeUsageLimitRefusal | null {
   const trimmed = text.trim();
   if (trimmed.length === 0 || trimmed.length > MAX_REFUSAL_TEXT_LENGTH) {
+    return null;
+  }
+  if (QUOTATION_HINT.test(trimmed)) {
     return null;
   }
   if (!REFUSAL_PATTERNS.some((pattern) => pattern.test(trimmed))) {

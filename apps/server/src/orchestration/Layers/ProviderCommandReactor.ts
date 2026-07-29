@@ -643,7 +643,15 @@ const make = Effect.gen(function* () {
       return restartedSession.threadId;
     }
 
-    const startedSession = yield* startProviderSession(undefined);
+    // Cold start of a thread with history: pass the resolved cursor
+    // explicitly. ProviderService's own persisted-binding fallback only
+    // applies when the binding names THIS instance — after a cross-account
+    // switch on a dead session (reaper, server restart) the binding still
+    // names the previous account and the thread would silently restart
+    // without --resume (trouvaille essaim 29/07).
+    const startedSession = yield* startProviderSession(
+      resolvedResumeCursor !== undefined ? { resumeCursor: resolvedResumeCursor } : undefined,
+    );
     yield* bindSessionToThread(startedSession);
     return startedSession.threadId;
   });

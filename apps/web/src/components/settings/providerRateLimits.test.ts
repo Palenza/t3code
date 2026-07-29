@@ -89,6 +89,37 @@ describe("presentProviderRateLimits", () => {
     expect(presented?.gauges[0]?.tone).toBe("critical");
   });
 
+  it("retires a rejected whose reset time has passed (essaim 29/07)", () => {
+    // A wall ends at its reset by definition. Showing "limit reached" past
+    // that instant — and letting the relay treat the account as walled —
+    // would freeze one refusal into a permanent state.
+    const presented = presentProviderRateLimits({
+      rateLimits: rateLimits({
+        windows: [
+          { kind: "five_hour", severity: "rejected", resetsAtEpoch: NOW / 1000 - 600 },
+          { kind: "seven_day", utilization: 40 },
+        ],
+      }),
+      now: NOW,
+    });
+
+    // The expired wall says nothing anymore; only the weekly figure remains.
+    expect(presented?.gauges).toHaveLength(1);
+    expect(presented?.gauges[0]?.kind).toBe("seven_day");
+  });
+
+  it("keeps a rejected whose reset time is still ahead", () => {
+    const presented = presentProviderRateLimits({
+      rateLimits: rateLimits({
+        windows: [{ kind: "five_hour", severity: "rejected", resetsAtEpoch: NOW / 1000 + 600 }],
+      }),
+      now: NOW,
+    });
+
+    expect(presented?.gauges[0]?.severityLabel).toBe("limit reached");
+    expect(presented?.gauges[0]?.tone).toBe("critical");
+  });
+
   it("drops a window that says nothing beyond its own name", () => {
     // Neither figure, nor reset, nor a state worth reading: a row of
     // furniture. The card should look untouched instead.

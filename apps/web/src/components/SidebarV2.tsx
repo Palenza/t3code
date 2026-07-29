@@ -98,7 +98,7 @@ import {
   type ThreadColor,
 } from "../threadCustomizationStore";
 import { useSidebarThemeStore } from "../sidebarThemeStore";
-import { useSidebarSpacesStore } from "../sidebarSpacesStore";
+import { MAX_SIDEBAR_FAVORITES, useSidebarSpacesStore } from "../sidebarSpacesStore";
 import { SidebarFavoritesGrid, SidebarSpacesBar } from "./sidebar/SidebarSpaces";
 import { SortableThreadItem } from "./sidebar/SortableThreadItem";
 import { useThreadSelectionStore } from "../threadSelectionStore";
@@ -1549,7 +1549,9 @@ export default function SidebarV2() {
   // filter context changes so a scope/search flip never inherits a deep
   // page state.
   const [settledVisibleCount, setSettledVisibleCount] = useState(SETTLED_TAIL_INITIAL_COUNT);
-  const settledResetKey = projectScopeKey ?? "all";
+  // The active space filters the list exactly like a scope does, so a space
+  // switch must shed the deep page state too (trouvaille essaim 29/07).
+  const settledResetKey = `${projectScopeKey ?? "all"}·${activeSpaceId ?? "all"}`;
   const lastSettledResetKeyRef = useRef(settledResetKey);
   if (lastSettledResetKeyRef.current !== settledResetKey) {
     lastSettledResetKeyRef.current = settledResetKey;
@@ -2045,6 +2047,7 @@ export default function SidebarV2() {
           return;
         }
         deletedThreadKeys.add(threadKey);
+        useSidebarSpacesStore.getState().purgeThread(threadKey);
       }
       removeFromSelection(threadKeys);
     },
@@ -2203,12 +2206,21 @@ export default function SidebarV2() {
           return;
         }
         if (clicked.value === "favorite") {
-          useSidebarSpacesStore.getState().toggleFavorite({
+          const verdict = useSidebarSpacesStore.getState().toggleFavorite({
             threadKey,
             environmentId: thread.environmentId,
             threadId: thread.id,
             title: thread.title || "Sans titre",
           });
+          if (verdict === "full") {
+            // Un clic qui ne fait RIEN sans le dire = un bug aux yeux du
+            // lecteur. Le cap est celui d'Arc : 12, la grille pleine.
+            toastManager.add({
+              type: "warning",
+              title: "Favoris pleins",
+              description: `La grille est limitée à ${MAX_SIDEBAR_FAVORITES} favoris — retire-en un d'abord (clic droit sur son icône).`,
+            });
+          }
           return;
         }
         if (clicked.value?.startsWith("color:")) {
@@ -2293,6 +2305,7 @@ export default function SidebarV2() {
               );
               return;
             }
+            useSidebarSpacesStore.getState().purgeThread(threadKey);
             return;
           }
           default:

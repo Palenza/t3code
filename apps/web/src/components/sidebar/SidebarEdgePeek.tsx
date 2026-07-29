@@ -18,6 +18,16 @@ export const useSidebarPeekStore = create<{
   setPeek: (peek) => set({ peek }),
 }));
 
+/** Anything under the pointer that belongs to a PORTALED popup (Base UI
+ * portals render outside the sidebar's DOM): menus, dialogs, popovers,
+ * selects. While the pointer is over one, the peek must not close under it. */
+const PORTALED_POPUP_SELECTOR =
+  '[data-slot$="-positioner"], [data-slot$="-popup"], [role="menu"], [role="dialog"], [role="listbox"]';
+
+/** How far past the sidebar's floating card the pointer may wander before the
+ * peek closes. Also covers the 0–8 px gutter the peek was opened from. */
+const CLOSE_MARGIN_PX = 40;
+
 export function SidebarEdgePeek() {
   const { state, isMobile } = useSidebar();
   const peek = useSidebarPeekStore((store) => store.peek);
@@ -30,6 +40,39 @@ export function SidebarEdgePeek() {
       setPeek(false);
     }
   }, [active, peek, setPeek]);
+
+  // Closing is decided from GLOBAL pointer position, not the sidebar's own
+  // mouseleave: React's mouseleave fires when the pointer moves onto a
+  // portaled popup (closing the peek under an open menu) and never fires when
+  // the pointer leaves the window and comes back elsewhere (peek stuck open)
+  // — both observed by the essaim review, 29/07.
+  useEffect(() => {
+    if (!peek) {
+      return;
+    }
+    const onMouseMove = (event: MouseEvent) => {
+      const target = event.target;
+      if (target instanceof Element && target.closest(PORTALED_POPUP_SELECTOR)) {
+        return;
+      }
+      const sidebar = document.querySelector("[data-app-sidebar]");
+      if (!(sidebar instanceof Element)) {
+        setPeek(false);
+        return;
+      }
+      const rect = sidebar.getBoundingClientRect();
+      const outside =
+        event.clientX > rect.right + CLOSE_MARGIN_PX ||
+        event.clientX < rect.left - CLOSE_MARGIN_PX ||
+        event.clientY < rect.top - CLOSE_MARGIN_PX ||
+        event.clientY > rect.bottom + CLOSE_MARGIN_PX;
+      if (outside) {
+        setPeek(false);
+      }
+    };
+    document.addEventListener("mousemove", onMouseMove, { passive: true });
+    return () => document.removeEventListener("mousemove", onMouseMove);
+  }, [peek, setPeek]);
 
   if (!active || peek) {
     return null;
