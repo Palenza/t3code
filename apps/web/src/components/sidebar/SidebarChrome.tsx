@@ -159,7 +159,7 @@ function QuickSettingLink({
             className="h-7 text-[13px] text-sidebar-foreground/70 hover:text-sidebar-foreground"
             onClick={() => onNavigate(link.to)}
           >
-            <span className="truncate">{link.label}</span>
+            <span className="truncate pl-6">{link.label}</span>
           </SidebarMenuButton>
         }
       />
@@ -210,12 +210,6 @@ export const SidebarChromeFooter = memo(function SidebarChromeFooter() {
         {SIDEBAR_QUICK_LINKS.map((link) => (
           <SidebarMenuItem key={link.to}>
             <QuickSettingLink link={link} onNavigate={navigateClosingMobile} />
-            <SidebarMenuButton
-              className="hidden"
-              onClick={() => navigateClosingMobile(link.to)}
-            >
-              <span className="pl-6">{link.label}</span>
-            </SidebarMenuButton>
           </SidebarMenuItem>
         ))}
         <SidebarMenuItem>
