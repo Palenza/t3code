@@ -142,9 +142,12 @@ export function SpacesBoard({ onFermer }: { onFermer: () => void }) {
               </button>
             </div>
 
-            <div className="min-h-0 flex-1 overflow-y-auto px-2 py-1">
+            {/* Gouttière MESURÉE : l'icône démarre à 17 px du bord, fait 20 px
+                de côté, et le libellé commence à 45 px — trois entrées
+                mesurées, écart nul entre elles. */}
+            <div className="min-h-0 flex-1 overflow-y-auto px-[17px] py-1">
               {fils.length === 0 ? (
-                <p className="px-2 py-3 text-[12px] text-black/35">Aucun fil rangé ici.</p>
+                <p className="py-3 text-[11px] text-black/35">Aucun fil rangé ici.</p>
               ) : (
                 fils.map((threadKey) => {
                   const [environmentId, threadId] = threadKey.split(":");
@@ -163,8 +166,14 @@ export function SpacesBoard({ onFermer }: { onFermer: () => void }) {
                       // Hauteur de ligne de 41 px MESURÉE (82 px Retina, quatre
                       // fois de suite) : j'avais mis 28. Et l'encre est franche
                       // — c'est le contenu qui porte, pas le titre.
-                      className="flex h-[41px] w-full cursor-pointer items-center rounded-lg px-2 text-left text-[11px] font-semibold text-black/80 transition-colors hover:bg-black/8"
+                      className="flex h-[41px] w-full cursor-pointer items-center gap-2 rounded-lg text-left text-[11px] font-semibold text-black/80 transition-colors hover:bg-black/8"
                     >
+                      {/* La pastille de 20 px qui précède chaque entrée : c'est
+                          elle qui pose la gouttière de 45 px du libellé. */}
+                      <span
+                        aria-hidden
+                        className="size-5 shrink-0 rounded-[5px] bg-black/12"
+                      />
                       <span className="truncate">{threadId ?? threadKey}</span>
                     </button>
                   );

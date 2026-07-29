@@ -60,23 +60,27 @@ export function BibliothequeOverlay() {
     // colonnes colorées ne ressortent que sur un noir franc ; un fond
     // translucide les aurait délavées (mesure 30/07).
     <div className="fixed inset-0 z-50 flex bg-[#101010]">
-      {/* Le rail d'Arc : icône au-dessus, libellé dessous, l'actif en pastille. */}
-      {/* 120 px : la largeur MESURÉE du rail d'Arc (240 px Retina). */}
-      <nav className="flex w-[120px] shrink-0 flex-col items-center gap-2 py-6">
+      {/* Le rail d'Arc : icône au-dessus, libellé dessous, l'actif en pastille.
+          MESURÉ au second passage : 140 px de large (frontière nette à 280 px
+          Retina), et surtout un PAS VERTICAL de 100 px entre entrées — mesuré
+          trois fois de suite sans variation. C'est un rail très aéré ; le mien
+          les empilait à 60 px, ce qui en faisait une liste. */}
+      <nav className="flex w-[140px] shrink-0 flex-col items-center pt-8">
         {ONGLETS.map(({ cle, nom, Icone }) => (
           <button
             key={cle}
             type="button"
             onClick={() => ouvrir(cle)}
             className={cn(
-              "flex w-[92px] cursor-pointer flex-col items-center gap-1.5 rounded-xl px-2 py-3 transition-colors",
+              "flex h-[100px] w-[92px] cursor-pointer flex-col items-center justify-center gap-2 rounded-xl px-2 transition-colors",
               onglet === cle
                 ? "bg-accent text-foreground"
                 : "text-muted-foreground hover:bg-accent/50",
             )}
           >
             <Icone className="size-5" />
-            <span className="text-[11px] font-medium leading-tight">{nom}</span>
+            {/* 11 px : hauteur de glyphes mesurée à 17 px Retina. */}
+            <span className="text-[11px] font-semibold leading-tight">{nom}</span>
           </button>
         ))}
         <button
