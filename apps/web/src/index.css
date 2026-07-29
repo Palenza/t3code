@@ -246,7 +246,15 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
 }
 
 @layer components {
+  /* La marque ne DISPARAÎT jamais : rétrécir la sidebar effaçait « T3 Code
+     Raptor » en entier sous 13,5rem (reproche fondateur 29/07). Désormais le
+     mot-marque T3 tient toujours ; ce sont les MOTS qui s'effacent, l'un
+     après l'autre, quand la place manque. */
   .sidebar-brand {
+    display: none;
+  }
+
+  .sidebar-brand-word {
     display: none;
   }
 
@@ -255,9 +263,13 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
   }
 
   @media (min-width: 48rem) {
-    @container sidebar-header (min-width: 13.5rem) {
-      .sidebar-brand {
-        display: flex;
+    .sidebar-brand {
+      display: flex;
+    }
+
+    @container sidebar-header (min-width: 11rem) {
+      .sidebar-brand-word {
+        display: inline;
       }
     }
 

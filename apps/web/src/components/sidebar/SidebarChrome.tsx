@@ -65,7 +65,7 @@ function SidebarBrand({ onBackdrop }: { onBackdrop: boolean }) {
       <T3Wordmark />
       <span
         className={cn(
-          "truncate text-sm font-medium tracking-tight",
+          "sidebar-brand-word truncate text-sm font-medium tracking-tight",
           onBackdrop ? "text-white/70" : "text-muted-foreground",
         )}
       >
@@ -75,7 +75,7 @@ function SidebarBrand({ onBackdrop }: { onBackdrop: boolean }) {
           cuivre sur le bandeau griffé, pour prolonger l'icône. */}
       <span
         className={cn(
-          "truncate text-[11px] font-semibold uppercase tracking-[0.14em]",
+          "sidebar-brand-word truncate text-[11px] font-semibold uppercase tracking-[0.14em]",
           onBackdrop ? "text-[#ff9d4d]" : "text-muted-foreground/70",
         )}
       >
