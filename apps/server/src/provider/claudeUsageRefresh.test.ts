@@ -63,9 +63,16 @@ const layers = (input: {
     ),
     Layer.succeed(HttpClient.HttpClient, HttpClient.make(input.respond)),
     Path.layer,
-    // Never reached: every test sets `configDir`, so the keychain branch is
-    // not taken. Present only to satisfy the requirement.
-    Layer.succeed(ChildProcessSpawner.ChildProcessSpawner, {} as never),
+    // Le trousseau est désormais tenté AVANT le fichier, `configDir` posé ou
+    // non. Mon stub d'origine était un objet vide, commenté « jamais atteint » —
+    // c'était vrai le jour où je l'ai écrit, et faux dès que la lecture du
+    // trousseau est passée devant : appeler `spawn` sur un objet vide part en
+    // défaut, que `orElseSucceed` ne rattrape pas. Il ÉCHOUE donc franchement,
+    // ce qui est la vérité d'une machine de test : aucune entrée `security` à
+    // trouver, et la lecture retombe sur le fichier.
+    Layer.succeed(ChildProcessSpawner.ChildProcessSpawner, {
+      spawn: () => Effect.fail(new Error("aucun trousseau sous test")),
+    } as never),
   );
 
 const okResponse = (body: unknown) => (request: never) =>
