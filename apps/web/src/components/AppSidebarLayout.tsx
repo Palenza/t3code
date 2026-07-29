@@ -21,6 +21,7 @@ import { useSidebarV2Enabled } from "../hooks/useSettings";
 import ThreadSidebar from "./Sidebar";
 import { useSidebarSpacesStore } from "../sidebarSpacesStore";
 import { SidebarEdgePeek, useSidebarPeekStore } from "./sidebar/SidebarEdgePeek";
+import { BibliothequeOverlay, useBibliothequeStore } from "./sidebar/BibliothequeOverlay";
 import { SidebarThemeWash } from "./sidebar/SidebarThemeWash";
 import ThreadSidebarV2 from "./SidebarV2";
 import { useSidebarStageBackdropVariant } from "./SidebarStageBackdrop";
@@ -159,6 +160,13 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
     const direction = spaceSwipeAccumRef.current > 0 ? 1 : -1;
     spaceSwipeAccumRef.current = 0;
     spaceSwipeLastFireRef.current = now;
+    // Deux doigts vers la DROITE ouvrent la bibliothèque — le geste d'Arc,
+    // filmé le 30/07. Vers la gauche, on continue de circuler entre espaces.
+    // Le seuil est le même : un seul apprentissage pour deux directions.
+    if (direction > 0) {
+      useBibliothequeStore.getState().ouvrir("espaces");
+      return;
+    }
     useSidebarSpacesStore.getState().cycleSpace(direction);
   }, []);
   const sidebarProviderStyle = {
@@ -243,6 +251,7 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
       {children}
       <SidebarControl />
       <SidebarEdgePeek />
+      <BibliothequeOverlay />
     </SidebarProvider>
   );
 }
