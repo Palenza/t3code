@@ -783,6 +783,11 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   const requestedDriverKind: ProviderDriverKind = lockedProvider ?? unlockedSelectedProvider;
   const lockedContinuationGroupKey = useMemo((): string | null => {
     if (!lockedProvider || !activeThread) return null;
+    // Claude threads may hop between accounts mid-thread: the server copies
+    // the chat transcript into the target instance's home on switch (29/07,
+    // « je veux garder le même thread »), so no continuation-group lock here.
+    // Other drivers keep it — their resume state is not portable.
+    if (String(lockedProvider) === "claudeAgent") return null;
     const lockedInstanceId =
       activeThread.session?.providerInstanceId ?? activeThreadModelSelection?.instanceId;
     if (!lockedInstanceId) return null;

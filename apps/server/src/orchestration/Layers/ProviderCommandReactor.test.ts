@@ -25,6 +25,7 @@ import * as Effect from "effect/Effect";
 import * as Deferred from "effect/Deferred";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import * as PubSub from "effect/PubSub";
 import * as Scope from "effect/Scope";
@@ -55,6 +56,7 @@ import {
 } from "./ProviderCommandReactor.ts";
 import { OrchestrationEngineService } from "../Services/OrchestrationEngine.ts";
 import { ProviderCommandReactor } from "../Services/ProviderCommandReactor.ts";
+import { ProviderSessionDirectory } from "../../provider/Services/ProviderSessionDirectory.ts";
 import { ProjectionSnapshotQuery } from "../Services/ProjectionSnapshotQuery.ts";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Clock from "effect/Clock";
@@ -376,6 +378,15 @@ describe("ProviderCommandReactor", () => {
         Layer.mock(TextGeneration, {
           generateBranchName,
           generateThreadTitle,
+        }),
+      ),
+      Layer.provideMerge(
+        Layer.succeed(ProviderSessionDirectory, {
+          upsert: () => Effect.void,
+          getProvider: () => Effect.die("getProvider should not be called in this test"),
+          getBinding: () => Effect.succeed(Option.none()),
+          listThreadIds: () => Effect.succeed([]),
+          listBindings: () => Effect.succeed([]),
         }),
       ),
       Layer.provideMerge(ServerSettingsService.layerTest()),

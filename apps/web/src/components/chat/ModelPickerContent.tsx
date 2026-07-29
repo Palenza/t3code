@@ -173,6 +173,11 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
     (entry: Pick<ProviderInstanceEntry, "driverKind" | "continuationGroupKey">): boolean => {
       if (props.lockedProvider === null) return true;
       if (entry.driverKind !== props.lockedProvider) return false;
+      // Claude threads may hop between ACCOUNTS mid-thread: on switch the
+      // server copies the session transcript into the target instance's home
+      // (29/07 — « je veux garder le même thread »). Other drivers keep the
+      // continuation-group lock, their resume state is not portable.
+      if (String(props.lockedProvider) === "claudeAgent") return true;
       if (!props.lockedContinuationGroupKey) return true;
       return entry.continuationGroupKey === props.lockedContinuationGroupKey;
     },

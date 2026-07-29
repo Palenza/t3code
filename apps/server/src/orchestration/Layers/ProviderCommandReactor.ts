@@ -28,10 +28,15 @@ import { makeDrainableWorker } from "@t3tools/shared/DrainableWorker";
 import { resolveThreadWorkspaceCwd } from "../../checkpointing/Utils.ts";
 import { increment, orchestrationEventsProcessedTotal } from "../../observability/Metrics.ts";
 import { ProviderAdapterRequestError } from "../../provider/Errors.ts";
+import { copyClaudeTranscriptToInstance } from "../../provider/claudeTranscriptCopy.ts";
 import type { ProviderServiceError } from "../../provider/Errors.ts";
 import { TextGeneration } from "../../textGeneration/TextGeneration.ts";
 import { ProviderService } from "../../provider/Services/ProviderService.ts";
 import { ProviderRegistry } from "../../provider/Services/ProviderRegistry.ts";
+import {
+  ProviderSessionDirectory,
+  type ProviderRuntimeBinding,
+} from "../../provider/Services/ProviderSessionDirectory.ts";
 import { OrchestrationEngineService } from "../Services/OrchestrationEngine.ts";
 import { ProjectionSnapshotQuery } from "../Services/ProjectionSnapshotQuery.ts";
 import {
@@ -195,6 +200,7 @@ const make = Effect.gen(function* () {
   const projectionSnapshotQuery = yield* ProjectionSnapshotQuery;
   const providerService = yield* ProviderService;
   const providerRegistry = yield* ProviderRegistry;
+  const providerSessionDirectory = yield* ProviderSessionDirectory;
   const gitWorkflow = yield* GitWorkflowService;
   const vcsStatusBroadcaster = yield* VcsStatusBroadcaster;
   const textGeneration = yield* TextGeneration;
@@ -378,6 +384,18 @@ const make = Effect.gen(function* () {
         .pipe(Effect.map((sessions) => sessions.find((session) => session.threadId === threadId)));
 
     const activeSession = yield* resolveActiveSession(threadId);
+    // The live session object only carries `resumeCursor` once the adapter
+    // has surfaced it; the session directory's persisted binding always holds
+    // the latest cursor — fall back to it so instance switches and restarts
+    // never silently lose the conversation.
+    const resolvedResumeCursor =
+      activeSession?.resumeCursor ??
+      Option.getOrUndefined(
+        yield* providerSessionDirectory
+          .getBinding(threadId)
+          .pipe(Effect.orElseSucceed(() => Option.none<ProviderRuntimeBinding>())),
+      )?.resumeCursor ??
+      undefined;
     const activeThreadSession =
       thread.session !== null && thread.session.status !== "stopped" && activeSession
         ? thread.session
@@ -467,6 +485,11 @@ const make = Effect.gen(function* () {
         requestedModelSelection,
       });
     }
+    const project = yield* resolveProject(thread.projectId);
+    const effectiveCwd = resolveThreadWorkspaceCwd({
+      thread,
+      projects: project ? [project] : [],
+    });
     if (
       thread.session !== null &&
       requestedModelSelection !== undefined &&
@@ -483,18 +506,34 @@ const make = Effect.gen(function* () {
         currentInfo.continuationIdentity.continuationKey !==
         desiredInfo.continuationIdentity.continuationKey
       ) {
-        return yield* new ProviderAdapterRequestError({
-          provider: preferredProvider,
-          method: "thread.turn.start",
-          detail: `Thread '${threadId}' cannot switch from instance '${currentInstanceId}' to '${desiredInstanceId}' because their provider resume state is incompatible.`,
+        // Same driver, different home: for Claude the resume state is one
+        // transcript file per session — copy it to the target instance and
+        // the switch becomes an ordinary restart-with-resume. Décision
+        // fondateur 29/07 : un fil doit pouvoir continuer sur un autre
+        // compte quand le sien est au mur.
+        const transcriptCopied =
+          String(currentInfo.driverKind) === "claudeAgent"
+            ? yield* copyClaudeTranscriptToInstance({
+                fromContinuationKey: currentInfo.continuationIdentity.continuationKey,
+                toContinuationKey: desiredInfo.continuationIdentity.continuationKey,
+                resumeCursor: resolvedResumeCursor,
+                cwd: effectiveCwd,
+              })
+            : false;
+        if (!transcriptCopied) {
+          return yield* new ProviderAdapterRequestError({
+            provider: preferredProvider,
+            method: "thread.turn.start",
+            detail: `Thread '${threadId}' cannot switch from instance '${currentInstanceId}' to '${desiredInstanceId}' because their provider resume state is incompatible.`,
+          });
+        }
+        yield* Effect.logInfo("claude thread transcript copied for instance switch", {
+          threadId,
+          currentInstanceId,
+          desiredInstanceId,
         });
       }
     }
-    const project = yield* resolveProject(thread.projectId);
-    const effectiveCwd = resolveThreadWorkspaceCwd({
-      thread,
-      projects: project ? [project] : [],
-    });
 
     const startProviderSession = (input?: {
       readonly resumeCursor?: unknown;
@@ -569,9 +608,7 @@ const make = Effect.gen(function* () {
         return existingSessionThreadId;
       }
 
-      const resumeCursor = shouldRestartForModelChange
-        ? undefined
-        : (activeSession?.resumeCursor ?? undefined);
+      const resumeCursor = shouldRestartForModelChange ? undefined : resolvedResumeCursor;
       yield* Effect.logInfo("provider command reactor restarting provider session", {
         threadId,
         existingSessionThreadId,

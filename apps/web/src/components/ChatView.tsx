@@ -5513,7 +5513,15 @@ function ChatViewContent(props: ChatViewProps) {
         scheduleComposerFocus();
         return;
       }
-      if (lockedProvider !== null && activeThread.session?.providerInstanceId) {
+      // Claude threads may hop between accounts mid-thread: the server copies
+      // the chat transcript into the target instance's home on switch (29/07,
+      // « je veux garder le même thread »). Other drivers keep the
+      // continuation-group guard — their resume state is not portable.
+      if (
+        lockedProvider !== null &&
+        String(lockedProvider) !== "claudeAgent" &&
+        activeThread.session?.providerInstanceId
+      ) {
         const currentEntry = providerStatuses.find(
           (snapshot) => snapshot.instanceId === activeThread.session?.providerInstanceId,
         );
