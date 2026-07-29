@@ -1,112 +1,313 @@
-import { PaletteIcon, PlusIcon, XIcon } from "lucide-react";
+import { useCallback, useRef, useState } from "react";
+
+import { MinusIcon, MoonIcon, PaletteIcon, PlusIcon, SparklesIcon, SunIcon } from "lucide-react";
 
 import { cn } from "../../lib/utils";
+import { useTheme } from "../../hooks/useTheme";
 import {
+  DEFAULT_STOP_POSITIONS,
+  MAX_SIDEBAR_THEME_STOPS,
+  makeSidebarThemeFromColors,
+  SIDEBAR_THEME_GRAIN_URL,
   SIDEBAR_THEME_PRESETS,
+  sidebarThemeBackground,
+  sidebarThemeGrainOpacity,
   useSidebarThemeStore,
   type SidebarTheme,
+  type SidebarThemeStop,
 } from "../../sidebarThemeStore";
 import { Button } from "../ui/button";
 import { SettingsPageContainer, SettingsSection } from "./settingsLayout";
 
-const DEFAULT_THEME: SidebarTheme = { colors: ["#5db3f0", "#9c5fd4"], intensity: 0.5, grain: 0.25 };
+const DEFAULT_THEME: SidebarTheme = makeSidebarThemeFromColors(["#4caf7d", "#ef6292"]);
+
+const clamp01 = (value: number): number => Math.min(1, Math.max(0, value));
 
 /**
- * Arc-style sidebar theme editor. The preview is the sidebar itself, live —
- * every change lands in the store and paints immediately, which beats any
- * thumbnail. No theme by default: the upstream look until the user chooses.
+ * Arc-style theme editor (retour fondateur 29/07, calqué sur l'éditeur de
+ * Spaces d'Arc) : la toile pointillée EST l'aperçu — chaque couleur est une
+ * pastille qu'on déplace au doigt, le dégradé suit en direct, et la sidebar
+ * (l'aperçu grandeur nature) se repeint à chaque geste. Un thème par projet,
+ * comme un Space.
  */
 export function ThemeSettingsPanel() {
-  const theme = useSidebarThemeStore((state) => state.theme);
+  const defaultTheme = useSidebarThemeStore((state) => state.theme);
+  const themesByProject = useSidebarThemeStore((state) => state.themesByProject);
+  const activeProjectKey = useSidebarThemeStore((state) => state.activeProjectKey);
   const setTheme = useSidebarThemeStore((state) => state.setTheme);
   const clearTheme = useSidebarThemeStore((state) => state.clearTheme);
+  const setProjectTheme = useSidebarThemeStore((state) => state.setProjectTheme);
+  const clearProjectTheme = useSidebarThemeStore((state) => state.clearProjectTheme);
+  const { resolvedTheme } = useTheme();
 
-  const current = theme ?? DEFAULT_THEME;
-  const active = theme !== null;
+  const [scope, setScope] = useState<"default" | "project">(() =>
+    activeProjectKey !== null && themesByProject[activeProjectKey] !== undefined
+      ? "project"
+      : "default",
+  );
+  const projectScopeAvailable = activeProjectKey !== null;
+  const effectiveScope = scope === "project" && projectScopeAvailable ? "project" : "default";
 
-  const apply = (next: Partial<SidebarTheme>) => setTheme({ ...current, ...next });
-  const setColor = (index: number, color: string) => {
-    const colors = [...current.colors];
-    colors[index] = color;
-    apply({ colors });
+  const storedTheme =
+    effectiveScope === "project" && activeProjectKey !== null
+      ? (themesByProject[activeProjectKey] ?? null)
+      : defaultTheme;
+  const active = storedTheme !== null;
+  const current = storedTheme ?? DEFAULT_THEME;
+
+  const [selectedStopIndex, setSelectedStopIndex] = useState(0);
+  const selectedStop = current.stops[Math.min(selectedStopIndex, current.stops.length - 1)];
+
+  const apply = useCallback(
+    (next: SidebarTheme) => {
+      if (effectiveScope === "project" && activeProjectKey !== null) {
+        setProjectTheme(activeProjectKey, next);
+        return;
+      }
+      setTheme(next);
+    },
+    [activeProjectKey, effectiveScope, setProjectTheme, setTheme],
+  );
+  const disable = useCallback(() => {
+    if (effectiveScope === "project" && activeProjectKey !== null) {
+      clearProjectTheme(activeProjectKey);
+      return;
+    }
+    clearTheme();
+  }, [activeProjectKey, clearProjectTheme, clearTheme, effectiveScope]);
+
+  const patch = (partial: Partial<SidebarTheme>) => apply({ ...current, ...partial });
+  const patchStop = (index: number, stop: Partial<SidebarThemeStop>) => {
+    const stops = current.stops.map((existing, i) =>
+      i === index ? { ...existing, ...stop } : existing,
+    );
+    apply({ ...current, stops });
   };
-  const removeColor = (index: number) => {
-    if (current.colors.length <= 1) return;
-    apply({ colors: current.colors.filter((_, i) => i !== index) });
+
+  const addStop = () => {
+    if (current.stops.length >= MAX_SIDEBAR_THEME_STOPS) return;
+    const preset =
+      SIDEBAR_THEME_PRESETS[(current.stops.length * 3 + 2) % SIDEBAR_THEME_PRESETS.length] ??
+      "#5db3f0";
+    const position = DEFAULT_STOP_POSITIONS[current.stops.length] ?? { x: 0.5, y: 0.5 };
+    apply({ ...current, stops: [...current.stops, { color: preset, ...position }] });
+    setSelectedStopIndex(current.stops.length);
   };
+  const removeSelectedStop = () => {
+    if (current.stops.length <= 1) return;
+    const stops = current.stops.filter((_, i) => i !== selectedStopIndex);
+    apply({ ...current, stops });
+    setSelectedStopIndex(Math.max(0, selectedStopIndex - 1));
+  };
+
+  // ------------------------------------------------------------------
+  // Canvas drag — plain pointer events, positions in fractions of the box.
+  // ------------------------------------------------------------------
+  const canvasRef = useRef<HTMLDivElement | null>(null);
+  const dragIndexRef = useRef<number | null>(null);
+  const moveStopToPointer = (clientX: number, clientY: number) => {
+    const canvas = canvasRef.current;
+    const index = dragIndexRef.current;
+    if (canvas === null || index === null) return;
+    const rect = canvas.getBoundingClientRect();
+    const x = clamp01((clientX - rect.left) / rect.width);
+    const y = clamp01((clientY - rect.top) / rect.height);
+    patchStop(index, { x, y });
+  };
+
+  const canvasBackground = sidebarThemeBackground(current, resolvedTheme);
+  const grainOpacity = sidebarThemeGrainOpacity(current);
 
   return (
     <SettingsPageContainer>
       <SettingsSection title="Sidebar theme" icon={<PaletteIcon className="size-4.5" />}>
         <p className="max-w-xl px-3 text-[13px] leading-[1.45] text-muted-foreground/80 sm:px-4">
-          Pick one to three colours: the sidebar takes a soft gradient wash blended toward the
-          app's light or dark background, Arc-style. The sidebar itself is the live preview.
+          Drag the colour dots — the canvas and the sidebar repaint live, Arc-style. Each project
+          can carry its own theme, like a Space.
         </p>
 
-        <div className="px-3 pt-3 sm:px-4">
-          <p className="pb-2 text-xs font-medium text-muted-foreground">Presets</p>
-          <div className="flex flex-wrap gap-2">
-            {SIDEBAR_THEME_PRESETS.map((preset) => (
+        <div className="flex flex-wrap items-center gap-2 px-3 pt-3 sm:px-4">
+          <div className="flex overflow-hidden rounded-lg border border-border/60">
+            <button
+              type="button"
+              onClick={() => setScope("default")}
+              className={cn(
+                "cursor-pointer px-3 py-1.5 text-xs font-medium transition-colors",
+                effectiveScope === "default"
+                  ? "bg-accent text-foreground"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              Default theme
+            </button>
+            <button
+              type="button"
+              disabled={!projectScopeAvailable}
+              onClick={() => setScope("project")}
+              title={
+                projectScopeAvailable
+                  ? undefined
+                  : "Scope the sidebar to a project first (the project filter at the top)."
+              }
+              className={cn(
+                "cursor-pointer border-l border-border/60 px-3 py-1.5 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-45",
+                effectiveScope === "project"
+                  ? "bg-accent text-foreground"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              Current project
+            </button>
+          </div>
+
+          <div className="ml-auto flex overflow-hidden rounded-lg border border-border/60">
+            {(
+              [
+                { value: "auto", icon: <SparklesIcon className="size-3.5" />, label: "Auto" },
+                { value: "light", icon: <SunIcon className="size-3.5" />, label: "Light" },
+                { value: "dark", icon: <MoonIcon className="size-3.5" />, label: "Dark" },
+              ] as const
+            ).map((mode, index) => (
               <button
-                key={preset}
+                key={mode.value}
                 type="button"
-                aria-label={`Use ${preset}`}
-                onClick={() => apply({ colors: [preset] })}
+                aria-label={`${mode.label} appearance`}
+                onClick={() => patch({ appearance: mode.value })}
                 className={cn(
-                  "size-7 cursor-pointer rounded-full border border-border/60 transition-transform hover:scale-110",
-                  active && current.colors[0] === preset && current.colors.length === 1
-                    ? "ring-2 ring-ring ring-offset-2 ring-offset-background"
-                    : null,
+                  "cursor-pointer px-2.5 py-1.5 transition-colors",
+                  index > 0 && "border-l border-border/60",
+                  current.appearance === mode.value
+                    ? "bg-accent text-foreground"
+                    : "text-muted-foreground hover:text-foreground",
                 )}
-                style={{ backgroundColor: preset }}
-              />
+              >
+                {mode.icon}
+              </button>
             ))}
           </div>
         </div>
 
         <div className="px-3 pt-4 sm:px-4">
-          <p className="pb-2 text-xs font-medium text-muted-foreground">Colours</p>
-          <div className="flex items-center gap-2">
-            {current.colors.map((color, index) => (
-              <span
-                key={`${color}:${current.colors.slice(0, index).filter((c) => c === color).length}`}
-                className="relative"
-              >
-                <input
-                  type="color"
-                  value={color}
-                  aria-label={`Colour ${index + 1}`}
-                  onChange={(event) => setColor(index, event.currentTarget.value)}
-                  className="size-9 cursor-pointer rounded-lg border border-border/60 bg-transparent p-0.5"
-                />
-                {current.colors.length > 1 ? (
-                  <button
-                    type="button"
-                    aria-label={`Remove colour ${index + 1}`}
-                    onClick={() => removeColor(index)}
-                    className="absolute -top-1.5 -right-1.5 flex size-4 cursor-pointer items-center justify-center rounded-full bg-muted text-muted-foreground hover:text-foreground"
-                  >
-                    <XIcon className="size-2.5" />
-                  </button>
-                ) : null}
-              </span>
+          <div
+            ref={canvasRef}
+            className="relative h-64 w-full max-w-xl touch-none overflow-hidden rounded-2xl border border-border/60 bg-muted/40"
+            style={{ background: canvasBackground ?? undefined }}
+            onPointerMove={(event) => {
+              if (dragIndexRef.current !== null) {
+                moveStopToPointer(event.clientX, event.clientY);
+              }
+            }}
+            onPointerUp={() => {
+              dragIndexRef.current = null;
+            }}
+          >
+            {/* Dotted texture over the live gradient — the Arc canvas look. */}
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-0 opacity-35"
+              style={{
+                backgroundImage:
+                  "radial-gradient(color-mix(in oklab, var(--color-foreground) 26%, transparent) 1px, transparent 1px)",
+                backgroundSize: "14px 14px",
+              }}
+            />
+            {grainOpacity > 0 ? (
+              <div
+                aria-hidden
+                className="pointer-events-none absolute inset-0 mix-blend-overlay"
+                style={{
+                  backgroundImage: `url("${SIDEBAR_THEME_GRAIN_URL}")`,
+                  opacity: grainOpacity,
+                }}
+              />
+            ) : null}
+            {current.stops.map((stop, index) => (
+              <button
+                key={`${stop.color}:${current.stops.slice(0, index).filter((s) => s.color === stop.color).length}`}
+                type="button"
+                aria-label={`Colour dot ${index + 1}`}
+                onPointerDown={(event) => {
+                  event.currentTarget.setPointerCapture(event.pointerId);
+                  dragIndexRef.current = index;
+                  setSelectedStopIndex(index);
+                }}
+                onPointerMove={(event) => {
+                  if (dragIndexRef.current === index) {
+                    moveStopToPointer(event.clientX, event.clientY);
+                  }
+                }}
+                onPointerUp={() => {
+                  dragIndexRef.current = null;
+                }}
+                className={cn(
+                  "absolute size-9 -translate-x-1/2 -translate-y-1/2 cursor-grab rounded-full border-4 border-white shadow-md transition-transform active:cursor-grabbing",
+                  index === selectedStopIndex ? "scale-110 ring-2 ring-ring" : "hover:scale-105",
+                )}
+                style={{
+                  left: `${stop.x * 100}%`,
+                  top: `${stop.y * 100}%`,
+                  backgroundColor: stop.color,
+                }}
+              />
             ))}
-            {current.colors.length < 3 ? (
+            <div className="absolute inset-x-0 bottom-2 flex justify-center gap-2">
+              <Button
+                size="icon-sm"
+                variant="outline"
+                aria-label="Remove selected colour"
+                disabled={current.stops.length <= 1}
+                onClick={removeSelectedStop}
+              >
+                <MinusIcon className="size-4" />
+              </Button>
               <Button
                 size="icon-sm"
                 variant="outline"
                 aria-label="Add a colour"
-                onClick={() =>
-                  apply({ colors: [...current.colors, current.colors.at(-1) ?? "#5db3f0"] })
-                }
+                disabled={current.stops.length >= MAX_SIDEBAR_THEME_STOPS}
+                onClick={addStop}
               >
                 <PlusIcon className="size-4" />
               </Button>
-            ) : null}
+            </div>
           </div>
         </div>
 
-        <div className="grid max-w-md gap-4 px-3 pt-4 sm:px-4">
+        <div className="flex flex-wrap items-center gap-2 px-3 pt-4 sm:px-4">
+          {SIDEBAR_THEME_PRESETS.map((preset) => (
+            <button
+              key={preset}
+              type="button"
+              aria-label={`Paint selected dot ${preset}`}
+              onClick={() => patchStop(selectedStopIndex, { color: preset })}
+              className={cn(
+                "size-7 cursor-pointer rounded-full border border-border/60 transition-transform hover:scale-110",
+                selectedStop?.color === preset
+                  ? "ring-2 ring-ring ring-offset-2 ring-offset-background"
+                  : null,
+              )}
+              style={{ backgroundColor: preset }}
+            />
+          ))}
+          <label
+            className="relative ml-1 inline-flex size-7 cursor-pointer items-center justify-center overflow-hidden rounded-full border border-dashed border-border"
+            aria-label="Custom colour"
+            title="Custom colour"
+          >
+            <span
+              className="absolute inset-1 rounded-full"
+              style={{ backgroundColor: selectedStop?.color ?? "#5db3f0" }}
+            />
+            <input
+              type="color"
+              value={selectedStop?.color ?? "#5db3f0"}
+              onChange={(event) => patchStop(selectedStopIndex, { color: event.currentTarget.value })}
+              className="absolute inset-0 cursor-pointer opacity-0"
+            />
+          </label>
+        </div>
+
+        <div className="grid max-w-xl gap-4 px-3 pt-4 sm:px-4">
           <label className="grid gap-1 text-xs font-medium text-muted-foreground">
             Intensity
             <input
@@ -114,7 +315,7 @@ export function ThemeSettingsPanel() {
               min={0}
               max={100}
               value={Math.round(current.intensity * 100)}
-              onChange={(event) => apply({ intensity: Number(event.currentTarget.value) / 100 })}
+              onChange={(event) => patch({ intensity: Number(event.currentTarget.value) / 100 })}
               aria-label="Theme intensity"
             />
           </label>
@@ -125,24 +326,39 @@ export function ThemeSettingsPanel() {
               min={0}
               max={100}
               value={Math.round(current.grain * 100)}
-              onChange={(event) => apply({ grain: Number(event.currentTarget.value) / 100 })}
+              onChange={(event) => patch({ grain: Number(event.currentTarget.value) / 100 })}
               aria-label="Theme grain"
+            />
+          </label>
+          <label className="grid gap-1 text-xs font-medium text-muted-foreground">
+            Gradient angle
+            <input
+              type="range"
+              min={0}
+              max={360}
+              value={Math.round(current.angle)}
+              onChange={(event) => patch({ angle: Number(event.currentTarget.value) })}
+              aria-label="Gradient angle"
             />
           </label>
         </div>
 
         <div className="flex items-center gap-3 px-3 pt-4 pb-2 sm:px-4">
           {!active ? (
-            <Button size="sm" onClick={() => setTheme(current)}>
-              Enable theme
+            <Button size="sm" onClick={() => apply(current)}>
+              {effectiveScope === "project" ? "Enable for this project" : "Enable theme"}
             </Button>
           ) : (
-            <Button size="sm" variant="outline" onClick={clearTheme}>
-              No theme
+            <Button size="sm" variant="outline" onClick={disable}>
+              {effectiveScope === "project" ? "Remove project theme" : "No theme"}
             </Button>
           )}
           <p className="text-xs text-muted-foreground/70">
-            {active ? "Live on the sidebar." : "Off — the sidebar keeps the default look."}
+            {active
+              ? "Live on the sidebar."
+              : effectiveScope === "project"
+                ? "This project follows the default theme."
+                : "Off — the sidebar keeps the default look."}
           </p>
         </div>
       </SettingsSection>

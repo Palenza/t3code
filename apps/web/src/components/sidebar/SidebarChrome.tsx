@@ -104,21 +104,45 @@ function T3Wordmark() {
   );
 }
 
+// Un clic au lieu de Settings → sous-page (retour fondateur 29/07, façon
+// Arc) : les pages du quotidien vivent directement dans la sidebar.
+const SIDEBAR_QUICK_LINKS = [
+  { label: "General", to: "/settings/general" },
+  { label: "Providers", to: "/settings/providers" },
+  { label: "Tableau local", to: "/settings/tableau-local" },
+] as const;
+
 export const SidebarChromeFooter = memo(function SidebarChromeFooter() {
   const navigate = useNavigate();
   const { isMobile, setOpenMobile } = useSidebar();
+  const navigateClosingMobile = useCallback(
+    (to: string) => {
+      if (isMobile) {
+        setOpenMobile(false);
+      }
+      void navigate({ to });
+    },
+    [isMobile, navigate, setOpenMobile],
+  );
   const handleSettingsClick = useCallback(() => {
-    if (isMobile) {
-      setOpenMobile(false);
-    }
-    void navigate({ to: "/settings" });
-  }, [isMobile, navigate, setOpenMobile]);
+    navigateClosingMobile("/settings");
+  }, [navigateClosingMobile]);
 
   return (
     <SidebarFooter className="p-2">
       <SidebarProviderUpdatePill />
       <SidebarUpdatePill />
       <SidebarMenu>
+        {SIDEBAR_QUICK_LINKS.map((link) => (
+          <SidebarMenuItem key={link.to}>
+            <SidebarMenuButton
+              className="h-7 text-[13px] text-sidebar-foreground/70 hover:text-sidebar-foreground"
+              onClick={() => navigateClosingMobile(link.to)}
+            >
+              <span className="pl-6">{link.label}</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        ))}
         <SidebarMenuItem>
           <SidebarMenuButton onClick={handleSettingsClick}>
             <SettingsIcon />

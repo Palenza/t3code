@@ -1,5 +1,6 @@
 import { useTheme } from "../../hooks/useTheme";
 import {
+  resolveSidebarTheme,
   SIDEBAR_THEME_GRAIN_URL,
   sidebarThemeBackground,
   sidebarThemeGrainOpacity,
@@ -7,14 +8,18 @@ import {
 } from "../../sidebarThemeStore";
 
 /**
- * The Arc-style colour wash behind the whole sidebar: gradient layers first,
- * a grain veil above them, both inert (`pointer-events-none`, `-z-10` inside
- * the sidebar's own stacking context) so rows, header art and hover states
- * paint exactly as before. Renders nothing when no theme is set — the
- * default look stays byte-for-byte the upstream one.
+ * The Arc-style colour wash behind the whole sidebar: one radial per
+ * positioned colour dot, a grain veil above, both inert
+ * (`pointer-events-none`, `-z-10` inside the sidebar's own stacking context)
+ * so rows, header art and hover states paint exactly as before. Follows the
+ * sidebar's ACTIVE PROJECT like Arc's Spaces — switching projects switches
+ * colours. Renders nothing when no theme applies — the default look stays
+ * byte-for-byte the upstream one.
  */
 export function SidebarThemeWash() {
-  const theme = useSidebarThemeStore((state) => state.theme);
+  const theme = useSidebarThemeStore((state) =>
+    resolveSidebarTheme(state, state.activeProjectKey),
+  );
   const { resolvedTheme } = useTheme();
   if (theme === null) {
     return null;
@@ -26,7 +31,10 @@ export function SidebarThemeWash() {
   const grainOpacity = sidebarThemeGrainOpacity(theme);
   return (
     <div aria-hidden className="pointer-events-none absolute inset-0 -z-10">
-      <div className="absolute inset-0" style={{ background }} />
+      <div
+        className="absolute inset-0 transition-[background] duration-700 ease-out motion-reduce:transition-none"
+        style={{ background }}
+      />
       {grainOpacity > 0 ? (
         <div
           className="absolute inset-0 mix-blend-overlay"

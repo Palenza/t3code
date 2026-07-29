@@ -1,15 +1,20 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import {
+  makeSidebarThemeFromColors,
+  resolveSidebarTheme,
+  resolveSidebarThemeAppearance,
   sidebarThemeBackground,
   sidebarThemeGrainOpacity,
   type SidebarTheme,
 } from "./sidebarThemeStore";
 
 const theme = (overrides: Partial<SidebarTheme> = {}): SidebarTheme => ({
-  colors: ["#5db3f0"],
+  stops: [{ color: "#5db3f0", x: 0.3, y: 0.2 }],
   intensity: 0.5,
   grain: 0.25,
+  angle: 165,
+  appearance: "auto",
   ...overrides,
 });
 
@@ -22,16 +27,28 @@ describe("sidebarThemeBackground", () => {
     expect(dark).not.toContain("#f7f9fc");
   });
 
-  it("spreads one, two or three colors across the layers", () => {
-    const un = sidebarThemeBackground(theme({ colors: ["#e5484d"] }), "dark");
-    expect(un?.match(/#e5484d/g)?.length).toBeGreaterThanOrEqual(4);
-    const trois = sidebarThemeBackground(
-      theme({ colors: ["#e5484d", "#f5c542", "#4caf7d"] }),
+  it("paints one radial per dot, at the dot's position", () => {
+    const deux = sidebarThemeBackground(
+      theme({
+        stops: [
+          { color: "#e5484d", x: 0.1, y: 0.9 },
+          { color: "#4caf7d", x: 0.75, y: 0.25 },
+        ],
+      }),
       "dark",
     );
-    expect(trois).toContain("#e5484d");
-    expect(trois).toContain("#f5c542");
-    expect(trois).toContain("#4caf7d");
+    expect(deux).toContain("at 10% 90%");
+    expect(deux).toContain("at 75% 25%");
+    expect(deux?.match(/radial-gradient/g)?.length).toBe(2);
+  });
+
+  it("orients the base linear gradient by the theme angle", () => {
+    expect(sidebarThemeBackground(theme({ angle: 90 }), "dark")).toContain(
+      "linear-gradient(90deg,",
+    );
+    expect(sidebarThemeBackground(theme({ angle: -90 }), "dark")).toContain(
+      "linear-gradient(270deg,",
+    );
   });
 
   it("maps intensity to the kept-colour percentage, bounded", () => {
@@ -40,16 +57,48 @@ describe("sidebarThemeBackground", () => {
     expect(sidebarThemeBackground(theme({ intensity: 99 }), "dark")).toContain(" 68%,");
   });
 
+  it("forces the blend base when the theme pins an appearance", () => {
+    const pinnedLight = sidebarThemeBackground(theme({ appearance: "light" }), "dark");
+    expect(pinnedLight).toContain("#f7f9fc");
+    expect(resolveSidebarThemeAppearance(theme({ appearance: "dark" }), "light")).toBe("dark");
+    expect(resolveSidebarThemeAppearance(theme(), "light")).toBe("light");
+  });
+
   it("drops invalid colours and paints nothing when none are valid", () => {
     expect(
-      sidebarThemeBackground(theme({ colors: ["pas-une-couleur", "#123"] }), "dark"),
+      sidebarThemeBackground(
+        theme({
+          stops: [
+            { color: "pas-une-couleur", x: 0.5, y: 0.5 },
+            { color: "#123", x: 0.5, y: 0.5 },
+          ],
+        }),
+        "dark",
+      ),
     ).toBeNull();
-    const partiel = sidebarThemeBackground(
-      theme({ colors: ["nope", "#4caf7d"] }),
-      "dark",
-    );
-    expect(partiel).toContain("#4caf7d");
-    expect(partiel).not.toContain("nope");
+  });
+});
+
+describe("resolveSidebarTheme", () => {
+  it("prefers the project theme, falls back to the default", () => {
+    const projet = theme({ intensity: 0.9 });
+    const defaut = theme({ intensity: 0.1 });
+    const state = { theme: defaut, themesByProject: { "env:proj": projet } };
+    expect(resolveSidebarTheme(state, "env:proj")).toBe(projet);
+    expect(resolveSidebarTheme(state, "env:autre")).toBe(defaut);
+    expect(resolveSidebarTheme(state, null)).toBe(defaut);
+    expect(resolveSidebarTheme({ theme: null, themesByProject: {} }, "env:proj")).toBeNull();
+  });
+});
+
+describe("makeSidebarThemeFromColors", () => {
+  it("places colours on the default diagonal and caps at the maximum", () => {
+    const migre = makeSidebarThemeFromColors(["#e5484d", "#4caf7d"]);
+    expect(migre.stops).toHaveLength(2);
+    expect(migre.stops[0]?.x).toBeCloseTo(0.28);
+    expect(migre.appearance).toBe("auto");
+    const sept = makeSidebarThemeFromColors(Array.from({ length: 9 }, () => "#5db3f0"));
+    expect(sept.stops).toHaveLength(6);
   });
 });
 

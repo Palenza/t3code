@@ -187,7 +187,10 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
         collapsible="offcanvas"
         data-app-sidebar=""
         data-sidebar-version={useSidebarV2Theme ? "v2" : "v1"}
-        className="isolate border-r border-sidebar-border bg-sidebar text-sidebar-foreground"
+        // `sidebar-inner` (the opaque bg-sidebar layer) must be its own
+        // stacking context, otherwise the theme wash's -z-10 escapes to THIS
+        // context and paints underneath that opaque background — invisible.
+        className="isolate border-r border-sidebar-border bg-sidebar text-sidebar-foreground [&_[data-slot=sidebar-inner]]:isolate"
         resizable={{
           maxWidth: sidebarMaximumWidth,
           minWidth: THREAD_SIDEBAR_MIN_WIDTH,

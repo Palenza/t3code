@@ -97,6 +97,7 @@ import {
   useThreadCustomizationStore,
   type ThreadColor,
 } from "../threadCustomizationStore";
+import { useSidebarThemeStore } from "../sidebarThemeStore";
 import { SortableThreadItem } from "./sidebar/SortableThreadItem";
 import { useThreadSelectionStore } from "../threadSelectionStore";
 import { useThreadActions } from "../hooks/useThreadActions";
@@ -376,14 +377,26 @@ function SnoozePopoverButton(props: {
 const threadKeyOfShell = (thread: EnvironmentThreadShell): string =>
   scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id));
 
-const THREAD_COLOR_RAIL: Record<ThreadColor, string> = {
-  red: "bg-red-500",
-  orange: "bg-orange-500",
-  yellow: "bg-yellow-400",
-  green: "bg-green-500",
-  blue: "bg-blue-500",
-  purple: "bg-purple-500",
+// Arc-style card tint (retour fondateur 29/07 : le rail 3 px « fait cheap »).
+// The colour washes the WHOLE card as a soft oklab gradient, strongest on the
+// left, dissolving to transparent — visible at a glance, never shouting.
+const THREAD_COLOR_WASH: Record<ThreadColor, string> = {
+  red: "#e5484d",
+  orange: "#f2994a",
+  yellow: "#f5c542",
+  green: "#4caf7d",
+  blue: "#5db3f0",
+  purple: "#9c5fd4",
 };
+
+function threadColorWashBackground(hex: string): string {
+  return [
+    `linear-gradient(105deg,`,
+    `color-mix(in oklab, ${hex} 30%, transparent) 0%,`,
+    `color-mix(in oklab, ${hex} 12%, transparent) 52%,`,
+    `transparent 100%)`,
+  ].join(" ");
+}
 
 const SidebarV2Row = memo(function SidebarV2Row(props: {
   thread: SidebarThreadSummary;
@@ -453,10 +466,8 @@ const SidebarV2Row = memo(function SidebarV2Row(props: {
     threadColor === undefined ? null : (
       <span
         aria-hidden
-        className={cn(
-          "absolute left-0 top-1.5 bottom-1.5 z-20 w-[3px] rounded-full",
-          THREAD_COLOR_RAIL[threadColor],
-        )}
+        className="pointer-events-none absolute inset-0 z-0 rounded-[inherit]"
+        style={{ background: threadColorWashBackground(THREAD_COLOR_WASH[threadColor]) }}
       />
     );
   const isSelected = useThreadSelectionStore((state) => state.selectedThreadKeys.has(threadKey));
@@ -1218,6 +1229,12 @@ export default function SidebarV2() {
   // Project scope: one menu above the list. Scoping filters the list without
   // making the header width depend on the number or length of project names.
   const [projectScopeKey, setProjectScopeKey] = useState<string | null>(null);
+  // The sidebar's project scope IS the "Space" for theming (Arc-style): the
+  // wash follows whichever project the sidebar currently shows.
+  const setActiveThemeProjectKey = useSidebarThemeStore((state) => state.setActiveProjectKey);
+  useEffect(() => {
+    setActiveThemeProjectKey(projectScopeKey);
+  }, [projectScopeKey, setActiveThemeProjectKey]);
   const scopedProjectGroup = useMemo(
     () =>
       projectScopeKey === null
