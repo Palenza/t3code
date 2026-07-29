@@ -54,6 +54,9 @@ export function SidebarSpacesBar() {
   const [creating, setCreating] = useState(false);
   const [themeOpen, setThemeOpen] = useState(false);
   const [pickerOuvert, setPickerOuvert] = useState(false);
+  // Un état SÉPARÉ pour le choix d'icône de la création : partagé avec celui
+  // de la barre, les deux popovers s'ouvraient ensemble.
+  const [pickerCreation, setPickerCreation] = useState(false);
   const [renommage, setRenommage] = useState<{ id: string; valeur: string } | null>(null);
   const [glisse, setGlisse] = useState<string | null>(null);
   const [draftName, setDraftName] = useState("");
@@ -298,56 +301,104 @@ export function SidebarSpacesBar() {
           />
           <TooltipPopup side="top">Nouvel espace</TooltipPopup>
         </Tooltip>
-        <PopoverPopup side="top" align="end" className="w-72 p-0">
-          <div className="border-b border-border/50 px-4 py-3">
-            <p className="text-sm font-medium">Nouvel espace</p>
-            <p className="pt-0.5 text-xs text-muted-foreground">
-              Un espace regroupe des fils et porte ses couleurs.
-            </p>
-          </div>
-          <div className="flex flex-col gap-3 px-4 py-3">
-            <div className="flex items-center gap-2">
-              <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-accent/50 text-[18px]">
-                <SpaceIcon valeur={draftEmoji} className="size-4.5" />
-              </span>
-              <input
-                autoFocus
-                value={draftName}
-                onChange={(event) => setDraftName(event.currentTarget.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") submitCreate();
+        <PopoverPopup
+          // La VUE d'Arc, pas une bulle : leur création d'espace occupe TOUTE
+          // la colonne — illustration, nom, thème, et les deux actions collées
+          // en bas. Notre petite bulle flottante posée sur la barre était le
+          // « trop moche » du 30/07 ; ici elle recouvre la sidebar sur toute
+          // sa hauteur, exactement comme chez eux.
+          anchor={() => document.querySelector("[data-app-sidebar]")}
+          side="right"
+          align="center"
+          sideOffset={-999}
+          className="h-[100dvh] w-[var(--sidebar-width,17rem)] rounded-none border-0 p-0 shadow-2xl"
+          viewportClassName="h-full overflow-y-auto p-0 [--viewport-inline-padding:0px]"
+        >
+          <div className="flex h-full flex-col px-5 pt-10 pb-5">
+            {/* L'en-tête d'Arc : une pile de cartes, le titre, la promesse. */}
+            <div className="flex flex-col items-center gap-2 text-center">
+              <LayersIcon className="size-9 text-sidebar-foreground/70" />
+              <p className="text-[17px] font-semibold">Nouvel espace</p>
+              <p className="max-w-[15rem] text-[13px] leading-snug text-sidebar-muted-foreground">
+                Sépare tes fils par sujet : design, débogage, production…
+              </p>
+            </div>
+
+            <div className="flex flex-col gap-2 pt-7">
+              {/* Le nom, avec l'icône À GAUCHE dans le champ — comme Arc. */}
+              <div className="flex items-center gap-2 rounded-lg bg-sidebar-row-hover px-2.5 py-2">
+                <Popover open={pickerCreation} onOpenChange={setPickerCreation}>
+                  <PopoverTrigger
+                    render={
+                      <button
+                        type="button"
+                        aria-label="Choisir une icône"
+                        className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md border border-dashed border-sidebar-border text-[15px] transition-colors hover:bg-sidebar-row-active"
+                      >
+                        <SpaceIcon valeur={draftEmoji} className="size-4" />
+                      </button>
+                    }
+                  />
+                  <PopoverPopup side="right" align="start" className="w-80 p-0">
+                    <SpaceIconPicker
+                      valeur={draftEmoji}
+                      onChange={(valeur) => {
+                        setDraftEmoji(valeur);
+                        setPickerCreation(false);
+                      }}
+                    />
+                  </PopoverPopup>
+                </Popover>
+                <input
+                  autoFocus
+                  value={draftName}
+                  onChange={(event) => setDraftName(event.currentTarget.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") submitCreate();
+                  }}
+                  placeholder="Nom de l'espace…"
+                  className="h-7 w-full bg-transparent text-[13px] outline-none placeholder:text-sidebar-muted-foreground/70"
+                />
+              </div>
+
+              {/* « Choose a Theme » d'Arc : une ligne qui OUVRE l'instrument. */}
+              <button
+                type="button"
+                onClick={() => {
+                  setCreating(false);
+                  setThemeOpen(true);
                 }}
-                placeholder="Design, Débogage, Production…"
-                className="h-9 w-full rounded-lg border border-border/60 bg-transparent px-2.5 text-sm outline-none focus:ring-2 focus:ring-ring"
-              />
+                className="flex cursor-pointer items-center gap-2 rounded-lg bg-sidebar-row-hover px-2.5 py-2.5 text-left text-[13px] transition-colors hover:bg-sidebar-row-active"
+              >
+                <PaletteIcon className="size-4 shrink-0 text-sidebar-foreground/70" />
+                <span className="flex-1">Choisir un thème</span>
+                <span
+                  aria-hidden
+                  className="h-4 w-10 rounded-full ring-1 ring-sidebar-border"
+                  style={{
+                    background:
+                      sidebarThemeBackground(
+                        makeSidebarThemeFromColors(draftThemeColors),
+                        "dark",
+                      ) ?? undefined,
+                  }}
+                />
+              </button>
             </div>
-            <div className="-mx-4 border-y border-border/50">
-              <SpaceIconPicker valeur={draftEmoji} onChange={setDraftEmoji} />
+
+            {/* Les deux actions COLLÉES EN BAS, comme Arc. */}
+            <div className="mt-auto flex flex-col gap-1 pt-6">
+              <Button
+                className="w-full"
+                disabled={draftName.trim().length === 0}
+                onClick={submitCreate}
+              >
+                Créer l'espace
+              </Button>
+              <Button variant="ghost" className="w-full" onClick={() => setCreating(false)}>
+                Annuler
+              </Button>
             </div>
-            <div className="flex items-center gap-2">
-              <span
-                aria-hidden
-                className="h-6 w-full rounded-md ring-1 ring-border/50"
-                style={{
-                  background:
-                    sidebarThemeBackground(
-                      makeSidebarThemeFromColors(draftThemeColors),
-                      "dark",
-                    ) ?? undefined,
-                }}
-              />
-            </div>
-            <p className="-mt-2 text-[11px] text-muted-foreground/70">
-              Ses couleurs de naissance — modifiables ensuite dans Réglages → Theme.
-            </p>
-            <Button
-              className="w-full"
-              size="sm"
-              disabled={draftName.trim().length === 0}
-              onClick={submitCreate}
-            >
-              Créer l'espace
-            </Button>
           </div>
         </PopoverPopup>
       </Popover>
