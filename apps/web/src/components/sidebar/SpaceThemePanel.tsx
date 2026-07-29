@@ -136,7 +136,9 @@ function wheelColorAt(x: number, y: number): string {
 
 /** L'inverse : où poser un rond pour obtenir (au plus près) cette couleur. */
 function wheelPositionOf(hex: string): { x: number; y: number } {
-  const { h, s, l } = hexToHsl(hex);
+  // La saturation ne sert pas ici : sur la molette, la position ne dépend que
+  // de la teinte (angle) et de la clarté (rayon).
+  const { h, l } = hexToHsl(hex);
   const angle = ((h + 5) * Math.PI) / 180;
   const distFromLight = (Math.min(86, Math.max(42, l)) - 42) / 75;
   const dist = Math.min(0.44, Math.max(0.06, distFromLight));
@@ -310,6 +312,13 @@ export function SpaceThemePanel() {
           const size = STOP_SIZES_PX[index + 1] ?? 20;
           return (
             <button
+              // Ici l'index EST l'identité stable. Une clé bâtie sur la couleur
+              // ou la position remonterait le bouton au premier pixel de
+              // glissé — or c'est précisément pendant le glissé qu'il doit
+              // rester le même élément. Un `id` par arrêt réglerait ça
+              // proprement, mais il faudrait migrer les thèmes déjà rangés sur
+              // disque : cher pour un avertissement.
+              // eslint-disable-next-line react/no-array-index-key
               key={index}
               type="button"
               aria-label={`Prendre cette couleur comme dominante`}

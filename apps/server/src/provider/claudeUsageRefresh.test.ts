@@ -71,7 +71,7 @@ const layers = (input: {
     // ce qui est la vérité d'une machine de test : aucune entrée `security` à
     // trouver, et la lecture retombe sur le fichier.
     Layer.succeed(ChildProcessSpawner.ChildProcessSpawner, {
-      spawn: () => Effect.fail(new Error("aucun trousseau sous test")),
+      spawn: () => Effect.fail({ _tag: "PasDeTrousseauSousTest" } as const),
     } as never),
   );
 

@@ -312,6 +312,11 @@ describe("ProviderRuntimeIngestion", () => {
 
     return {
       engine,
+      // Le harnais porte le runtime, comme pour `readModel` et `drain` : un
+      // test qui appelle `Effect.runPromise` lui-même rouvre une porte que ce
+      // fichier a fermée partout ailleurs.
+      dispatch: (commande: Parameters<typeof engine.dispatch>[0]) =>
+        Effect.runPromise(engine.dispatch(commande)),
       readModel: () => Effect.runPromise(snapshotQuery.getSnapshot()),
       emit: provider.emit,
       setProviderSession: provider.setSession,
@@ -3493,22 +3498,20 @@ describe("ProviderRuntimeIngestion", () => {
       const harness = await createHarness({ serverSettings: deuxComptes });
 
       // La question de l'humain : c'est ELLE que le relais doit rejouer.
-      await Effect.runPromise(
-        harness.engine.dispatch({
-          type: "thread.turn.start",
-          commandId: CommandId.make("cmd-relais-question"),
-          threadId: asThreadId("thread-1"),
-          message: {
-            messageId: MessageId.make("msg-relais-question"),
-            role: "user",
-            text: "Ma question restée sans réponse",
-            attachments: [],
-          },
-          runtimeMode: "full-access",
-          interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
-          createdAt: "2026-07-29T21:59:50.000Z",
-        }),
-      );
+      await harness.dispatch({
+        type: "thread.turn.start",
+        commandId: CommandId.make("cmd-relais-question"),
+        threadId: asThreadId("thread-1"),
+        message: {
+          messageId: MessageId.make("msg-relais-question"),
+          role: "user",
+          text: "Ma question restée sans réponse",
+          attachments: [],
+        },
+        runtimeMode: "full-access",
+        interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+        createdAt: "2026-07-29T21:59:50.000Z",
+      });
 
       harness.emit({
         type: "turn.started",
