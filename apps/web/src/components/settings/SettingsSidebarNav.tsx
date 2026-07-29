@@ -6,6 +6,7 @@ import {
   FlaskConicalIcon,
   GaugeIcon,
   GitBranchIcon,
+  PaletteIcon,
   KeyboardIcon,
   Link2Icon,
   Mic2Icon,
@@ -32,6 +33,7 @@ export type SettingsSectionPath =
   | "/settings/connections"
   | "/settings/voice"
   | "/settings/beta"
+  | "/settings/theme"
   | "/settings/tableau-local"
   | "/settings/archived";
 
@@ -47,6 +49,7 @@ export const SETTINGS_NAV_ITEMS: ReadonlyArray<{
   { label: "Connections", to: "/settings/connections", icon: Link2Icon },
   { label: "Voice", to: "/settings/voice", icon: Mic2Icon },
   { label: "Beta", to: "/settings/beta", icon: FlaskConicalIcon },
+  { label: "Theme", to: "/settings/theme", icon: PaletteIcon },
   { label: "Tableau local", to: "/settings/tableau-local", icon: GaugeIcon },
   { label: "Archive", to: "/settings/archived", icon: ArchiveIcon },
 ];

@@ -15,6 +15,7 @@ import { Route as ConnectRouteImport } from './routes/connect'
 import { Route as ChatRouteImport } from './routes/_chat'
 import { Route as ChatIndexRouteImport } from './routes/_chat.index'
 import { Route as SettingsVoiceRouteImport } from './routes/settings.voice'
+import { Route as SettingsThemeRouteImport } from './routes/settings.theme'
 import { Route as SettingsTableauLocalRouteImport } from './routes/settings.tableau-local'
 import { Route as SettingsSourceControlRouteImport } from './routes/settings.source-control'
 import { Route as SettingsProvidersRouteImport } from './routes/settings.providers'
@@ -55,6 +56,11 @@ const ChatIndexRoute = ChatIndexRouteImport.update({
 const SettingsVoiceRoute = SettingsVoiceRouteImport.update({
   id: '/voice',
   path: '/voice',
+  getParentRoute: () => SettingsRoute,
+} as any)
+const SettingsThemeRoute = SettingsThemeRouteImport.update({
+  id: '/theme',
+  path: '/theme',
   getParentRoute: () => SettingsRoute,
 } as any)
 const SettingsTableauLocalRoute = SettingsTableauLocalRouteImport.update({
@@ -134,6 +140,7 @@ export interface FileRoutesByFullPath {
   '/settings/providers': typeof SettingsProvidersRoute
   '/settings/source-control': typeof SettingsSourceControlRoute
   '/settings/tableau-local': typeof SettingsTableauLocalRoute
+  '/settings/theme': typeof SettingsThemeRoute
   '/settings/voice': typeof SettingsVoiceRoute
   '/$environmentId/$threadId': typeof ChatEnvironmentIdThreadIdRoute
   '/draft/$draftId': typeof ChatDraftDraftIdRoute
@@ -152,6 +159,7 @@ export interface FileRoutesByTo {
   '/settings/providers': typeof SettingsProvidersRoute
   '/settings/source-control': typeof SettingsSourceControlRoute
   '/settings/tableau-local': typeof SettingsTableauLocalRoute
+  '/settings/theme': typeof SettingsThemeRoute
   '/settings/voice': typeof SettingsVoiceRoute
   '/': typeof ChatIndexRoute
   '/$environmentId/$threadId': typeof ChatEnvironmentIdThreadIdRoute
@@ -173,6 +181,7 @@ export interface FileRoutesById {
   '/settings/providers': typeof SettingsProvidersRoute
   '/settings/source-control': typeof SettingsSourceControlRoute
   '/settings/tableau-local': typeof SettingsTableauLocalRoute
+  '/settings/theme': typeof SettingsThemeRoute
   '/settings/voice': typeof SettingsVoiceRoute
   '/_chat/': typeof ChatIndexRoute
   '/_chat/$environmentId/$threadId': typeof ChatEnvironmentIdThreadIdRoute
@@ -195,6 +204,7 @@ export interface FileRouteTypes {
     | '/settings/providers'
     | '/settings/source-control'
     | '/settings/tableau-local'
+    | '/settings/theme'
     | '/settings/voice'
     | '/$environmentId/$threadId'
     | '/draft/$draftId'
@@ -213,6 +223,7 @@ export interface FileRouteTypes {
     | '/settings/providers'
     | '/settings/source-control'
     | '/settings/tableau-local'
+    | '/settings/theme'
     | '/settings/voice'
     | '/'
     | '/$environmentId/$threadId'
@@ -233,6 +244,7 @@ export interface FileRouteTypes {
     | '/settings/providers'
     | '/settings/source-control'
     | '/settings/tableau-local'
+    | '/settings/theme'
     | '/settings/voice'
     | '/_chat/'
     | '/_chat/$environmentId/$threadId'
@@ -289,6 +301,13 @@ declare module '@tanstack/react-router' {
       path: '/voice'
       fullPath: '/settings/voice'
       preLoaderRoute: typeof SettingsVoiceRouteImport
+      parentRoute: typeof SettingsRoute
+    }
+    '/settings/theme': {
+      id: '/settings/theme'
+      path: '/theme'
+      fullPath: '/settings/theme'
+      preLoaderRoute: typeof SettingsThemeRouteImport
       parentRoute: typeof SettingsRoute
     }
     '/settings/tableau-local': {
@@ -402,6 +421,7 @@ interface SettingsRouteChildren {
   SettingsProvidersRoute: typeof SettingsProvidersRoute
   SettingsSourceControlRoute: typeof SettingsSourceControlRoute
   SettingsTableauLocalRoute: typeof SettingsTableauLocalRoute
+  SettingsThemeRoute: typeof SettingsThemeRoute
   SettingsVoiceRoute: typeof SettingsVoiceRoute
 }
 
@@ -415,6 +435,7 @@ const SettingsRouteChildren: SettingsRouteChildren = {
   SettingsProvidersRoute: SettingsProvidersRoute,
   SettingsSourceControlRoute: SettingsSourceControlRoute,
   SettingsTableauLocalRoute: SettingsTableauLocalRoute,
+  SettingsThemeRoute: SettingsThemeRoute,
   SettingsVoiceRoute: SettingsVoiceRoute,
 }
 

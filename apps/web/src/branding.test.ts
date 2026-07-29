@@ -20,7 +20,9 @@ afterEach(() => {
 });
 
 describe("branding", () => {
-  it("uses injected desktop branding when available", async () => {
+  it("keeps the fork's displayed brand even when the bundle injects its own name", async () => {
+    // Décision fondateur 29/07 : la marque AFFICHÉE est T4 Code partout ; le
+    // stage injecté par le bundle, lui, reste respecté.
     Object.defineProperty(globalThis, "window", {
       configurable: true,
       value: {
@@ -36,9 +38,9 @@ describe("branding", () => {
 
     const branding = await import("./branding");
 
-    expect(branding.APP_BASE_NAME).toBe("T3 Code");
+    expect(branding.APP_BASE_NAME).toBe("T4 Code");
     expect(branding.APP_STAGE_LABEL).toBe("Nightly");
-    expect(branding.APP_DISPLAY_NAME).toBe("T3 Code (Nightly)");
+    expect(branding.APP_DISPLAY_NAME).toBe("T4 Code (Nightly)");
   });
 
   it("normalizes hosted app channel metadata", async () => {
@@ -49,7 +51,7 @@ describe("branding", () => {
     expect(branding.HOSTED_APP_CHANNEL).toBe("nightly");
     expect(branding.HOSTED_APP_CHANNEL_LABEL).toBe("Nightly");
     expect(branding.APP_STAGE_LABEL).toBe("Nightly");
-    expect(branding.APP_DISPLAY_NAME).toBe("T3 Code (Nightly)");
+    expect(branding.APP_DISPLAY_NAME).toBe("T4 Code (Nightly)");
   });
 
   it("does not label the latest hosted app channel", async () => {
@@ -60,7 +62,7 @@ describe("branding", () => {
     expect(branding.HOSTED_APP_CHANNEL).toBe("latest");
     expect(branding.HOSTED_APP_CHANNEL_LABEL).toBe("Latest");
     expect(branding.APP_STAGE_LABEL).toBe("Latest");
-    expect(branding.APP_DISPLAY_NAME).toBe("T3 Code");
+    expect(branding.APP_DISPLAY_NAME).toBe("T4 Code");
   });
 
   it("ignores unknown hosted app channels", async () => {
