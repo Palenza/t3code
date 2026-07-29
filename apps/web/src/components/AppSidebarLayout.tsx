@@ -1,6 +1,7 @@
 import { useAtomValue } from "@effect/atom-react";
 import * as Schema from "effect/Schema";
 import {
+  useCallback,
   useEffect,
   useState,
   useSyncExternalStore,
@@ -16,6 +17,7 @@ import { cn, isMacPlatform } from "../lib/utils";
 import { primaryServerKeybindingsAtom } from "../state/server";
 import { useSidebarV2Enabled } from "../hooks/useSettings";
 import ThreadSidebar from "./Sidebar";
+import { SidebarEdgePeek, useSidebarPeekStore } from "./sidebar/SidebarEdgePeek";
 import { SidebarThemeWash } from "./sidebar/SidebarThemeWash";
 import ThreadSidebarV2 from "./SidebarV2";
 import { useSidebarStageBackdropVariant } from "./SidebarStageBackdrop";
@@ -136,6 +138,10 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
       ? getWindowFullscreenState()
       : false;
   });
+  const sidebarPeek = useSidebarPeekStore((store) => store.peek);
+  const endSidebarPeek = useCallback(() => {
+    useSidebarPeekStore.getState().setPeek(false);
+  }, []);
   const sidebarProviderStyle = {
     "--sidebar-width": `${sidebarWidth}px`,
     ...(isMacosDesktop && !isWindowFullscreen
@@ -187,10 +193,17 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
         collapsible="offcanvas"
         data-app-sidebar=""
         data-sidebar-version={useSidebarV2Theme ? "v2" : "v1"}
+        onMouseLeave={sidebarPeek ? endSidebarPeek : undefined}
         // `sidebar-inner` (the opaque bg-sidebar layer) must be its own
         // stacking context, otherwise the theme wash's -z-10 escapes to THIS
         // context and paints underneath that opaque background — invisible.
-        className="isolate border-r border-sidebar-border bg-sidebar text-sidebar-foreground [&_[data-slot=sidebar-inner]]:isolate"
+        // While edge-peeking (Arc-style), the collapsed offcanvas container is
+        // pulled back on-screen as a floating overlay above the content.
+        className={cn(
+          "isolate border-r border-sidebar-border bg-sidebar text-sidebar-foreground [&_[data-slot=sidebar-inner]]:isolate",
+          sidebarPeek &&
+            "fixed! inset-y-2! left-2! z-50 h-auto! translate-x-0! rounded-xl border border-sidebar-border shadow-2xl [&_[data-slot=sidebar-inner]]:rounded-xl",
+        )}
         resizable={{
           maxWidth: sidebarMaximumWidth,
           minWidth: THREAD_SIDEBAR_MIN_WIDTH,
@@ -207,6 +220,7 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
       </Sidebar>
       {children}
       <SidebarControl />
+      <SidebarEdgePeek />
     </SidebarProvider>
   );
 }
