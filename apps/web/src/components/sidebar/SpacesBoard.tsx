@@ -31,6 +31,9 @@ import { SpaceThemePanel } from "./SpaceThemePanel";
  * un crayon ; le pied porte une poignée de déplacement à gauche et un menu à
  * droite ; un « + » rond, après la dernière colonne, en crée une de plus.
  */
+/** Largeur de colonne + gouttière, toutes deux MESURÉES sur l'enregistrement. */
+const PAS_COLONNE = 240 + 24;
+
 export function SpacesBoard({ onFermer }: { onFermer: () => void }) {
   const spaces = useSidebarSpacesStore((state) => state.spaces);
   const assignments = useSidebarSpacesStore((state) => state.assignments);
@@ -83,13 +86,11 @@ export function SpacesBoard({ onFermer }: { onFermer: () => void }) {
    * vaut « distance parcourue − ce que la rangée a déjà bougé toute seule » :
    * sans ce retrait, la colonne sauterait d'une case à chaque échange.
    */
-  const PAS_COLONNE = 240 + 24; // largeur mesurée + gouttière mesurée
-  const [glisse, setGlisse] = useState<{
-    readonly id: string;
-    readonly origineX: number;
-    readonly indexDepart: number;
-    readonly decalage: number;
-  } | null>(null);
+  const [glisse, setGlisse] = useState<{ readonly id: string; readonly decalage: number } | null>(
+    null,
+  );
+  /** Ce que le geste garde en tête, hors du rendu : ça change à chaque pixel. */
+  const gesteRef = useRef<{ id: string; origineX: number; indexDepart: number } | null>(null);
 
   /** Les fils rangés dans un espace, dans l'ordre où ils y sont entrés. */
   const filsDe = useCallback(
@@ -138,12 +139,21 @@ export function SpacesBoard({ onFermer }: { onFermer: () => void }) {
    */
   const refsColonnes = useRef(new Map<string, HTMLDivElement>());
   const positionsRef = useRef(new Map<string, number>());
+  const ordreRef = useRef<string>("");
   const glisseId = glisse?.id ?? null;
   useLayoutEffect(() => {
+    // Ne rien faire tant que l'ORDRE n'a pas changé. Le glissé provoque un
+    // rendu à chaque pixel ; se remesurer à chacun relançait une animation
+    // par-dessus la précédente, et la rangée tremblait au lieu de glisser.
+    const ordre = spaces.map((espace) => espace.id).join(",");
+    if (ordre === ordreRef.current) return;
     const avant = positionsRef.current;
     const apres = new Map<string, number>();
     for (const [id, element] of refsColonnes.current) {
-      const x = element.getBoundingClientRect().left;
+      // `offsetLeft`, PAS `getBoundingClientRect` : le second inclut la
+      // transformation en cours, donc il mesurait une position en plein vol et
+      // la prenait pour la position de repos. C'était la boucle qui tremble.
+      const x = element.offsetLeft;
       apres.set(id, x);
       const precedent = avant.get(id);
       if (precedent === undefined || precedent === x || id === glisseId) continue;
@@ -151,34 +161,49 @@ export function SpacesBoard({ onFermer }: { onFermer: () => void }) {
       element.style.transform = `translateX(${precedent - x}px)`;
       // Lecture forcée : sans elle le navigateur fusionne les deux écritures
       // et il n'y a aucune transition à voir.
-      void element.getBoundingClientRect();
+      void element.offsetWidth;
       element.style.transition = "transform 220ms cubic-bezier(0.2, 0, 0, 1)";
       element.style.transform = "";
     }
     positionsRef.current = apres;
-  });
+    ordreRef.current = ordre;
+  }, [glisseId, spaces]);
 
-  /** Le pointeur mène la danse jusqu'au relâchement, où qu'il aille. */
+  /**
+   * Le pointeur mène la danse jusqu'au relâchement, où qu'il aille.
+   *
+   * Les écouteurs se posent UNE fois par glissé. Ils dépendaient de `glisse` et
+   * de `spaces` — donc on les retirait et reposait à chaque pixel parcouru, et
+   * on relisait une liste figée dans la fermeture. On lit le magasin au moment
+   * du geste : c'est la seule version qui ne peut pas être en retard.
+   */
   useEffect(() => {
-    if (glisse === null) return;
+    if (glisseId === null) return;
     const surDeplacement = (event: PointerEvent) => {
-      const parcouru = event.clientX - glisse.origineX;
-      const indexCourant = spaces.findIndex((espace) => espace.id === glisse.id);
+      const geste = gesteRef.current;
+      if (geste === null) return;
+      const espaces = useSidebarSpacesStore.getState().spaces;
+      const indexCourant = espaces.findIndex((espace) => espace.id === geste.id);
       if (indexCourant < 0) return;
+      const parcouru = event.clientX - geste.origineX;
       const vise = Math.min(
-        spaces.length - 1,
-        Math.max(0, glisse.indexDepart + Math.round(parcouru / PAS_COLONNE)),
+        espaces.length - 1,
+        Math.max(0, geste.indexDepart + Math.round(parcouru / PAS_COLONNE)),
       );
       if (vise !== indexCourant) {
-        const voisine = spaces[vise];
-        if (voisine !== undefined) reorderSpaces(glisse.id, voisine.id);
+        const voisine = espaces[vise];
+        if (voisine !== undefined) reorderSpaces(geste.id, voisine.id);
       }
-      setGlisse({
-        ...glisse,
-        decalage: parcouru - (indexCourant - glisse.indexDepart) * PAS_COLONNE,
-      });
+      // AVEC `vise`, PAS `indexCourant`. On vient de déplacer la colonne : sa
+      // case est celle d'APRÈS. En retranchant l'ancienne, le décalage était
+      // faux d'une largeur entière dès le premier échange, et la colonne
+      // sautait sous le doigt. C'était « le swap bugué de fou » du 30/07.
+      setGlisse({ id: geste.id, decalage: parcouru - (vise - geste.indexDepart) * PAS_COLONNE });
     };
-    const surRelachement = () => setGlisse(null);
+    const surRelachement = () => {
+      gesteRef.current = null;
+      setGlisse(null);
+    };
     window.addEventListener("pointermove", surDeplacement);
     window.addEventListener("pointerup", surRelachement);
     window.addEventListener("pointercancel", surRelachement);
@@ -187,7 +212,7 @@ export function SpacesBoard({ onFermer }: { onFermer: () => void }) {
       window.removeEventListener("pointerup", surRelachement);
       window.removeEventListener("pointercancel", surRelachement);
     };
-  }, [PAS_COLONNE, glisse, reorderSpaces, spaces]);
+  }, [glisseId, reorderSpaces]);
 
   return (
     // Dimensions MESURÉES sur l'enregistrement Retina d'Arc (30/07, frames
@@ -370,12 +395,12 @@ export function SpacesBoard({ onFermer }: { onFermer: () => void }) {
                 aria-label={`Déplacer ${space.name}`}
                 onPointerDown={(event) => {
                   event.preventDefault();
-                  setGlisse({
+                  gesteRef.current = {
                     id: space.id,
                     origineX: event.clientX,
                     indexDepart: spaces.findIndex((espace) => espace.id === space.id),
-                    decalage: 0,
-                  });
+                  };
+                  setGlisse({ id: space.id, decalage: 0 });
                 }}
                 className={cn(
                   "cursor-grab rounded-md p-1 transition-colors active:cursor-grabbing",
