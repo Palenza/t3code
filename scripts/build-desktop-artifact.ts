@@ -1921,7 +1921,13 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
       }),
   });
 
-  const appVersion = options.version ?? serverPackageJson.version;
+  // La version vient du manifeste DESKTOP, pas du serveur. L'amont bascule ses
+  // quatre paquets d'un bloc, donc les deux se valent pour lui ; ce fork ne
+  // bascule que celui-ci, et lire le serveur produisait un DMG estampille
+  // 0.0.29 pour du code 0.0.47 — qui ecrasait en silence le vrai 0.0.29 deja
+  // sur le disque, avec un code de sortie 0. Un artefact qui ment sur sa propre
+  // version est pire qu'un build casse : il se distribue.
+  const appVersion = options.version ?? desktopPackageJson.version;
   const iconAssets = resolveDesktopBuildIconAssets(appVersion);
   const commitHash = yield* resolveGitCommitHash(repoRoot);
   const mkdir = options.keepStage ? fs.makeTempDirectory : fs.makeTempDirectoryScoped;
