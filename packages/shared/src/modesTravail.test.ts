@@ -56,10 +56,14 @@ describe("traduction d'un mode en permissions", () => {
 });
 
 describe("prompt d'un mode", () => {
-  it("dit le périmètre AVANT que l'agent se heurte au refus", () => {
-    // Un refus qui surprend fait perdre un tour à tout le monde.
+  it("dit le périmètre AVANT que l'agent s'y heurte", () => {
+    // Un blocage qui surprend fait perdre un tour à tout le monde. Le
+    // libellé a changé avec la sémantique réelle des permissions : hors
+    // périmètre, ce n'est pas un refus sec mais une approbation demandée
+    // — le prompt doit dire cette vérité-là, pas l'ancienne.
     const prompt = promptDuMode(modeParSlug("documentation"));
-    assert.match(prompt, /ne peux écrire que dans/u);
+    assert.match(prompt, /périmètre d'écriture/u);
+    assert.match(prompt, /approuvée/u);
     assert.match(prompt, /\*\*\/\*\.md/u);
   });
 
