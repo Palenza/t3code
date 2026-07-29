@@ -56,7 +56,10 @@ export function BibliothequeOverlay() {
   if (!ouverte) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex bg-background/95 backdrop-blur-xl">
+    // Fond MESURÉ chez Arc : #101010, quasi opaque — pas un voile flou. Les
+    // colonnes colorées ne ressortent que sur un noir franc ; un fond
+    // translucide les aurait délavées (mesure 30/07).
+    <div className="fixed inset-0 z-50 flex bg-[#101010]">
       {/* Le rail d'Arc : icône au-dessus, libellé dessous, l'actif en pastille. */}
       {/* 120 px : la largeur MESURÉE du rail d'Arc (240 px Retina). */}
       <nav className="flex w-[120px] shrink-0 flex-col items-center gap-2 py-6">

@@ -1,7 +1,7 @@
 import { useCallback, useState } from "react";
 
 import { useRouter } from "@tanstack/react-router";
-import { GripVerticalIcon, MoreHorizontalIcon, PencilIcon, PlusIcon } from "lucide-react";
+import { BrushIcon, GripVerticalIcon, MoreHorizontalIcon, PlusIcon } from "lucide-react";
 
 import { settlePromise } from "@t3tools/client-runtime/state/runtime";
 
@@ -122,10 +122,13 @@ export function SpacesBoard({ onFermer }: { onFermer: () => void }) {
                     if (event.key === "Enter") event.currentTarget.blur();
                     if (event.key === "Escape") setRenommage(null);
                   }}
-                  className="min-w-0 flex-1 bg-transparent text-[13px] font-semibold outline-none"
+                  className="min-w-0 flex-1 bg-transparent text-[12px] font-semibold outline-none"
                 />
               ) : (
-                <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-black/75">
+                // 12 px mesurés, et volontairement PÂLE : l'encre du titre
+                // relève à 74 de luminance quand celle des entrées tombe à 19
+                // — le nom de l'espace s'efface derrière son contenu.
+                <span className="min-w-0 flex-1 truncate text-[12px] font-semibold text-black/45">
                   {space.name}
                 </span>
               )}
@@ -135,7 +138,7 @@ export function SpacesBoard({ onFermer }: { onFermer: () => void }) {
                 onClick={() => setRenommage({ id: space.id, valeur: space.name })}
                 className="shrink-0 cursor-pointer rounded-md p-1 text-black/40 transition-colors hover:bg-black/5 hover:text-black/70"
               >
-                <PencilIcon className="size-3.5" />
+                <BrushIcon className="size-4" />
               </button>
             </div>
 
@@ -157,7 +160,10 @@ export function SpacesBoard({ onFermer }: { onFermer: () => void }) {
                         });
                         onFermer();
                       }}
-                      className="flex h-7 w-full cursor-pointer items-center rounded-lg px-2 text-left text-[12px] text-black/70 transition-colors hover:bg-black/8"
+                      // Hauteur de ligne de 41 px MESURÉE (82 px Retina, quatre
+                      // fois de suite) : j'avais mis 28. Et l'encre est franche
+                      // — c'est le contenu qui porte, pas le titre.
+                      className="flex h-[41px] w-full cursor-pointer items-center rounded-lg px-2 text-left text-[11px] font-semibold text-black/80 transition-colors hover:bg-black/8"
                     >
                       <span className="truncate">{threadId ?? threadKey}</span>
                     </button>
