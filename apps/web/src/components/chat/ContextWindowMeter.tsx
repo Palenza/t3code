@@ -1,10 +1,46 @@
-import type { ServerProvider } from "@t3tools/contracts";
+import { useCallback, useRef } from "react";
+
+import type { ProviderInstanceId, ServerProvider } from "@t3tools/contracts";
 
 import { cn } from "~/lib/utils";
 import { type ContextWindowSnapshot, formatContextWindowTokens } from "~/lib/contextWindow";
+import { usePrimaryEnvironment } from "../../state/environments";
+import { serverEnvironment } from "../../state/server";
+import { useAtomCommand } from "../../state/use-atom-command";
 import { Popover, PopoverPopup, PopoverTrigger } from "../ui/popover";
 import { ProviderRateLimitGauges } from "../settings/ProviderRateLimitGauges";
 import { presentProviderRateLimits } from "../settings/providerRateLimits";
+
+/** At most one hover-triggered refresh per meter per window. */
+const HOVER_REFRESH_THROTTLE_MS = 15_000;
+
+/**
+ * Opening the popover IS the "someone is looking" moment: fire a targeted
+ * provider refresh so the plan-usage figures are seconds old, never minutes
+ * (« je ne veux plus jamais voir updated il y a vingt minutes », 29/07). The
+ * server piggybacks an account-usage fetch on the probe and streams fresh
+ * snapshots back; failures degrade to the stored figures.
+ */
+function useRefreshRateLimitsOnOpen(instanceId: ProviderInstanceId | null | undefined) {
+  const primaryEnvironment = usePrimaryEnvironment();
+  const refreshProviders = useAtomCommand(serverEnvironment.refreshProviders, {
+    reportFailure: false,
+  });
+  const lastRefreshAtRef = useRef(0);
+  return useCallback(
+    (open: boolean) => {
+      if (!open || !instanceId || !primaryEnvironment) return;
+      const now = Date.now();
+      if (now - lastRefreshAtRef.current < HOVER_REFRESH_THROTTLE_MS) return;
+      lastRefreshAtRef.current = now;
+      void refreshProviders({
+        environmentId: primaryEnvironment.environmentId,
+        input: { instanceId },
+      });
+    },
+    [instanceId, primaryEnvironment, refreshProviders],
+  );
+}
 
 function formatPercentage(value: number | null): string | null {
   if (value === null || !Number.isFinite(value)) {
@@ -21,8 +57,11 @@ export function ContextWindowMeter(props: {
   providerDisplayName?: string | null;
   /** The active account's subscription usage, shown alongside the context window. */
   rateLimits?: ServerProvider["rateLimits"];
+  /** The instance those rate limits belong to — refreshed when the popover opens. */
+  rateLimitsInstanceId?: ProviderInstanceId | null;
 }) {
-  const { usage, providerDisplayName, rateLimits } = props;
+  const { usage, providerDisplayName, rateLimits, rateLimitsInstanceId } = props;
+  const handleOpenChange = useRefreshRateLimitsOnOpen(rateLimitsInstanceId);
   // Gate the whole section on the same judgement the gauges make: a header
   // above "nothing worth showing" would read as "all limits at zero".
   const hasRateLimits =
@@ -40,7 +79,7 @@ export function ContextWindowMeter(props: {
     : "color-mix(in oklab, var(--color-muted-foreground) 72%, transparent)";
 
   return (
-    <Popover>
+    <Popover onOpenChange={handleOpenChange}>
       <PopoverTrigger
         openOnHover
         delay={150}

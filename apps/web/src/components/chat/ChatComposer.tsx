@@ -420,6 +420,7 @@ const ComposerFooterPrimaryActions = memo(function ComposerFooterPrimaryActions(
   activeContextWindow: ReturnType<typeof deriveLatestContextWindowSnapshot>;
   activeThreadProviderDisplayName: string | null;
   activeThreadRateLimits: ServerProvider["rateLimits"];
+  activeThreadRateLimitsInstanceId: ProviderInstanceId | null;
   isPreparingWorktree: boolean;
   pendingAction: {
     questionIndex: number;
@@ -447,6 +448,7 @@ const ComposerFooterPrimaryActions = memo(function ComposerFooterPrimaryActions(
           usage={props.activeContextWindow}
           providerDisplayName={props.activeThreadProviderDisplayName}
           rateLimits={props.activeThreadRateLimits}
+          rateLimitsInstanceId={props.activeThreadRateLimitsInstanceId}
         />
       ) : null}
       {props.isPreparingWorktree ? (
@@ -3391,6 +3393,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                   activeContextWindow={activeContextWindow}
                   activeThreadProviderDisplayName={activeThreadProviderDisplayName}
                   activeThreadRateLimits={activeThreadRateLimits}
+                  activeThreadRateLimitsInstanceId={explicitSelectedInstanceId}
                   pendingAction={pendingPrimaryAction}
                   // The stop button must appear the instant a turn is on its
                   // way — local dispatch in flight or session still spawning —

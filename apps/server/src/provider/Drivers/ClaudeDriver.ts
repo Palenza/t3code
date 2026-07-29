@@ -198,6 +198,11 @@ export const ClaudeDriver: ProviderDriver<ClaudeSettings, ClaudeDriverEnv> = {
         cwd,
       ).pipe(
         Effect.map(stampIdentity),
+        // A status probe is a "someone is looking" moment (boot, settings
+        // change, the meter popover's targeted refresh): piggyback an account
+        // usage fetch — self-throttled — so plan-usage figures shown to the
+        // user are seconds old, never minutes.
+        Effect.tap(() => Effect.forkDetach(refreshAccountUsage)),
         Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
         Effect.provideService(FileSystem.FileSystem, fileSystem),
         Effect.provideService(Path.Path, path),
