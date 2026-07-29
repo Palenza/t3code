@@ -57,7 +57,7 @@ function SidebarBrand({ onBackdrop }: { onBackdrop: boolean }) {
     <Link
       aria-label="Go to threads"
       className={cn(
-        "sidebar-brand relative z-10 ml-[var(--workspace-titlebar-content-left)] h-7 w-fit min-w-0 shrink-0 items-center gap-1 overflow-hidden rounded-md outline-hidden ring-ring focus-visible:ring-2",
+        "sidebar-brand relative z-10 ml-[var(--workspace-titlebar-content-left)] h-7 w-fit min-w-0 shrink-0 items-center gap-1.5 overflow-hidden rounded-md outline-hidden ring-ring focus-visible:ring-2",
         onBackdrop ? "text-white" : "text-foreground",
       )}
       to="/"
@@ -65,7 +65,7 @@ function SidebarBrand({ onBackdrop }: { onBackdrop: boolean }) {
       <T3Wordmark />
       <span
         className={cn(
-          "sidebar-brand-word truncate text-sm font-medium tracking-tight",
+          "sidebar-brand-word truncate text-base font-medium tracking-tight",
           // BLANC PUR sur le bandeau (demande fondateur 29/07) : sur
           // l'ardoise griffée, un gris se noie.
           onBackdrop ? "text-white" : "text-muted-foreground",
@@ -80,7 +80,7 @@ function SidebarBrand({ onBackdrop }: { onBackdrop: boolean }) {
           il garde son éclat sur n'importe quelle couleur de bandeau. */}
       <span
         className={cn(
-          "sidebar-brand-word truncate text-[11px] font-bold uppercase tracking-[0.18em]",
+          "sidebar-brand-word truncate text-[13px] font-bold uppercase tracking-[0.2em]",
           onBackdrop
             ? "bg-gradient-to-r from-[#ffd9a8] via-[#ff9d4d] to-[#ff5a1f] bg-clip-text text-transparent drop-shadow-[0_0_6px_rgba(255,120,40,0.55)]"
             : "text-muted-foreground/70",
@@ -109,7 +109,7 @@ function T3Wordmark() {
   return (
     <svg
       aria-label="T3"
-      className="h-2.5 w-auto shrink-0"
+      className="h-3.5 w-auto shrink-0"
       viewBox="15.5309 37 94.3941 56.96"
       xmlns="http://www.w3.org/2000/svg"
     >
