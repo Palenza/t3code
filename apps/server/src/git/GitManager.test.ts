@@ -288,7 +288,8 @@ function createTextGeneration(
       Effect.succeed({
         branch: "update-workflow",
       }),
-    generateThreadTitle: () =>
+    groupThreadsByTheme: () => Effect.succeed({ groups: [] }),
+  generateThreadTitle: () =>
       Effect.succeed({
         title: "Update workflow",
       }),
@@ -329,6 +330,7 @@ function createTextGeneration(
             }),
         ),
       ),
+    groupThreadsByTheme: (input) => implementation.groupThreadsByTheme(input),
     generateThreadTitle: (input) =>
       implementation.generateThreadTitle(input).pipe(
         Effect.mapError(

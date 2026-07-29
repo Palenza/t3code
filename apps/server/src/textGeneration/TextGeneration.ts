@@ -71,6 +71,17 @@ export interface ThreadTitleGenerationResult {
   title: string;
 }
 
+export interface ThreadGroupingInput {
+  cwd: string;
+  threads: ReadonlyArray<{ readonly id: string; readonly title: string }>;
+  /** What model and provider to use for generation. */
+  modelSelection: ModelSelection;
+}
+
+export interface ThreadGroupingResult {
+  groups: ReadonlyArray<{ readonly name: string; readonly threadIds: ReadonlyArray<string> }>;
+}
+
 export interface TextGenerationService {
   generateCommitMessage(
     input: CommitMessageGenerationInput,
@@ -78,6 +89,8 @@ export interface TextGenerationService {
   generatePrContent(input: PrContentGenerationInput): Promise<PrContentGenerationResult>;
   generateBranchName(input: BranchNameGenerationInput): Promise<BranchNameGenerationResult>;
   generateThreadTitle(input: ThreadTitleGenerationInput): Promise<ThreadTitleGenerationResult>;
+  /** Le « Tidy » : regroupe les fils par THÈME (juge sémantique). */
+  groupThreadsByTheme(input: ThreadGroupingInput): Promise<ThreadGroupingResult>;
 }
 
 /**
@@ -113,6 +126,15 @@ export class TextGeneration extends Context.Service<
     readonly generateThreadTitle: (
       input: ThreadTitleGenerationInput,
     ) => Effect.Effect<ThreadTitleGenerationResult, TextGenerationError>;
+
+    /**
+     * Group open threads by THEME — Arc's Tidy, applied to conversations.
+     * A semantic judge, never keyword matching: the caller shows the groups
+     * as a proposal the user accepts or rejects.
+     */
+    readonly groupThreadsByTheme: (
+      input: ThreadGroupingInput,
+    ) => Effect.Effect<ThreadGroupingResult, TextGenerationError>;
   }
 >()("t3/textGeneration/TextGeneration") {}
 
@@ -154,6 +176,10 @@ export const makeTextGenerationFromRegistry = (
     generatePrContent: (input) =>
       resolveInstance(registry, "generatePrContent", input.modelSelection.instanceId).pipe(
         Effect.flatMap((textGeneration) => textGeneration.generatePrContent(input)),
+      ),
+    groupThreadsByTheme: (input) =>
+      resolveInstance(registry, "generateThreadTitle", input.modelSelection.instanceId).pipe(
+        Effect.flatMap((textGeneration) => textGeneration.groupThreadsByTheme(input)),
       ),
     generateBranchName: (input) =>
       resolveInstance(registry, "generateBranchName", input.modelSelection.instanceId).pipe(

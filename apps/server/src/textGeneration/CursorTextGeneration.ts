@@ -16,6 +16,7 @@ import {
   buildCommitMessagePrompt,
   buildPrContentPrompt,
   buildThreadTitlePrompt,
+  buildThreadGroupingPrompt,
 } from "./TextGenerationPrompts.ts";
 import {
   sanitizeCommitSubject,
@@ -258,10 +259,37 @@ export const makeCursorTextGeneration = Effect.fn("makeCursorTextGeneration")(fu
       } satisfies TextGeneration.ThreadTitleGenerationResult;
     });
 
+  const groupThreadsByTheme: TextGeneration.TextGeneration["Service"]["groupThreadsByTheme"] =
+    Effect.fn("CursorTextGeneration.groupThreadsByTheme")(function* (input) {
+      const { prompt, outputSchema } = buildThreadGroupingPrompt({ threads: input.threads });
+      const generated = yield* runCursorJson({
+        operation: "generateThreadTitle",
+        cwd: input.cwd,
+        prompt,
+        outputSchemaJson: outputSchema,
+        modelSelection: input.modelSelection,
+      });
+      // Re-bornage APRÈS l'appel (règle I1) : jamais un groupe vide, jamais
+      // un id inventé, jamais deux fois le même fil.
+      const known = new Set(input.threads.map((thread) => thread.id));
+      const used = new Set<string>();
+      const groups = (generated.groups ?? []).flatMap((group) => {
+        const name = String(group.name ?? "").trim().slice(0, 40);
+        const threadIds = (group.threadIds ?? []).filter((id) => {
+          if (!known.has(id) || used.has(id)) return false;
+          used.add(id);
+          return true;
+        });
+        return name.length > 0 && threadIds.length >= 2 ? [{ name, threadIds }] : [];
+      });
+      return { groups };
+    });
+
   return {
     generateCommitMessage,
     generatePrContent,
     generateBranchName,
     generateThreadTitle,
+    groupThreadsByTheme,
   } satisfies TextGeneration.TextGeneration["Service"];
 });

@@ -231,3 +231,45 @@ export function buildThreadTitlePrompt(input: ThreadTitlePromptInput) {
 
   return { prompt, outputSchema };
 }
+
+export interface ThreadGroupingPromptInput {
+  /** Les fils à ranger : un identifiant + son titre, rien de plus. */
+  readonly threads: ReadonlyArray<{ readonly id: string; readonly title: string }>;
+}
+
+/**
+ * Le « Tidy » d'Arc, transposé aux fils (demande fondateur 29/07, vidéo
+ * décortiquée) : un JUGE SÉMANTIQUE regroupe les fils ouverts par thème et
+ * nomme chaque groupe. Jamais de mots-clés ni de regex — c'est du sens, pas
+ * du texte. Les groupes sont une PROPOSITION : l'utilisateur en accepte
+ * certains, en rejette d'autres, comme chez Arc.
+ */
+export function buildThreadGroupingPrompt(input: ThreadGroupingPromptInput) {
+  const listing = input.threads
+    .map((thread) => `${thread.id}\t${thread.title.replace(/\s+/g, " ").slice(0, 140)}`)
+    .join("\n");
+  const prompt = [
+    "You group a developer's open conversation threads by THEME, the way Arc's Tidy groups browser tabs.",
+    "",
+    "Rules:",
+    "- Group by what the work is ABOUT (subject matter, feature area, product), never by wording overlap.",
+    "- 2 to 6 groups. Every group needs at least 2 threads; leave the rest ungrouped.",
+    "- Name each group like a folder a human would create: 2-4 words, no punctuation, in the language of the titles.",
+    "- Use each thread id at most once. Never invent an id.",
+    "- If nothing groups meaningfully, return an empty groups array — say so rather than forcing groups.",
+    "",
+    "Return a JSON object with key: groups — an array of objects with keys: name, threadIds.",
+    "",
+    "Threads (id, tab, title):",
+    listing,
+  ].join("\n");
+  const outputSchema = Schema.Struct({
+    groups: Schema.Array(
+      Schema.Struct({
+        name: Schema.String,
+        threadIds: Schema.Array(Schema.String),
+      }),
+    ),
+  });
+  return { prompt, outputSchema };
+}
