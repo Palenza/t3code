@@ -56,8 +56,15 @@ const GRADIENT_SWATCHES: ReadonlyArray<readonly [string, string, string]> = [
   ["#8d5a3b", "#c98d5f", "#f2dcc0"],
 ];
 
-/** Les tailles d'Arc : la dominante pèse, les satellites suivent. */
-const STOP_SIZES_PX = [44, 26, 22] as const;
+/**
+ * Les tailles d'Arc, MESURÉES sur l'enregistrement du vrai panneau (30/07,
+ * frames 734 px de large pour un panneau de ~367 px CSS, donc ÷2) :
+ * dominante 70 px → 35, satellite 42 px → 21. Le rapport est de 1,67, pas
+ * de 1,7 comme je l'avais estimé — mais mes valeurs absolues étaient trop
+ * grosses de 25 % pour la dominante et trop grosses aussi pour les
+ * satellites, ce qui écrasait la toile.
+ */
+const STOP_SIZES_PX = [35, 21, 18] as const;
 
 const APPEARANCE_CHOICES = [
   { value: "auto", icon: SparklesIcon, label: "Suivre le système" },
@@ -256,7 +263,8 @@ export function SpaceThemePanel() {
         // passer le fond presque net, le SOCLE des contrôles est laiteux. Ce
         // contraste est ce qui fait lire l'un comme une fenêtre et l'autre
         // comme un pupitre — un verre unique donnait une plaque plate.
-        "flex w-[340px] flex-col overflow-hidden rounded-lg backdrop-blur-2xl backdrop-saturate-150 transition-colors",
+        // 367 px : largeur MESURÉE (734 px de capture ÷ 2).
+        "flex w-[367px] flex-col overflow-hidden rounded-lg backdrop-blur-2xl backdrop-saturate-150 transition-colors",
         isDarkCanvas ? "bg-neutral-900/28" : "bg-white/28",
       )}
     >
