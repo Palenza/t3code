@@ -2,6 +2,7 @@ import { describe, expect, it } from "vite-plus/test";
 
 import {
   makeSidebarThemeFromColors,
+  sidebarThemeInk,
   resolveSidebarTheme,
   resolveSidebarThemeAppearance,
   sidebarThemeBackground,
@@ -109,5 +110,23 @@ describe("sidebarThemeGrainOpacity", () => {
     expect(sidebarThemeGrainOpacity(theme({ grain: 0 }))).toBe(0);
     expect(sidebarThemeGrainOpacity(theme({ grain: 1 }))).toBe(0.35);
     expect(sidebarThemeGrainOpacity(theme({ grain: 0.5 }))).toBeCloseTo(0.18, 2);
+  });
+});
+
+describe("sidebarThemeInk", () => {
+  it("switches to white ink under the measured luminance threshold (vidéo Arc)", () => {
+    // Deux relevés réels de la vidéo 60 fps : bleu nuit → texte blanc,
+    // rose pâle → texte sombre. Le seuil (~0,53) vit dans la fonction.
+    expect(
+      sidebarThemeInk(theme({ stops: [{ color: "#30347c", x: 0.5, y: 0.5 }] }), "dark"),
+    ).toBe("light-ink");
+    expect(
+      sidebarThemeInk(theme({ stops: [{ color: "#f2ccbe", x: 0.5, y: 0.5 }], appearance: "light" }), "light"),
+    ).toBe("dark-ink");
+  });
+
+  it("follows the blend base when no valid stop exists", () => {
+    expect(sidebarThemeInk(theme({ stops: [] }), "dark")).toBe("light-ink");
+    expect(sidebarThemeInk(theme({ stops: [], appearance: "light" }), "light")).toBe("dark-ink");
   });
 });

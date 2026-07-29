@@ -66,26 +66,13 @@ const APPEARANCE_CHOICES = [
 ] as const;
 
 // ---------------------------------------------------------------- couleur
-// La palette invisible parle en HSL ; le store parle en hex. Conversions
-// locales, en flottant pendant le drag pour ne jamais accumuler d'arrondis.
-
-function hexToHsl(hex: string): { h: number; s: number; l: number } {
-  const value = hex.replace("#", "");
-  const r = Number.parseInt(value.slice(0, 2), 16) / 255;
-  const g = Number.parseInt(value.slice(2, 4), 16) / 255;
-  const b = Number.parseInt(value.slice(4, 6), 16) / 255;
-  const max = Math.max(r, g, b);
-  const min = Math.min(r, g, b);
-  const l = (max + min) / 2;
-  if (max === min) {
-    return { h: 0, s: 0, l: l * 100 };
-  }
-  const d = max - min;
-  const s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
-  const h =
-    max === r ? ((g - b) / d + (g < b ? 6 : 0)) * 60 : max === g ? ((b - r) / d + 2) * 60 : ((r - g) / d + 4) * 60;
-  return { h, s: s * 100, l: l * 100 };
-}
+// LA ROUE INVISIBLE, reconstruite depuis 10 761 frames de la vidéo
+// fondateur (60 fps, 835 frames de drag mesurées) : la TEINTE est l'angle
+// autour du centre de la toile (est 355°, sud 86°, ouest 186°, nord 264° —
+// hue ≈ angle − 5°), la couleur est PLEINE au centre et pâlit vers le bord
+// (l 0,42 → 0,86, « presque blanc sans jamais l'être »). Chaque rond prend
+// la couleur de la roue LÀ OÙ IL EST — les satellites « touchent d'autres
+// gradients » parce qu'ils échantillonnent d'autres angles.
 
 function hslToHex(h: number, s: number, l: number): string {
   const hue = ((h % 360) + 360) % 360;
@@ -113,14 +100,43 @@ function hslToHex(h: number, s: number, l: number): string {
   return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
 }
 
-/** Les accords d'Arc : des voisines (±40°), jamais la même teinte. */
-function harmonize(dominantHex: string, count: number): string[] {
-  const { h, s, l } = hexToHsl(dominantHex);
-  const satellites = [
-    hslToHex(h - 40, Math.min(100, s + 4), Math.min(88, l + 7)),
-    hslToHex(h + 40, Math.min(100, s + 4), Math.max(20, l - 6)),
-  ];
-  return satellites.slice(0, Math.max(0, count));
+function hexToHsl(hex: string): { h: number; s: number; l: number } {
+  const value = hex.replace("#", "");
+  const r = Number.parseInt(value.slice(0, 2), 16) / 255;
+  const g = Number.parseInt(value.slice(2, 4), 16) / 255;
+  const b = Number.parseInt(value.slice(4, 6), 16) / 255;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const l = (max + min) / 2;
+  if (max === min) return { h: 0, s: 0, l: l * 100 };
+  const d = max - min;
+  const s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+  const h =
+    max === r ? ((g - b) / d + (g < b ? 6 : 0)) * 60 : max === g ? ((b - r) / d + 2) * 60 : ((r - g) / d + 4) * 60;
+  return { h, s: s * 100, l: l * 100 };
+}
+
+/** La couleur de la roue à une position de toile (mesures de la vidéo). */
+function wheelColorAt(x: number, y: number): string {
+  const dx = x - 0.5;
+  const dy = y - 0.5;
+  const hue = (Math.atan2(dy, dx) * 180) / Math.PI - 5;
+  const dist = Math.hypot(dx, dy);
+  const light = Math.min(86, 42 + dist * 75);
+  const sat = Math.max(55, 95 - dist * 55);
+  return hslToHex(hue, sat, light);
+}
+
+/** L'inverse : où poser un rond pour obtenir (au plus près) cette couleur. */
+function wheelPositionOf(hex: string): { x: number; y: number } {
+  const { h, s, l } = hexToHsl(hex);
+  const angle = ((h + 5) * Math.PI) / 180;
+  const distFromLight = (Math.min(86, Math.max(42, l)) - 42) / 75;
+  const dist = Math.min(0.44, Math.max(0.06, distFromLight));
+  return {
+    x: 0.5 + Math.cos(angle) * dist,
+    y: 0.5 + Math.sin(angle) * dist,
+  };
 }
 
 export function SpaceThemePanel() {
@@ -148,104 +164,68 @@ export function SpaceThemePanel() {
 
   // ------------------------------------------------------------- la toile
   const canvasRef = useRef<HTMLDivElement | null>(null);
-  const dragRef = useRef<{
-    lastX: number;
-    lastY: number;
-    color: { h: number; s: number; l: number };
-  } | null>(null);
+  const draggingRef = useRef(false);
 
-  const dominant = current.stops[0] ?? { color: "#f2a3c0", x: 0.5, y: 0.42 };
+  const dominant = current.stops[0] ?? { color: wheelColorAt(0.62, 0.4), x: 0.62, y: 0.4 };
 
   /** Positions du groupe : dominante au point, satellites déployés selon la
-   * distance au centre (repliés au centre = une seule couleur au voile). */
-  const groupStops = useCallback(
-    (x: number, y: number, colors: ReadonlyArray<string>): SidebarThemeStop[] => {
-      const distance = Math.hypot(x - 0.5, y - 0.5);
-      const spread = 0.03 + distance * 0.42;
-      const clamp = (value: number) => Math.max(0.05, Math.min(0.95, value));
-      return colors.map((color, index) => {
-        if (index === 0) return { color, x: clamp(x), y: clamp(y) };
-        const side = index === 1 ? -1 : 1;
-        return { color, x: clamp(x + side * spread), y: clamp(y - spread * 0.5) };
-      });
-    },
-    [],
-  );
+   * distance au centre — et chaque rond prend LA COULEUR DE LA ROUE à sa
+   * position. Un seul système : placer, la roue colore. */
+  const groupStops = useCallback((x: number, y: number, count: number): SidebarThemeStop[] => {
+    const distance = Math.hypot(x - 0.5, y - 0.5);
+    const spread = 0.05 + distance * 0.38;
+    const clamp = (value: number) => Math.max(0.05, Math.min(0.95, value));
+    return Array.from({ length: count }, (_, index) => {
+      if (index === 0) {
+        const px = clamp(x);
+        const py = clamp(y);
+        return { color: wheelColorAt(px, py), x: px, y: py };
+      }
+      const side = index === 1 ? -1 : 1;
+      const px = clamp(x + side * spread);
+      const py = clamp(y - spread * 0.5);
+      return { color: wheelColorAt(px, py), x: px, y: py };
+    });
+  }, []);
 
   const moveGroup = useCallback(
     (clientX: number, clientY: number) => {
       const canvas = canvasRef.current;
-      const drag = dragRef.current;
-      if (canvas === null || drag === null) return;
+      if (canvas === null || !draggingRef.current) return;
       const rect = canvas.getBoundingClientRect();
       const x = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
       const y = Math.max(0, Math.min(1, (clientY - rect.top) / rect.height));
-      // LA PALETTE INVISIBLE : le déplacement MODULE la couleur — la teinte
-      // dérive horizontalement, la lumière suit la verticale (monter =
-      // éclaircir jusqu'au délavé, descendre = foncer). En delta, pas en
-      // absolu : le jaune reste de la famille du jaune tant qu'on ne
-      // traverse pas la toile entière.
-      drag.color.h += (x - drag.lastX) * 160;
-      drag.color.l = Math.max(16, Math.min(90, drag.color.l - (y - drag.lastY) * 110));
-      drag.lastX = x;
-      drag.lastY = y;
-      const dominantHex = hslToHex(drag.color.h, drag.color.s, drag.color.l);
-      const colors = [dominantHex, ...harmonize(dominantHex, current.stops.length - 1)];
-      apply({ ...current, stops: groupStops(x, y, colors) });
+      apply({ ...current, stops: groupStops(x, y, current.stops.length) });
     },
     [apply, current, groupStops],
   );
 
-  const beginDrag = useCallback(
-    (clientX: number, clientY: number) => {
-      const canvas = canvasRef.current;
-      if (canvas === null) return;
-      const rect = canvas.getBoundingClientRect();
-      dragRef.current = {
-        lastX: Math.max(0, Math.min(1, (clientX - rect.left) / rect.width)),
-        lastY: Math.max(0, Math.min(1, (clientY - rect.top) / rect.height)),
-        color: hexToHsl(dominant.color),
-      };
-    },
-    [dominant.color],
-  );
-
   const applySolid = useCallback(
     (color: string) => {
-      // Un rond uni = LA dominante change ; les satellites présents se
-      // réaccordent autour d'elle, la composition reste.
-      const colors = [color, ...harmonize(color, current.stops.length - 1)];
-      apply({ ...current, stops: groupStops(dominant.x, dominant.y, colors) });
+      // Roue ABSOLUE : la couleur désigne une POSITION — le groupe y saute
+      // (mesuré sur la vidéo : le trio se replace au clic du nuancier).
+      const position = wheelPositionOf(color);
+      apply({ ...current, stops: groupStops(position.x, position.y, current.stops.length) });
     },
-    [apply, current, dominant.x, dominant.y, groupStops],
+    [apply, current, groupStops],
   );
 
   const applyGradient = useCallback(
     (trio: readonly [string, string, string]) => {
-      // Un gradient = les trois ronds d'un coup, préréglés.
-      apply({ ...current, stops: groupStops(dominant.x, dominant.y, trio) });
+      // Le gradient pose TROIS ronds ancrés sur la position-roue du premier.
+      const position = wheelPositionOf(trio[0]);
+      apply({ ...current, stops: groupStops(position.x, position.y, 3) });
     },
-    [apply, current, dominant.x, dominant.y, groupStops],
+    [apply, current, groupStops],
   );
 
   const addStop = useCallback(() => {
     if (current.stops.length >= MAX_ARC_STOPS) return;
-    const colors = [
-      dominant.color,
-      ...harmonize(dominant.color, current.stops.length),
-    ];
-    apply({ ...current, stops: groupStops(dominant.x, dominant.y, colors) });
-  }, [apply, current, dominant.color, dominant.x, dominant.y, groupStops]);
+    apply({ ...current, stops: groupStops(dominant.x, dominant.y, current.stops.length + 1) });
+  }, [apply, current, dominant.x, dominant.y, groupStops]);
   const removeStop = useCallback(() => {
     if (current.stops.length <= 1) return;
-    apply({
-      ...current,
-      stops: groupStops(
-        dominant.x,
-        dominant.y,
-        current.stops.slice(0, -1).map((stop) => stop.color),
-      ),
-    });
+    apply({ ...current, stops: groupStops(dominant.x, dominant.y, current.stops.length - 1) });
   }, [apply, current, dominant.x, dominant.y, groupStops]);
 
   const isDarkCanvas =
@@ -279,10 +259,10 @@ export function SpaceThemePanel() {
             : "[--dot:color-mix(in_oklab,black_13%,transparent)]",
         )}
         onPointerMove={(event) => {
-          if (dragRef.current !== null) moveGroup(event.clientX, event.clientY);
+          if (draggingRef.current) moveGroup(event.clientX, event.clientY);
         }}
         onPointerUp={() => {
-          dragRef.current = null;
+          draggingRef.current = false;
         }}
       >
         <div className="absolute inset-x-0 top-3 flex items-center justify-center gap-2">
@@ -328,7 +308,7 @@ export function SpaceThemePanel() {
           aria-label="Mélanger — la position module la couleur, les satellites s'accordent"
           onPointerDown={(event) => {
             event.preventDefault();
-            beginDrag(event.clientX, event.clientY);
+            draggingRef.current = true;
             try {
               event.currentTarget.setPointerCapture(event.pointerId);
             } catch {
@@ -336,10 +316,10 @@ export function SpaceThemePanel() {
             }
           }}
           onPointerMove={(event) => {
-            if (dragRef.current !== null) moveGroup(event.clientX, event.clientY);
+            if (draggingRef.current) moveGroup(event.clientX, event.clientY);
           }}
           onPointerUp={() => {
-            dragRef.current = null;
+            draggingRef.current = false;
           }}
           className="absolute -translate-x-1/2 -translate-y-1/2 cursor-grab rounded-full shadow-md ring-[3px] ring-white transition-[background-color] duration-75 active:cursor-grabbing"
           style={{

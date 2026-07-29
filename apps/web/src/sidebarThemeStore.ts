@@ -214,6 +214,37 @@ export function sidebarThemeBackground(
   ].join(", ");
 }
 
+/**
+ * L'encre qui garde le texte NET sur le voile — la règle d'Arc mesurée sur
+ * la vidéo fondateur (10 761 frames, 5 bascules observées) : le texte
+ * devient blanc quand la luminance du voile passe SOUS ~0,53, sombre
+ * au-dessus — quelle que soit l'apparence choisie. On approxime le voile
+ * par la moyenne des pastilles mélangée à la base au même dosage que le
+ * fond (`kept`).
+ */
+export function sidebarThemeInk(
+  theme: SidebarTheme,
+  appearance: "light" | "dark",
+): "light-ink" | "dark-ink" {
+  const stops = theme.stops.filter((stop) => HEX_COLOR.test(stop.color));
+  const resolved = resolveSidebarThemeAppearance(theme, appearance);
+  if (stops.length === 0) {
+    return resolved === "dark" ? "light-ink" : "dark-ink";
+  }
+  const kept = (25 + clamp01(theme.intensity) * 65) / 100;
+  const base = resolved === "dark" ? [14, 17, 22] : [247, 249, 252];
+  const channel = (offset: number) => {
+    const average =
+      stops.reduce(
+        (sum, stop) => sum + Number.parseInt(stop.color.slice(1 + offset, 3 + offset), 16),
+        0,
+      ) / stops.length;
+    return (average * kept + base[offset / 2]! * (1 - kept)) / 255;
+  };
+  const luma = 0.2126 * channel(0) + 0.7152 * channel(2) + 0.0722 * channel(4);
+  return luma < 0.53 ? "light-ink" : "dark-ink";
+}
+
 export function sidebarThemeGrainOpacity(theme: SidebarTheme): number {
   // Plafonné bas : le grain est une texture, pas un brouillard.
   return Math.round(clamp01(theme.grain) * 35) / 100;

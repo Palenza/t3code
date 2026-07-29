@@ -4,10 +4,10 @@ import { useTheme } from "../../hooks/useTheme";
 import { activeSpaceTheme, useSidebarSpacesStore } from "../../sidebarSpacesStore";
 import {
   resolveSidebarTheme,
-  resolveSidebarThemeAppearance,
   SIDEBAR_THEME_GRAIN_URL,
   sidebarThemeBackground,
   sidebarThemeGrainOpacity,
+  sidebarThemeInk,
   useSidebarThemeStore,
 } from "../../sidebarThemeStore";
 
@@ -28,17 +28,16 @@ export function SidebarThemeWash() {
   );
   const theme = spaceTheme ?? fallbackTheme;
   const { resolvedTheme } = useTheme();
-  const washAppearance = theme === null ? null : resolveSidebarThemeAppearance(theme, resolvedTheme);
+  const washInk = theme === null ? null : sidebarThemeInk(theme, resolvedTheme);
 
-  // La règle d'Arc que le fondateur a exigée (« pas de mode clair qui rend
-  // les textes illisibles ») : le TEXTE suit le VOILE, jamais le thème
-  // global de l'app. Un voile clair (☀️) impose l'encre sombre même quand
-  // l'app est en sombre — et inversement. Les tokens vivent sur l'élément
-  // sidebar (ancêtre des textes), posés/retirés ici.
+  // La règle d'Arc, MESURÉE sur la vidéo fondateur (5 bascules observées) :
+  // l'encre suit la LUMINANCE RÉELLE du voile, pas un mode. Voile sombre ou
+  // saturé foncé → texte blanc ; voile clair ou pastel → texte sombre. Les
+  // tokens vivent sur l'élément sidebar (ancêtre des textes).
   useEffect(() => {
     const sidebar = document.querySelector<HTMLElement>("[data-app-sidebar]");
-    if (sidebar === null || washAppearance === null) return;
-    if (washAppearance === "light") {
+    if (sidebar === null || washInk === null) return;
+    if (washInk === "dark-ink") {
       sidebar.style.setProperty("--sidebar-foreground", "oklch(0.29 0.03 262)");
       sidebar.style.setProperty("--sidebar-muted-foreground", "oklch(0.47 0.03 262)");
       sidebar.style.setProperty("--sidebar-border", "oklch(0.29 0.03 262 / 14%)");
@@ -52,7 +51,7 @@ export function SidebarThemeWash() {
       sidebar.style.removeProperty("--sidebar-muted-foreground");
       sidebar.style.removeProperty("--sidebar-border");
     };
-  }, [washAppearance]);
+  }, [washInk]);
 
   if (theme === null) {
     return null;
