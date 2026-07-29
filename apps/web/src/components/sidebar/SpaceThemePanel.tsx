@@ -5,7 +5,6 @@ import { ChevronLeftIcon, ChevronRightIcon, MinusIcon, MoonIcon, PlusIcon, Spark
 import { cn } from "../../lib/utils";
 import { useSidebarSpacesStore } from "../../sidebarSpacesStore";
 import {
-  DEFAULT_STOP_POSITIONS,
   MAX_SIDEBAR_THEME_STOPS,
   makeSidebarThemeFromColors,
   useSidebarThemeStore,
@@ -93,48 +92,85 @@ export function SpaceThemePanel() {
 
   // ------------------------------------------------------------- la toile
   const canvasRef = useRef<HTMLDivElement | null>(null);
-  const dragIndexRef = useRef<number | null>(null);
-  const moveStopToPointer = useCallback(
+  const draggingGroupRef = useRef(false);
+
+  // LE geste d'Arc (corrigé sur les ~20 captures fondateur, 2e passe) : les
+  // couleurs ne se déplacent pas une à une — c'est UN GROUPE. On saisit le
+  // GROS rond (la dominante), les satellites suivent en formation, et leur
+  // ÉCARTEMENT dépend de la position : au centre de la toile ils se replient
+  // sous la dominante (une seule couleur au voile), en s'éloignant ils se
+  // déploient et le mélange s'ouvre. Un seul geste = position ET dosage.
+  const groupStopsAround = useCallback(
+    (x: number, y: number, colors: ReadonlyArray<string>): SidebarThemeStop[] => {
+      const distanceFromCenter = Math.hypot(x - 0.5, y - 0.5);
+      const spread = 0.02 + distanceFromCenter * 0.5;
+      const lift = spread * 0.45;
+      const clamp = (value: number) => Math.max(0.04, Math.min(0.96, value));
+      return colors.map((color, index) => {
+        if (index === 0) return { color, x: clamp(x), y: clamp(y) };
+        const side = index === 1 ? -1 : 1;
+        return { color, x: clamp(x + side * spread), y: clamp(y - lift) };
+      });
+    },
+    [],
+  );
+
+  const moveGroupToPointer = useCallback(
     (clientX: number, clientY: number) => {
       const canvas = canvasRef.current;
-      const index = dragIndexRef.current;
-      if (canvas === null || index === null) return;
+      if (canvas === null || !draggingGroupRef.current) return;
       const rect = canvas.getBoundingClientRect();
       const x = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
       const y = Math.max(0, Math.min(1, (clientY - rect.top) / rect.height));
-      const stops = current.stops.map((stop, i) => (i === index ? { ...stop, x, y } : stop));
-      apply({ ...current, stops });
+      apply({
+        ...current,
+        stops: groupStopsAround(
+          x,
+          y,
+          current.stops.map((stop) => stop.color),
+        ),
+      });
     },
-    [apply, current],
+    [apply, current, groupStopsAround],
   );
+
+  const dominant = current.stops[0] ?? { color: "#5db3f0", x: 0.5, y: 0.45 };
 
   const addStop = useCallback(() => {
     if (current.stops.length >= MAX_SIDEBAR_THEME_STOPS) return;
     const palette = SPACE_THEME_PALETTES[(current.stops.length * 5 + 3) % SPACE_THEME_PALETTES.length]!;
-    const position = DEFAULT_STOP_POSITIONS[current.stops.length] ?? { x: 0.5, y: 0.5 };
-    apply({ ...current, stops: [...current.stops, { color: palette[0], ...position }] });
-  }, [apply, current]);
+    apply({
+      ...current,
+      stops: groupStopsAround(dominant.x, dominant.y, [
+        ...current.stops.map((stop) => stop.color),
+        palette[0],
+      ]),
+    });
+  }, [apply, current, dominant.x, dominant.y, groupStopsAround]);
   const removeStop = useCallback(() => {
     if (current.stops.length <= 1) return;
-    apply({ ...current, stops: current.stops.slice(0, -1) });
-  }, [apply, current]);
+    apply({
+      ...current,
+      stops: groupStopsAround(
+        dominant.x,
+        dominant.y,
+        current.stops.slice(0, -1).map((stop) => stop.color),
+      ),
+    });
+  }, [apply, current, dominant.x, dominant.y, groupStopsAround]);
 
   const applyPalette = useCallback(
-    (palette: readonly [string, string, string]) => {
-      // Le trio remplace les couleurs mais respecte les POSITIONS déjà
-      // arrangées — changer d'ambiance ne défait pas la composition.
-      const positions: ReadonlyArray<{ x: number; y: number }> =
-        current.stops.length >= 3
-          ? current.stops
-          : DEFAULT_STOP_POSITIONS.slice(0, 3).map((position) => position);
-      const stops: SidebarThemeStop[] = palette.map((color, index) => ({
-        color,
-        x: positions[index]?.x ?? 0.5,
-        y: positions[index]?.y ?? 0.5,
-      }));
-      apply({ ...current, stops });
+    (color: string) => {
+      // « Ça tourne » (verbatim fondateur) : la couleur cliquée devient la
+      // DOMINANTE, les autres reculent d'un rang vers les satellites. Trois
+      // clics successifs composent donc le trio entier, sans rien défaire.
+      const rotated = [color, ...current.stops.map((stop) => stop.color)].slice(
+        0,
+        Math.max(3, Math.min(current.stops.length, MAX_SIDEBAR_THEME_STOPS)),
+      );
+      apply({ ...current, stops: groupStopsAround(dominant.x, dominant.y, rotated) });
     },
-    [apply, current],
+    [apply, current, dominant.x, dominant.y, groupStopsAround],
   );
 
   const isDarkCanvas =
@@ -145,22 +181,24 @@ export function SpaceThemePanel() {
 
   return (
     <div className="flex w-72 flex-col">
-      {/* La toile pointillée — claire ou sombre selon le mode choisi. */}
+      {/* La toile pointillée, en liquid glass : translucide, elle laisse le
+          voile transparaître (« la carte a un peu liquid glass ») — jamais
+          un blanc opaque qui éblouit. */}
       <div
         ref={canvasRef}
         className={cn(
           "relative m-2 h-64 touch-none rounded-xl bg-[radial-gradient(circle,var(--dot)_1px,transparent_1px)] bg-[size:8px_8px] transition-colors",
           isDarkCanvas
-            ? "bg-neutral-800 [--dot:color-mix(in_oklab,white_14%,transparent)]"
-            : "bg-neutral-100 [--dot:color-mix(in_oklab,black_12%,transparent)]",
+            ? "bg-neutral-900/45 [--dot:color-mix(in_oklab,white_16%,transparent)]"
+            : "bg-white/45 [--dot:color-mix(in_oklab,black_14%,transparent)]",
         )}
         onPointerMove={(event) => {
-          if (dragIndexRef.current !== null) {
-            moveStopToPointer(event.clientX, event.clientY);
+          if (draggingGroupRef.current) {
+            moveGroupToPointer(event.clientX, event.clientY);
           }
         }}
         onPointerUp={() => {
-          dragIndexRef.current = null;
+          draggingGroupRef.current = false;
         }}
       >
         <div className="absolute inset-x-0 top-2 flex items-center justify-center gap-1">
@@ -186,23 +224,16 @@ export function SpaceThemePanel() {
             </button>
           ))}
         </div>
-        {current.stops.map((stop, index) => {
-          const size = STOP_SIZES_PX[index] ?? 18;
+        {/* Les satellites suivent, ils ne se saisissent pas : un seul geste
+            pilote tout le groupe. Rendus AVANT la dominante pour glisser
+            dessous quand le groupe se replie au centre. */}
+        {current.stops.slice(1).map((stop, index) => {
+          const size = STOP_SIZES_PX[index + 1] ?? 18;
           return (
-            <button
+            <span
               key={index}
-              type="button"
-              aria-label={`Pastille ${index + 1} — glisser pour déplacer`}
-              onPointerDown={(event) => {
-                event.preventDefault();
-                dragIndexRef.current = index;
-                try {
-                  event.currentTarget.setPointerCapture(event.pointerId);
-                } catch {
-                  // Sans capture, le drag vit tant que le pointeur survole.
-                }
-              }}
-              className="absolute -translate-x-1/2 -translate-y-1/2 cursor-grab rounded-full shadow-md ring-[3px] ring-white transition-[width,height] active:cursor-grabbing"
+              aria-hidden
+              className="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 rounded-full shadow-sm ring-2 ring-white transition-[left,top,width,height] duration-75"
               style={{
                 left: `${stop.x * 100}%`,
                 top: `${stop.y * 100}%`,
@@ -213,6 +244,35 @@ export function SpaceThemePanel() {
             />
           );
         })}
+        <button
+          type="button"
+          aria-label="Déplacer le mélange — les satellites suivent"
+          onPointerDown={(event) => {
+            event.preventDefault();
+            draggingGroupRef.current = true;
+            try {
+              event.currentTarget.setPointerCapture(event.pointerId);
+            } catch {
+              // Sans capture, le drag vit tant que le pointeur survole.
+            }
+          }}
+          onPointerMove={(event) => {
+            if (draggingGroupRef.current) {
+              moveGroupToPointer(event.clientX, event.clientY);
+            }
+          }}
+          onPointerUp={() => {
+            draggingGroupRef.current = false;
+          }}
+          className="absolute -translate-x-1/2 -translate-y-1/2 cursor-grab rounded-full shadow-md ring-[3px] ring-white active:cursor-grabbing"
+          style={{
+            left: `${dominant.x * 100}%`,
+            top: `${dominant.y * 100}%`,
+            width: STOP_SIZES_PX[0],
+            height: STOP_SIZES_PX[0],
+            backgroundColor: dominant.color,
+          }}
+        />
         <div className="absolute inset-x-0 bottom-2 flex items-center justify-center gap-3">
           <button
             type="button"
@@ -261,13 +321,13 @@ export function SpaceThemePanel() {
             <button
               key={palette.join("-")}
               type="button"
-              aria-label={`Palette ${palette.join(", ")}`}
-              onClick={() => applyPalette(palette)}
+              aria-label={`Couleur ${palette[0]}`}
+              onClick={() => applyPalette(palette[0])}
               className="size-6 cursor-pointer rounded-full ring-1 ring-black/10 transition-transform hover:scale-110"
               style={{
-                // Un rond UNI, comme Arc : il annonce l'ambiance par sa
-                // dominante et pose le trio entier au clic. En mode sombre,
-                // le nuancier s'assombrit avec le reste du panneau.
+                // Un rond = UNE couleur, et « ça tourne » : elle devient la
+                // dominante, les précédentes reculent vers les satellites.
+                // En mode sombre, le nuancier s'assombrit avec le panneau.
                 backgroundColor: isDarkCanvas
                   ? `color-mix(in oklab, ${palette[0]} 72%, black)`
                   : palette[0],
