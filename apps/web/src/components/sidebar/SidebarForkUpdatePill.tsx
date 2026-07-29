@@ -18,6 +18,8 @@ interface ForkUpdateEtat {
   readonly latestSubject: string | null;
   readonly building: boolean;
   readonly lastRebuildExitCode?: number | null;
+  /** Pourquoi le dernier rebuild s'est arrêté, en clair. */
+  readonly derniereRaison?: string | null;
   /** Commits de l'AMONT (Théo) qui nous manquent — l'info que le bouton
    * natif de la Nightly donne, et que notre fork ne peut pas avoir. */
   readonly amontBehind?: number | null;
@@ -60,8 +62,10 @@ export function SidebarForkUpdatePill() {
         toastManager.add(
           stackedThreadToast({
             type: "error",
-            title: "Update échouée",
-            description: `Le rebuild s'est arrêté (code ${next.lastRebuildExitCode}). L'app n'a pas changé — voir ~/.t3/logs/t3-maj.log.`,
+            title: "Mise à jour impossible",
+            description:
+              next.derniereRaison ??
+              `Le rebuild s'est arrêté (code ${next.lastRebuildExitCode}). L'app n'a pas changé — voir ~/.t3/logs/t3-maj.log.`,
           }),
         );
       }
@@ -151,8 +155,8 @@ export function SidebarForkUpdatePill() {
         {building
           ? "Update en cours — rebuild local…"
           : (etat.behind ?? 0) > 0
-            ? `Mise à jour · ${etat.behind} commit${(etat.behind ?? 0) > 1 ? "s" : ""}`
-            : `Nouveautés amont · ${amont} commit${amont > 1 ? "s" : ""}`}
+            ? `Mettre à jour l'app · ${etat.behind} changement${(etat.behind ?? 0) > 1 ? "s" : ""}`
+            : `Mettre à jour l'app · ${amont} nouveauté${amont > 1 ? "s" : ""}`}
       </span>
     </button>
   );

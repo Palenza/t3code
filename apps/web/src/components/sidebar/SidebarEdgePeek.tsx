@@ -55,6 +55,14 @@ export function SidebarEdgePeek() {
       if (target instanceof Element && target.closest(PORTALED_POPUP_SELECTOR)) {
         return;
       }
+      // Un panneau OUVERT gèle le peek, même quand la souris n'est pas encore
+      // dessus : le trajet sidebar → panneau traverse le contenu principal, et
+      // fermer en chemin escamotait la sidebar SOUS le curseur — « je quitte
+      // la barre pour aller sur le cadre, ça ferme tout » (30/07). Tant qu'un
+      // panneau est déployé, l'intention de l'humain est claire.
+      if (document.querySelector(PORTALED_POPUP_SELECTOR) !== null) {
+        return;
+      }
       const sidebar = document.querySelector("[data-app-sidebar]");
       if (!(sidebar instanceof Element)) {
         setPeek(false);

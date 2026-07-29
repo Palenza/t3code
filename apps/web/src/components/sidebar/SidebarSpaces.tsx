@@ -246,11 +246,10 @@ export function SidebarSpacesBar() {
                     aria-label="Modifier les couleurs"
                     className={cn(
                       "ml-auto flex size-7 cursor-pointer items-center justify-center rounded-lg text-sidebar-muted-foreground/70 transition-all hover:bg-sidebar-row-hover hover:text-sidebar-foreground",
-                      // Discret comme Arc : il se révèle quand la main
-                      // approche la barre (ou quand le panneau est ouvert).
-                      themeOpen
-                        ? "opacity-100"
-                        : "opacity-0 group-hover/spacesbar:opacity-100 focus-visible:opacity-100",
+                      // TOUJOURS visible : caché jusqu'au survol, personne ne
+                      // sait qu'il existe — « il faut qu'il soit toujours
+                      // activé » (30/07).
+                      themeOpen && "bg-sidebar-row-hover text-sidebar-foreground",
                     )}
                   >
                     <PaletteIcon className="size-4" />

@@ -63,6 +63,20 @@ let rebuildRunning = false;
  */
 let lastRebuildExitCode: number | null = null;
 
+/** La dernière ligne « ✗ … » du journal — la raison, en clair. */
+function derniereLigneEchec(): string | null {
+  try {
+    const lignes = NodeFS.readFileSync(UPDATE_LOG, "utf8").split("\n");
+    for (let index = lignes.length - 1; index >= 0; index -= 1) {
+      const ligne = lignes[index]?.trim();
+      if (ligne !== undefined && ligne.startsWith("✗")) return ligne.replace(/^✗\s*/u, "");
+    }
+  } catch {
+    // Journal illisible : on reste muet plutôt que d'inventer une cause.
+  }
+  return null;
+}
+
 export function isForkRebuildRunning(): boolean {
   return rebuildRunning;
 }
@@ -105,6 +119,13 @@ export const forkUpdateEtatRouteLayer = HttpRouter.add(
 
     return HttpServerResponse.jsonUnsafe(
       {
+        // La RAISON du dernier échec, pas seulement son code : le script sait
+        // toujours pourquoi il s'arrête (dépôt sale, conflit, test rouge) et
+        // l'écrit dans son journal — « Update échouée (code 1) » ne disait
+        // rien à personne (30/07).
+        derniereRaison: lastRebuildExitCode !== null && lastRebuildExitCode !== 0
+          ? derniereLigneEchec()
+          : null,
         behind: behind !== null && Number.isFinite(behind) ? behind : null,
         latestSubject: subjectOutput === null ? null : subjectOutput.trim(),
         amontBehind: amontBehind !== null && Number.isFinite(amontBehind) ? amontBehind : null,

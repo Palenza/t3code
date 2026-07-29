@@ -159,7 +159,10 @@ function QuickSettingLink({
       <PopoverTrigger
         openOnHover
         delay={160}
-        closeDelay={240}
+        // Fermeture LENTE : le trajet sidebar → panneau passe au-dessus du
+        // contenu, et la sidebar en peek se referme sous le curseur pendant
+        // le voyage. 240 ms coupaient le pont en route (30/07).
+        closeDelay={600}
         render={
           <SidebarMenuButton
             className="h-7 text-[13px] text-sidebar-foreground/70 hover:text-sidebar-foreground"
@@ -175,14 +178,14 @@ function QuickSettingLink({
         }
       />
       <PopoverPopup
-        anchor={() => document.querySelector("[data-app-sidebar]")}
+        // Ancré sur le LIEN survolé, pas sur la sidebar : ancré sur elle, le
+        // panneau s'ouvrait au milieu d'une colonne pleine hauteur, donc loin
+        // de la souris — « ça ne s'affiche pas en face de la souris, du coup
+        // elle disparaît » (30/07). Il se déploie maintenant à hauteur du
+        // lien, et `sideOffset` court garde le pont souris franchissable.
         side="right"
-        // CENTRÉ, pas `end` : aligné sur le bas d'une sidebar pleine hauteur,
-        // le panneau démarrait au ras du bord inférieur et sortait de l'écran
-        // — « Comptes Claude » n'affichait que sa première ligne (capture
-        // 30/07). Centré, il se déploie de part et d'autre du lien survolé.
         align="center"
-        sideOffset={14}
+        sideOffset={6}
         // `h-` borne la BOÎTE (le contenu long défile dedans) ; `max-h` seul
         // laissait le panneau prendre sa hauteur naturelle et déborder.
         className="max-h-[min(80vh,44rem)] w-[min(720px,60vw)] overflow-hidden p-0"

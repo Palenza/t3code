@@ -471,27 +471,37 @@ function IntensityWave(props: { dark: boolean; value: number; onChange: (value: 
     props.onChange(Math.max(0, Math.min(1, (clientX - rect.left) / rect.width)));
   };
   /**
-   * La vague d'Arc, relue sur les captures du 30/07 : elle ondule à PLEINE
-   * amplitude jusqu'à la poignée, puis se couche en ligne DROITE après.
+   * La vague d'Arc, MESURÉE image par image (enregistrement 30/07, 2 878
+   * frames à 60 fps du vrai panneau).
    *
-   * La version d'avant faisait varier l'amplitude sur toute la largeur — la
-   * vague restait donc molle partout à faible valeur, alors que chez Arc une
-   * poignée à gauche donne une longue ligne plate et une poignée à droite une
-   * vague pleine sur presque tout le rail. C'est la LONGUEUR ondulée qui dit
-   * la valeur, pas la hauteur des creux.
+   * Ce que la mesure a tranché, contre deux lectures fausses d'affilée :
+   * l'amplitude EST la valeur. Au minimum la vague est une ligne PARFAITEMENT
+   * plate ; plus la poignée va à droite, plus les ondulations montent en
+   * HAUTEUR. Ma première version partait d'un plancher non nul (jamais plate),
+   * la seconde faisait varier la longueur ondulée à amplitude fixe (plate
+   * nulle part). Les frames à 2 %, 55 % et 85 % de course ne laissent aucun
+   * doute.
+   *
+   * Et un détail que seule la frame à 55 % montre : la vague CONTINUE après
+   * la poignée, mais plus basse et plus pâle. Deux traits, donc — le rempli
+   * et le reste — jamais un seul.
    */
-  const wavePath = useMemo(() => {
+  const [wavePath, waveTailPath] = useMemo(() => {
     const valeur = Math.max(0, Math.min(1, props.value));
+    const amplitude = valeur * 9;
     const bascule = valeur * 160;
-    const points: string[] = [];
-    for (let x = 0; x <= 160; x += 2) {
-      // Un fondu court juste après la poignée : Arc ne coupe pas l'onde net,
-      // elle s'éteint sur quelques pixels.
-      const attenuation = x <= bascule ? 1 : Math.max(0, 1 - (x - bascule) / 26);
-      const y = 14 - Math.sin((x / 22) * Math.PI * 2) * 8 * attenuation;
-      points.push(`${x === 0 ? "M" : "L"}${x} ${y.toFixed(1)}`);
-    }
-    return points.join(" ");
+    const trace = (depuis: number, jusqu: number, hauteur: number): string => {
+      const points: string[] = [];
+      for (let x = depuis; x <= jusqu; x += 2) {
+        const y = 14 - Math.sin((x / 22) * Math.PI * 2) * hauteur;
+        points.push(`${x === depuis ? "M" : "L"}${x} ${y.toFixed(1)}`);
+      }
+      return points.join(" ");
+    };
+    return [
+      trace(0, Math.max(2, bascule), amplitude),
+      trace(Math.max(2, bascule), 160, amplitude * 0.55),
+    ];
   }, [props.value]);
   return (
     <div
@@ -524,10 +534,18 @@ function IntensityWave(props: { dark: boolean; value: number; onChange: (value: 
       className="relative h-10 flex-1 cursor-pointer touch-none outline-none focus-visible:ring-2 focus-visible:ring-ring"
     >
       <svg viewBox="0 0 160 28" className="absolute inset-y-1 w-full" preserveAspectRatio="none">
+        {/* Le RESTE d'abord, sous le rempli : plus bas, plus pâle. */}
+        <path
+          d={waveTailPath}
+          fill="none"
+          stroke={props.dark ? "rgb(255 255 255 / 0.20)" : "rgb(60 60 65 / 0.22)"}
+          strokeWidth="3.5"
+          strokeLinecap="round"
+        />
         <path
           d={wavePath}
           fill="none"
-          stroke={props.dark ? "rgb(255 255 255 / 0.45)" : "rgb(60 60 65 / 0.5)"}
+          stroke={props.dark ? "rgb(255 255 255 / 0.55)" : "rgb(60 60 65 / 0.62)"}
           strokeWidth="3.5"
           strokeLinecap="round"
         />
