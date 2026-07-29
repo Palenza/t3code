@@ -19,6 +19,7 @@ import {
   favorisEpinglerRouteLayer,
 } from "./favorisEnAttente.ts";
 import { forkUpdateEtatRouteLayer, forkUpdateLancerRouteLayer } from "./forkUpdate.ts";
+import { memoireRouteLayer } from "./memoireConsignes.ts";
 import { modeEtatRouteLayer, modePoserRouteLayer } from "./modeActif.ts";
 import { websocketRpcRouteLayer } from "./ws.ts";
 import * as ExternalLauncher from "./process/externalLauncher.ts";
@@ -385,6 +386,7 @@ export const makeRoutesLayer = Layer.mergeAll(
     favorisEpinglerRouteLayer,
     modeEtatRouteLayer,
     modePoserRouteLayer,
+    memoireRouteLayer,
     assetRouteLayer,
     staticAndDevRouteLayer,
     websocketRpcRouteLayer,

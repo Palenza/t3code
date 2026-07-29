@@ -3,6 +3,10 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./consignes": {
+      "types": "./src/consignes.ts",
+      "import": "./src/consignes.ts"
+    },
     "./modesTravail": {
       "types": "./src/modesTravail.ts",
       "import": "./src/modesTravail.ts"

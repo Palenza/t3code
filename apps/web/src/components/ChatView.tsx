@@ -69,6 +69,7 @@ import { AsyncResult } from "effect/unstable/reactivity";
 import { isElectron } from "../env";
 import { readLocalApi } from "../localApi";
 import { useDiffPanelStore } from "../diffPanelStore";
+import { useMemoireStore } from "../memoireStore";
 import { usePromessesStore } from "../promessesStore";
 import {
   collapseExpandedComposerCursor,
@@ -2276,6 +2277,25 @@ function ChatViewContent(props: ChatViewProps) {
     }
     return null;
   }, [displayServerMessages]);
+
+  // Ce que l'humain vient de poser comme règle. Lu sur SON dernier message,
+  // pas sur la réponse : une consigne vient de lui, jamais de l'agent.
+  const dernierMessageHumain = useMemo(() => {
+    for (let index = displayServerMessages.length - 1; index >= 0; index -= 1) {
+      const message = displayServerMessages[index];
+      if (message?.role === "user") return message;
+    }
+    return null;
+  }, [displayServerMessages]);
+
+  useEffect(() => {
+    const texte = dernierMessageHumain?.text;
+    if (texte === undefined || texte.length === 0) return;
+    useMemoireStore.getState().noterDepuisMessage({
+      message: texte,
+      maintenant: new Date().toISOString(),
+    });
+  }, [dernierMessageHumain]);
 
   useEffect(() => {
     const texte = dernierAssistantFini?.text;
