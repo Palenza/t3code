@@ -69,6 +69,7 @@ import { AsyncResult } from "effect/unstable/reactivity";
 import { isElectron } from "../env";
 import { readLocalApi } from "../localApi";
 import { useDiffPanelStore } from "../diffPanelStore";
+import { usePromessesStore } from "../promessesStore";
 import {
   collapseExpandedComposerCursor,
   parseStandaloneComposerSlashCommand,
@@ -2262,6 +2263,29 @@ function ChatViewContent(props: ChatViewProps) {
       }
     };
   }, [attachmentPreviewHandoffByMessageId, clearAttachmentPreviewHandoff, displayServerMessages]);
+
+  // Ce que l'agent vient de promettre. On lit la DERNIÈRE réponse terminée :
+  // un message encore en train de s'écrire dirait une promesse tronquée, et
+  // les phrases d'engagement arrivent presque toujours en fin de réponse.
+  const dernierAssistantFini = useMemo(() => {
+    for (let index = displayServerMessages.length - 1; index >= 0; index -= 1) {
+      const message = displayServerMessages[index];
+      if (message?.role !== "assistant") continue;
+      if (message.streaming === true) return null;
+      return message;
+    }
+    return null;
+  }, [displayServerMessages]);
+
+  useEffect(() => {
+    const texte = dernierAssistantFini?.text;
+    if (texte === undefined || texte.length === 0) return;
+    usePromessesStore.getState().noterDepuisReponse({
+      reponse: texte,
+      threadKey: routeThreadKey,
+      maintenant: new Date().toISOString(),
+    });
+  }, [dernierAssistantFini, routeThreadKey]);
   const timelineMessages = useMemo(() => {
     const messages = displayServerMessages;
     const serverMessagesWithPreviewHandoff =
