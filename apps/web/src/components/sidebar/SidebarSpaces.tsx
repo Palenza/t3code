@@ -1,7 +1,7 @@
 import { useCallback, useState } from "react";
 
 import { useRouter } from "@tanstack/react-router";
-import { LayersIcon, PlusIcon } from "lucide-react";
+import { LayersIcon, PaletteIcon, PlusIcon } from "lucide-react";
 
 import { settlePromise } from "@t3tools/client-runtime/state/runtime";
 
@@ -21,6 +21,7 @@ import { useThreadCustomizationStore, type ThreadColor } from "../../threadCusto
 import { Button } from "../ui/button";
 import { Popover, PopoverPopup, PopoverTrigger } from "../ui/popover";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
+import { SpaceThemePanel } from "./SpaceThemePanel";
 
 /**
  * La barre d'Espaces façon Arc, en bas de la sidebar. Lisibilité d'abord
@@ -36,9 +37,9 @@ export function SidebarSpacesBar() {
   const setActiveSpace = useSidebarSpacesStore((state) => state.setActiveSpace);
   const deleteSpace = useSidebarSpacesStore((state) => state.deleteSpace);
   const createSpace = useSidebarSpacesStore((state) => state.createSpace);
-  const router = useRouter();
 
   const [creating, setCreating] = useState(false);
+  const [themeOpen, setThemeOpen] = useState(false);
   const [draftName, setDraftName] = useState("");
   const [draftEmoji, setDraftEmoji] = useState(SPACE_EMOJI_PRESETS[0] ?? "🎨");
 
@@ -80,8 +81,10 @@ export function SidebarSpacesBar() {
         );
         if (clicked._tag === "Failure") return;
         if (clicked.value === "theme") {
+          // Le panneau flottant, pas une page : l'éditeur d'Arc s'ouvre là
+          // où on est, sur l'espace qu'on vient de désigner.
           setActiveSpace(spaceId);
-          void router.navigate({ to: "/settings/theme" });
+          setThemeOpen(true);
           return;
         }
         if (clicked.value === "delete") {
@@ -89,11 +92,11 @@ export function SidebarSpacesBar() {
         }
       })();
     },
-    [deleteSpace, router, setActiveSpace],
+    [deleteSpace, setActiveSpace],
   );
 
   return (
-    <div className="flex items-center gap-1 px-2 pb-1">
+    <div className="group/spacesbar flex items-center gap-1 px-2 pb-1">
       <Tooltip>
         <TooltipTrigger
           render={
@@ -154,6 +157,41 @@ export function SidebarSpacesBar() {
           </Tooltip>
         );
       })}
+      <Popover open={themeOpen} onOpenChange={setThemeOpen}>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <PopoverTrigger
+                render={
+                  <button
+                    type="button"
+                    aria-label="Modifier les couleurs"
+                    className={cn(
+                      "ml-auto flex size-7 cursor-pointer items-center justify-center rounded-lg text-sidebar-muted-foreground/70 transition-all hover:bg-sidebar-row-hover hover:text-sidebar-foreground",
+                      // Discret comme Arc : il se révèle quand la main
+                      // approche la barre (ou quand le panneau est ouvert).
+                      themeOpen
+                        ? "opacity-100"
+                        : "opacity-0 group-hover/spacesbar:opacity-100 focus-visible:opacity-100",
+                    )}
+                  >
+                    <PaletteIcon className="size-4" />
+                  </button>
+                }
+              />
+            }
+          />
+          <TooltipPopup side="top">Modifier les couleurs</TooltipPopup>
+        </Tooltip>
+        <PopoverPopup
+          side="top"
+          align="end"
+          className="p-0"
+          viewportClassName="p-0 [--viewport-inline-padding:0px]"
+        >
+          <SpaceThemePanel />
+        </PopoverPopup>
+      </Popover>
       <Popover open={creating} onOpenChange={setCreating}>
         <Tooltip>
           <TooltipTrigger
@@ -163,7 +201,7 @@ export function SidebarSpacesBar() {
                   <button
                     type="button"
                     aria-label="Nouvel espace"
-                    className="ml-auto flex size-7 cursor-pointer items-center justify-center rounded-lg text-sidebar-muted-foreground/70 transition-colors hover:bg-sidebar-row-hover hover:text-sidebar-foreground"
+                    className="flex size-7 cursor-pointer items-center justify-center rounded-lg text-sidebar-muted-foreground/70 transition-colors hover:bg-sidebar-row-hover hover:text-sidebar-foreground"
                   >
                     <PlusIcon className="size-4" />
                   </button>
