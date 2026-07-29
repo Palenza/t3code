@@ -265,7 +265,12 @@ export function SpaceThemePanel() {
               onClick={() => applyPalette(palette)}
               className="size-6 cursor-pointer rounded-full ring-1 ring-black/10 transition-transform hover:scale-110"
               style={{
-                background: `linear-gradient(135deg, ${palette[0]} 0%, ${palette[1]} 50%, ${palette[2]} 100%)`,
+                // Un rond UNI, comme Arc : il annonce l'ambiance par sa
+                // dominante et pose le trio entier au clic. En mode sombre,
+                // le nuancier s'assombrit avec le reste du panneau.
+                backgroundColor: isDarkCanvas
+                  ? `color-mix(in oklab, ${palette[0]} 72%, black)`
+                  : palette[0],
               }}
             />
           ))}
@@ -294,9 +299,11 @@ export function SpaceThemePanel() {
 }
 
 /**
- * Le slider d'Arc : une sinusoïde comme rail, une pilule comme poignée. La
- * position de la pilule LE LONG de la vague est la valeur — la vague, elle,
- * dit ce que le réglage fait (de l'ondulation dans la couleur).
+ * Le slider d'Arc, décortiqué image par image (vidéo fondateur 29/07) : la
+ * sinusoïde n'est pas un rail décoratif — SON AMPLITUDE EST LA VALEUR. À
+ * zéro la ligne est presque plate et le voile est délavé ; à fond la vague
+ * est pleine et la couleur assume. Le contrôle mime son effet : c'est ça,
+ * le « archi bien fait ».
  */
 function IntensityWave(props: { value: number; onChange: (value: number) => void }) {
   const railRef = useRef<HTMLDivElement | null>(null);
@@ -308,14 +315,16 @@ function IntensityWave(props: { value: number; onChange: (value: number) => void
     props.onChange(Math.max(0, Math.min(1, (clientX - rect.left) / rect.width)));
   };
   const wavePath = useMemo(() => {
-    // Amplitude 7 px, période 22 px sur 160 px de large, centrée sur y=14.
+    // Période 22 px sur 160 px, centrée sur y=14 ; l'amplitude suit la
+    // valeur : 0,8 px (presque plat, jamais mort) → 8 px (pleine vague).
+    const amplitude = 0.8 + Math.max(0, Math.min(1, props.value)) * 7.2;
     const points: string[] = [];
     for (let x = 0; x <= 160; x += 2) {
-      const y = 14 - Math.sin((x / 22) * Math.PI * 2) * 7;
+      const y = 14 - Math.sin((x / 22) * Math.PI * 2) * amplitude;
       points.push(`${x === 0 ? "M" : "L"}${x} ${y.toFixed(1)}`);
     }
     return points.join(" ");
-  }, []);
+  }, [props.value]);
   return (
     <div
       ref={railRef}
@@ -405,8 +414,12 @@ function GrainDial(props: { value: number; onChange: (value: number) => void }) 
       onPointerUp={() => {
         draggingRef.current = null;
       }}
-      className="relative size-12 shrink-0 cursor-ns-resize touch-none outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      className="group relative size-12 shrink-0 cursor-ns-resize touch-none outline-none focus-visible:ring-2 focus-visible:ring-ring"
     >
+      <span
+        aria-hidden
+        className="absolute left-1/2 top-1/2 size-7 -translate-x-1/2 -translate-y-1/2 rounded-full bg-muted-foreground/15 opacity-0 transition-opacity group-hover:opacity-100"
+      />
       {Array.from({ length: DOTS }, (_, index) => {
         const dotAngle = (index / DOTS) * 360;
         return (

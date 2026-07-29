@@ -194,9 +194,11 @@ export function sidebarThemeBackground(
     return null;
   }
   const base = BLEND_BASE[resolveSidebarThemeAppearance(theme, appearance)];
-  // 22 % à 68 % de couleur gardée : sous 22 % on ne voit rien, au-delà de
-  // 68 % le texte du mode sombre commence à se battre avec le fond.
-  const kept = Math.round(22 + clamp01(theme.intensity) * 46);
+  // 25 % à 90 % de couleur gardée. La borne haute vient de la vidéo d'Arc
+  // (29/07) : à fond, leur voile est de la couleur FRANCHE — cyan pétant,
+  // magenta plein — pas un pastel. L'intensité est un curseur d'engagement :
+  // délavé en bas, assumé en haut.
+  const kept = Math.round(25 + clamp01(theme.intensity) * 65);
   const mix = (color: string) => `color-mix(in oklab, ${color} ${kept}%, ${base})`;
   const at = (value: number) => `${Math.round(clamp01(value) * 100)}%`;
   const radials = stops.map(

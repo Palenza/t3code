@@ -22,7 +22,7 @@ describe("sidebarThemeBackground", () => {
   it("blends toward the dark base in dark mode and the light base in light mode", () => {
     const dark = sidebarThemeBackground(theme(), "dark");
     const light = sidebarThemeBackground(theme(), "light");
-    expect(dark).toContain("color-mix(in oklab, #5db3f0 45%, #0e1116)");
+    expect(dark).toContain("color-mix(in oklab, #5db3f0 58%, #0e1116)");
     expect(light).toContain("#f7f9fc");
     expect(dark).not.toContain("#f7f9fc");
   });
@@ -52,9 +52,11 @@ describe("sidebarThemeBackground", () => {
   });
 
   it("maps intensity to the kept-colour percentage, bounded", () => {
-    expect(sidebarThemeBackground(theme({ intensity: 0 }), "dark")).toContain(" 22%,");
-    expect(sidebarThemeBackground(theme({ intensity: 1 }), "dark")).toContain(" 68%,");
-    expect(sidebarThemeBackground(theme({ intensity: 99 }), "dark")).toContain(" 68%,");
+    // Bornes recalées sciemment sur la vidéo d'Arc (29/07) : à fond, le
+    // voile est de la couleur FRANCHE (90 %), pas un pastel plafonné à 68 %.
+    expect(sidebarThemeBackground(theme({ intensity: 0 }), "dark")).toContain(" 25%,");
+    expect(sidebarThemeBackground(theme({ intensity: 1 }), "dark")).toContain(" 90%,");
+    expect(sidebarThemeBackground(theme({ intensity: 99 }), "dark")).toContain(" 90%,");
   });
 
   it("forces the blend base when the theme pins an appearance", () => {
