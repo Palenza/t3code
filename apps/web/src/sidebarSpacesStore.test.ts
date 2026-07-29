@@ -91,3 +91,45 @@ describe("sidebarSpacesStore", () => {
     ).toBe(false);
   });
 });
+
+describe("gestion des espaces (façon Arc)", () => {
+  it("réordonne la barre en insérant à la place visée", () => {
+    // Glisser le 3e sur le 1er le place EN PREMIER, les autres décalent —
+    // c'est ce que fait Arc quand on réarrange ses espaces (29/07).
+    const store = useSidebarSpacesStore;
+    store.setState({ spaces: [], activeSpaceId: null, assignments: {}, favorites: [] });
+    const a = store.getState().createSpace({ name: "A", emoji: "🎨", theme: null });
+    const b = store.getState().createSpace({ name: "B", emoji: "🐛", theme: null });
+    const c = store.getState().createSpace({ name: "C", emoji: "🚀", theme: null });
+
+    store.getState().reorderSpaces(c, a);
+
+    expect(store.getState().spaces.map((space) => space.id)).toEqual([c, a, b]);
+  });
+
+  it("ne bouge rien si la cible n'existe pas ou est elle-même", () => {
+    const store = useSidebarSpacesStore;
+    store.setState({ spaces: [], activeSpaceId: null, assignments: {}, favorites: [] });
+    const a = store.getState().createSpace({ name: "A", emoji: "🎨", theme: null });
+    const b = store.getState().createSpace({ name: "B", emoji: "🐛", theme: null });
+
+    store.getState().reorderSpaces(a, a);
+    store.getState().reorderSpaces(a, "inconnu");
+
+    expect(store.getState().spaces.map((space) => space.id)).toEqual([a, b]);
+  });
+
+  it("renomme et rhabille un espace sans toucher aux autres", () => {
+    const store = useSidebarSpacesStore;
+    store.setState({ spaces: [], activeSpaceId: null, assignments: {}, favorites: [] });
+    const a = store.getState().createSpace({ name: "A", emoji: "🎨", theme: null });
+    const b = store.getState().createSpace({ name: "B", emoji: "🐛", theme: null });
+
+    store.getState().renameSpace(a, "Design");
+    store.getState().setSpaceEmoji(a, "icon:code dev");
+
+    const [premier, second] = store.getState().spaces;
+    expect(premier).toMatchObject({ id: a, name: "Design", emoji: "icon:code dev" });
+    expect(second).toMatchObject({ id: b, name: "B", emoji: "🐛" });
+  });
+});

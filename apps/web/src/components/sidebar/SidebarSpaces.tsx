@@ -22,6 +22,7 @@ import { Button } from "../ui/button";
 import { Popover, PopoverPopup, PopoverTrigger } from "../ui/popover";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { SpaceThemePanel } from "./SpaceThemePanel";
+import { SpaceIcon, SpaceIconPicker } from "./SpaceIconPicker";
 
 /**
  * La barre d'Espaces façon Arc, en bas de la sidebar. Lisibilité d'abord
@@ -37,9 +38,14 @@ export function SidebarSpacesBar() {
   const setActiveSpace = useSidebarSpacesStore((state) => state.setActiveSpace);
   const deleteSpace = useSidebarSpacesStore((state) => state.deleteSpace);
   const createSpace = useSidebarSpacesStore((state) => state.createSpace);
+  const renameSpace = useSidebarSpacesStore((state) => state.renameSpace);
+  const setSpaceEmoji = useSidebarSpacesStore((state) => state.setSpaceEmoji);
 
   const [creating, setCreating] = useState(false);
   const [themeOpen, setThemeOpen] = useState(false);
+  const [pickerOuvert, setPickerOuvert] = useState(false);
+  const [renommage, setRenommage] = useState<{ id: string; valeur: string } | null>(null);
+  const [glisse, setGlisse] = useState<string | null>(null);
   const [draftName, setDraftName] = useState("");
   const [draftEmoji, setDraftEmoji] = useState(SPACE_EMOJI_PRESETS[0] ?? "🎨");
 
@@ -73,6 +79,8 @@ export function SidebarSpacesBar() {
         const clicked = await settlePromise(() =>
           api.contextMenu.show(
             [
+              { id: "rename", label: "Renommer l'espace…" },
+              { id: "icon", label: "Changer l'icône…" },
               { id: "theme", label: "Modifier le thème…" },
               { id: "delete", label: `Supprimer « ${spaceName} »`, destructive: true },
             ],
@@ -80,6 +88,15 @@ export function SidebarSpacesBar() {
           ),
         );
         if (clicked._tag === "Failure") return;
+        if (clicked.value === "rename") {
+          setRenommage({ id: spaceId, valeur: spaceName });
+          return;
+        }
+        if (clicked.value === "icon") {
+          setActiveSpace(spaceId);
+          setPickerOuvert(true);
+          return;
+        }
         if (clicked.value === "theme") {
           // Le panneau flottant, pas une page : l'éditeur d'Arc s'ouvre là
           // où on est, sur l'espace qu'on vient de désigner.
@@ -129,6 +146,19 @@ export function SidebarSpacesBar() {
                 <button
                   type="button"
                   aria-label={`Espace ${space.name}`}
+                  draggable
+                  onDragStart={() => setGlisse(space.id)}
+                  onDragOver={(event) => event.preventDefault()}
+                  onDrop={(event) => {
+                    // Réordonner la barre en glissant, comme Arc.
+                    event.preventDefault();
+                    if (glisse !== null && glisse !== space.id) {
+                      useSidebarSpacesStore.getState().reorderSpaces(glisse, space.id);
+                    }
+                    setGlisse(null);
+                  }}
+                  onDragEnd={() => setGlisse(null)}
+                  onDoubleClick={() => setRenommage({ id: space.id, valeur: space.name })}
                   onClick={() => setActiveSpace(space.id)}
                   onContextMenu={(event) => {
                     event.preventDefault();
@@ -142,13 +172,35 @@ export function SidebarSpacesBar() {
                     active
                       ? "max-w-32 bg-sidebar-row-active px-2.5"
                       : "w-7 justify-center opacity-60 hover:bg-sidebar-row-hover hover:opacity-100",
+                    glisse === space.id && "opacity-40",
                   )}
                 >
-                  <span className="shrink-0 text-[14px] leading-none">{space.emoji}</span>
+                  <SpaceIcon valeur={space.emoji} className="shrink-0 text-[14px]" />
                   {active ? (
-                    <span className="truncate text-[11px] font-medium text-sidebar-foreground">
-                      {space.name}
-                    </span>
+                    renommage?.id === space.id ? (
+                      <input
+                        autoFocus
+                        value={renommage.valeur}
+                        onClick={(event) => event.stopPropagation()}
+                        onChange={(event) =>
+                          setRenommage({ id: space.id, valeur: event.currentTarget.value })
+                        }
+                        onBlur={() => {
+                          const nom = renommage.valeur.trim();
+                          if (nom.length > 0) renameSpace(space.id, nom);
+                          setRenommage(null);
+                        }}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") event.currentTarget.blur();
+                          if (event.key === "Escape") setRenommage(null);
+                        }}
+                        className="w-20 bg-transparent text-[11px] font-medium text-sidebar-foreground outline-none"
+                      />
+                    ) : (
+                      <span className="truncate text-[11px] font-medium text-sidebar-foreground">
+                        {space.name}
+                      </span>
+                    )
                   ) : null}
                 </button>
               }
@@ -157,6 +209,22 @@ export function SidebarSpacesBar() {
           </Tooltip>
         );
       })}
+      {/* Changer l'icône d'un espace EXISTANT — même sélecteur qu'à la
+          création, ouvert par le menu contextuel. */}
+      <Popover open={pickerOuvert} onOpenChange={setPickerOuvert}>
+        <PopoverTrigger render={<span className="sr-only" aria-hidden />} />
+        <PopoverPopup side="top" align="start" className="p-0">
+          {activeSpaceId === null ? null : (
+            <SpaceIconPicker
+              valeur={spaces.find((space) => space.id === activeSpaceId)?.emoji ?? "🎨"}
+              onChange={(valeur) => {
+                setSpaceEmoji(activeSpaceId, valeur);
+                setPickerOuvert(false);
+              }}
+            />
+          )}
+        </PopoverPopup>
+      </Popover>
       <Popover open={themeOpen} onOpenChange={setThemeOpen}>
         <Tooltip>
           <TooltipTrigger
@@ -231,7 +299,7 @@ export function SidebarSpacesBar() {
           <div className="flex flex-col gap-3 px-4 py-3">
             <div className="flex items-center gap-2">
               <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-accent/50 text-[18px]">
-                {draftEmoji}
+                <SpaceIcon valeur={draftEmoji} className="size-4.5" />
               </span>
               <input
                 autoFocus
@@ -244,21 +312,8 @@ export function SidebarSpacesBar() {
                 className="h-9 w-full rounded-lg border border-border/60 bg-transparent px-2.5 text-sm outline-none focus:ring-2 focus:ring-ring"
               />
             </div>
-            <div className="grid grid-cols-6 gap-1">
-              {SPACE_EMOJI_PRESETS.map((emoji) => (
-                <button
-                  key={emoji}
-                  type="button"
-                  aria-label={`Icône ${emoji}`}
-                  onClick={() => setDraftEmoji(emoji)}
-                  className={cn(
-                    "flex h-8 cursor-pointer items-center justify-center rounded-lg text-[15px] transition-colors",
-                    draftEmoji === emoji ? "bg-accent ring-1 ring-ring" : "hover:bg-accent/60",
-                  )}
-                >
-                  {emoji}
-                </button>
-              ))}
+            <div className="-mx-4 border-y border-border/50">
+              <SpaceIconPicker valeur={draftEmoji} onChange={setDraftEmoji} />
             </div>
             <div className="flex items-center gap-2">
               <span

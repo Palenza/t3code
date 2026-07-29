@@ -56,6 +56,10 @@ interface SidebarSpacesState {
   favorites: SidebarFavorite[];
   createSpace: (input: { name: string; emoji: string; theme: SidebarTheme | null }) => string;
   renameSpace: (id: string, name: string) => void;
+  /** Change l'icône d'un espace — emoji ou icône lucide (`icon:<nom>`). */
+  setSpaceEmoji: (id: string, emoji: string) => void;
+  /** Réordonne la barre : l'espace `id` prend la place de `overId`. */
+  reorderSpaces: (id: string, overId: string) => void;
   setSpaceTheme: (id: string, theme: SidebarTheme | null) => void;
   deleteSpace: (id: string) => void;
   setActiveSpace: (id: string | null) => void;
@@ -90,6 +94,21 @@ export const useSidebarSpacesStore = create<SidebarSpacesState>()(
         set((state) => ({
           spaces: state.spaces.map((space) => (space.id === id ? { ...space, name } : space)),
         })),
+      setSpaceEmoji: (id, emoji) =>
+        set((state) => ({
+          spaces: state.spaces.map((space) => (space.id === id ? { ...space, emoji } : space)),
+        })),
+      reorderSpaces: (id, overId) =>
+        set((state) => {
+          const depuis = state.spaces.findIndex((space) => space.id === id);
+          const vers = state.spaces.findIndex((space) => space.id === overId);
+          if (depuis === -1 || vers === -1 || depuis === vers) return state;
+          const spaces = [...state.spaces];
+          const [deplace] = spaces.splice(depuis, 1);
+          if (deplace === undefined) return state;
+          spaces.splice(vers, 0, deplace);
+          return { spaces };
+        }),
       setSpaceTheme: (id, theme) =>
         set((state) => ({
           spaces: state.spaces.map((space) => (space.id === id ? { ...space, theme } : space)),
