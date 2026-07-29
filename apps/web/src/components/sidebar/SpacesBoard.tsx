@@ -73,7 +73,11 @@ export function SpacesBoard({ onFermer }: { onFermer: () => void }) {
   );
 
   return (
-    <div className="flex h-full items-start gap-3 overflow-x-auto p-4">
+    // Dimensions MESURÉES sur l'enregistrement Retina d'Arc (30/07, frames
+    // 3600×2338 → CSS = pixels ÷ 2) : colonnes de 240 px, écarts de 24 px,
+    // marge haute de 87 px. Mes valeurs d'origine — 216 et 12 — étaient des
+    // estimations à l'œil, et fausses toutes les deux.
+    <div className="flex h-full items-start gap-6 overflow-x-auto px-6 pt-[87px] pb-6">
       {spaces.map((space) => {
         const fils = filsDe(space.id);
         const fond =
@@ -94,7 +98,8 @@ export function SpacesBoard({ onFermer }: { onFermer: () => void }) {
             className={cn(
               // Une colonne = un espace, et son dégradé EST son identité :
               // c'est ce qui rend le tableau lisible d'un coup d'œil.
-              "flex h-full w-[13.5rem] shrink-0 flex-col rounded-2xl ring-1 ring-black/5 transition-opacity",
+              // 240 px de large, coins de 10 px : mesurés, pas devinés.
+              "flex h-full w-60 shrink-0 flex-col rounded-[10px] ring-1 ring-black/5 transition-opacity",
               glisse === space.id && "opacity-40",
             )}
             style={{ background: fond }}

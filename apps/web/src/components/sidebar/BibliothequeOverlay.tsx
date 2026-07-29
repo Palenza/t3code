@@ -58,14 +58,15 @@ export function BibliothequeOverlay() {
   return (
     <div className="fixed inset-0 z-50 flex bg-background/95 backdrop-blur-xl">
       {/* Le rail d'Arc : icône au-dessus, libellé dessous, l'actif en pastille. */}
-      <nav className="flex w-24 shrink-0 flex-col items-center gap-2 py-6">
+      {/* 120 px : la largeur MESURÉE du rail d'Arc (240 px Retina). */}
+      <nav className="flex w-[120px] shrink-0 flex-col items-center gap-2 py-6">
         {ONGLETS.map(({ cle, nom, Icone }) => (
           <button
             key={cle}
             type="button"
             onClick={() => ouvrir(cle)}
             className={cn(
-              "flex w-20 cursor-pointer flex-col items-center gap-1.5 rounded-xl px-2 py-3 transition-colors",
+              "flex w-[92px] cursor-pointer flex-col items-center gap-1.5 rounded-xl px-2 py-3 transition-colors",
               onglet === cle
                 ? "bg-accent text-foreground"
                 : "text-muted-foreground hover:bg-accent/50",
