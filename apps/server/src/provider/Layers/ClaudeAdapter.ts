@@ -56,6 +56,7 @@ import {
 import * as Cause from "effect/Cause";
 import * as Crypto from "effect/Crypto";
 import * as DateTime from "effect/DateTime";
+import * as Option from "effect/Option";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -207,11 +208,25 @@ interface ClaudeSessionContext {
   lastThreadStartedId: string | undefined;
   /** One synthesized rejected-rate-limit event per turn, never a burst. */
   usageLimitRefusalEmittedForTurnId: string | undefined;
+  /** Les dossiers de skills que cette session relit à chaud (compte + projet). */
+  readonly skillsDirs: ReadonlyArray<string>;
+  /**
+   * Empreinte des skills au moment où la session les a chargées. Comparée au
+   * début de chaque tour : si elle a bougé, on demande au SDK de recharger —
+   * éditer une skill n'oblige plus à redémarrer la session.
+   */
+  skillsSignature: string | undefined;
   stopped: boolean;
 }
 
 interface ClaudeQueryRuntime extends AsyncIterable<SDKMessage> {
   readonly interrupt: () => Promise<void>;
+  /**
+   * Recharge les skills depuis le disque SANS redémarrer la session. Optionnel :
+   * les doubles de test ne le fournissent pas, et son absence doit seulement
+   * désactiver la recharge, jamais faire échouer un tour.
+   */
+  readonly reloadSkills?: () => Promise<unknown>;
   readonly setModel: (model?: string) => Promise<void>;
   readonly setPermissionMode: (mode: PermissionMode) => Promise<void>;
   readonly setMaxThinkingTokens: (maxThinkingTokens: number | null) => Promise<void>;
@@ -1381,6 +1396,34 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
         prompt: input.prompt,
         options: input.options,
       }) as ClaudeQueryRuntime);
+
+  /**
+   * Empreinte du contenu des dossiers de skills : nombre de fichiers + mtime le
+   * plus récent. Le mtime d'un DOSSIER ne bouge pas quand on édite un fichier
+   * dedans — d'où la marche récursive. Les dossiers de skills sont minuscules
+   * (quelques fichiers), la marche coûte moins qu'un stat de plus.
+   */
+  const signatureDesSkills = Effect.fn("signatureDesSkills")(function* (
+    dirs: ReadonlyArray<string>,
+  ) {
+    let fichiers = 0;
+    let dernierMtime = 0;
+    for (const dir of dirs) {
+      const entrees = yield* fileSystem
+        .readDirectory(dir, { recursive: true })
+        .pipe(Effect.orElseSucceed(() => [] as ReadonlyArray<string>));
+      for (const entree of entrees) {
+        const info = yield* fileSystem
+          .stat(path.join(dir, entree))
+          .pipe(Effect.orElseSucceed(() => null));
+        if (info === null || info.type !== "File") continue;
+        fichiers += 1;
+        const mtime = Option.getOrUndefined(info.mtime)?.getTime() ?? 0;
+        if (mtime > dernierMtime) dernierMtime = mtime;
+      }
+    }
+    return `${fichiers}:${dernierMtime}`;
+  });
 
   const sessions = new Map<ThreadId, ClaudeSessionContext>();
   const runtimeEventQueue = yield* Queue.unbounded<ProviderRuntimeEvent>();
@@ -2561,7 +2604,10 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
     // (constaté live 29/07). Synthesize the event a real refusal would
     // carry; one per turn.
     const refusalTurnId = context.turnState?.turnId;
-    if (refusalTurnId !== undefined && context.usageLimitRefusalEmittedForTurnId !== refusalTurnId) {
+    if (
+      refusalTurnId !== undefined &&
+      context.usageLimitRefusalEmittedForTurnId !== refusalTurnId
+    ) {
       const refusal = detectClaudeUsageLimitRefusal(extractTextContent(message.message?.content));
       if (refusal !== null) {
         context.usageLimitRefusalEmittedForTurnId = refusalTurnId;
@@ -3683,6 +3729,17 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
         updatedAt: startedAt,
       };
 
+      const configDirBrut = claudeEnvironment["CLAUDE_CONFIG_DIR"];
+      const skillsDirs = [
+        ...(typeof configDirBrut === "string" && configDirBrut.length > 0
+          ? [path.join(configDirBrut, "skills")]
+          : []),
+        ...(input.cwd ? [path.join(input.cwd, ".claude", "skills")] : []),
+      ];
+      const skillsSignature = yield* signatureDesSkills(skillsDirs).pipe(
+        Effect.orElseSucceed(() => undefined),
+      );
+
       const context: ClaudeSessionContext = {
         session,
         promptQueue,
@@ -3704,6 +3761,8 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
         lastAssistantUuid: resumeState?.resumeSessionAt,
         lastThreadStartedId: undefined,
         usageLimitRefusalEmittedForTurnId: undefined,
+        skillsDirs,
+        skillsSignature,
         stopped: false,
       };
       yield* Ref.set(contextRef, context);
@@ -3797,6 +3856,33 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
     // instead, so they don't block the user's next turn.
     const steeringTurnState =
       context.turnState && context.turnState.synthetic !== true ? context.turnState : null;
+
+    // RECHARGE À CHAUD DES SKILLS. Éditer une skill obligeait à redémarrer la
+    // session entière : la CLI ne relit ses dossiers qu'au démarrage. On compare
+    // l'empreinte à chaque début de tour — jamais pendant un steering, les
+    // skills ne comptent qu'à l'ouverture d'un tour — et un échec de recharge ne
+    // bloque JAMAIS l'envoi : au pire, le tour part avec les skills d'avant,
+    // c'est-à-dire exactement l'ancien comportement.
+    const reloadSkills = context.query.reloadSkills;
+    if (steeringTurnState === null && reloadSkills !== undefined) {
+      yield* Effect.gen(function* () {
+        const signature = yield* signatureDesSkills(context.skillsDirs);
+        if (context.skillsSignature !== undefined && signature !== context.skillsSignature) {
+          yield* Effect.tryPromise({
+            try: () => reloadSkills(),
+            catch: (cause) => toRequestError(input.threadId, "turn/reload-skills", cause),
+          });
+          yield* Effect.logInfo("claude: skills rechargées à chaud", {
+            threadId: input.threadId,
+          });
+        }
+        context.skillsSignature = signature;
+      }).pipe(
+        Effect.catchCause((cause) =>
+          Effect.logWarning("claude: recharge des skills impossible", { cause }),
+        ),
+      );
+    }
     if (context.turnState && steeringTurnState === null) {
       yield* completeTurn(context, "completed");
     }

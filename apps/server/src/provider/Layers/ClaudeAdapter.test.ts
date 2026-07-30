@@ -58,6 +58,7 @@ class FakeClaudeQuery implements AsyncIterable<SDKMessage> {
   public readonly setModelCalls: Array<string | undefined> = [];
   public readonly setPermissionModeCalls: Array<string> = [];
   public readonly setMaxThinkingTokensCalls: Array<number | null> = [];
+  public reloadSkillsCalls = 0;
   public closeCalls = 0;
 
   emit(message: SDKMessage): void {
@@ -93,6 +94,11 @@ class FakeClaudeQuery implements AsyncIterable<SDKMessage> {
       waiter.resolve({ done: true, value: undefined });
     }
   }
+
+  readonly reloadSkills = async (): Promise<unknown> => {
+    this.reloadSkillsCalls += 1;
+    return {};
+  };
 
   readonly interrupt = async (): Promise<void> => {
     this.interruptCalls.push(undefined);
@@ -691,6 +697,78 @@ describe("ClaudeAdapterLive", () => {
 
       const createInput = harness.getLastCreateQueryInput();
       assert.equal(createInput?.options.settings, undefined);
+    }).pipe(
+      Effect.provideService(Random.Random, makeDeterministicRandomService()),
+      Effect.provide(harness.layer),
+    );
+  });
+
+  it.effect("recharge les skills à chaud quand une skill a été éditée depuis l'ouverture", () => {
+    // L'empreinte de référence est prise à l'OUVERTURE de session — pas au
+    // premier tour, sinon une édition entre les deux serait ratée à vie. Ce
+    // test joue exactement ce scénario : ouvrir, éditer, envoyer.
+    const tmp = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "claude-skills-"));
+    NodeFS.mkdirSync(NodePath.join(tmp, "skills", "ma-skill"), { recursive: true });
+    const skillFile = NodePath.join(tmp, "skills", "ma-skill", "SKILL.md");
+    NodeFS.writeFileSync(skillFile, "version une");
+    const harness = makeHarness({ claudeConfig: { homePath: tmp } });
+    // Instant FIXE et futur (secondes epoch, 2099-01-01T00:00:00Z) : deux
+    // écritures dans la même milliseconde donneraient la même empreinte, et un
+    // instant lu à l'horloge ne serait pas rejouable. `utimesSync` accepte les
+    // secondes directement — pas besoin de construire une Date.
+    const futur = 4_070_908_800;
+    return Effect.gen(function* () {
+      const adapter = yield* ClaudeAdapter;
+      const session = yield* adapter.startSession({
+        threadId: THREAD_ID,
+        provider: ProviderDriverKind.make("claudeAgent"),
+        modelSelection: createModelSelection(
+          ProviderInstanceId.make("claudeAgent"),
+          "claude-sonnet-4-6",
+          [],
+        ),
+        runtimeMode: "full-access",
+      });
+
+      // Édition APRÈS l'ouverture — le scénario exact que l'empreinte doit voir.
+      NodeFS.writeFileSync(skillFile, "version deux, éditée pendant la session");
+      NodeFS.utimesSync(skillFile, futur, futur);
+
+      yield* adapter.sendTurn({
+        threadId: session.threadId,
+        input: "premier message",
+        attachments: [],
+      });
+      assert.equal(harness.query.reloadSkillsCalls, 1);
+    }).pipe(
+      Effect.provideService(Random.Random, makeDeterministicRandomService()),
+      Effect.provide(harness.layer),
+    );
+  });
+
+  it.effect("ne recharge PAS quand rien n'a bougé — le cas de tous les jours", () => {
+    const tmp = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "claude-skills-"));
+    NodeFS.mkdirSync(NodePath.join(tmp, "skills", "ma-skill"), { recursive: true });
+    NodeFS.writeFileSync(NodePath.join(tmp, "skills", "ma-skill", "SKILL.md"), "stable");
+    const harness = makeHarness({ claudeConfig: { homePath: tmp } });
+    return Effect.gen(function* () {
+      const adapter = yield* ClaudeAdapter;
+      const session = yield* adapter.startSession({
+        threadId: THREAD_ID,
+        provider: ProviderDriverKind.make("claudeAgent"),
+        modelSelection: createModelSelection(
+          ProviderInstanceId.make("claudeAgent"),
+          "claude-sonnet-4-6",
+          [],
+        ),
+        runtimeMode: "full-access",
+      });
+      yield* adapter.sendTurn({
+        threadId: session.threadId,
+        input: "message ordinaire",
+        attachments: [],
+      });
+      assert.equal(harness.query.reloadSkillsCalls, 0);
     }).pipe(
       Effect.provideService(Random.Random, makeDeterministicRandomService()),
       Effect.provide(harness.layer),
