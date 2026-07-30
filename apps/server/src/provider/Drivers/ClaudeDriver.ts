@@ -59,6 +59,7 @@ import {
   makeClaudeContinuationGroupKey,
   resolveClaudeHomePath,
 } from "./ClaudeHome.ts";
+import { deposerOutillage } from "./ClaudeOutillage.ts";
 import { refreshClaudeUsage } from "../claudeUsageRefresh.ts";
 const decodeClaudeSettings = Schema.decodeSync(ClaudeSettings);
 
@@ -164,6 +165,26 @@ export const ClaudeDriver: ProviderDriver<ClaudeSettings, ClaudeDriverEnv> = {
         effectiveConfig.homePath.trim().length > 0
           ? yield* resolveClaudeHomePath(effectiveConfig)
           : undefined;
+      // L'outillage partagé, déposé une fois par compte au montage du pilote.
+      //
+      // Il enseigne aux agents lancés depuis Raptor la règle qui vaut le plus
+      // cher : ne pas dépenser un agent pour une question VÉRIFIABLE. Mesuré
+      // le 30/07 — une veille brûlait jusqu'à 48 agents pour établir si des
+      // dépôts existaient, ce qu'une commande fait en 7 secondes.
+      //
+      // Volontairement sans garde d'erreur ici : `deposerOutillage` renvoie
+      // false plutôt que d'échouer. Un disque plein ne doit jamais empêcher un
+      // agent de démarrer — l'outillage est un bonus, pas une dépendance.
+      if (configDir !== undefined) {
+        const pose = yield* deposerOutillage(configDir).pipe(
+          Effect.provideService(FileSystem.FileSystem, fileSystem),
+          Effect.provideService(Path.Path, path),
+        );
+        if (!pose) {
+          yield* Effect.logWarning("outillage non déposé", { instanceId, configDir });
+        }
+      }
+
       const refreshAccountUsage = refreshClaudeUsage({ instanceId, configDir }).pipe(
         Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
         Effect.provideService(FileSystem.FileSystem, fileSystem),
