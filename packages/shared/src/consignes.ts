@@ -153,11 +153,32 @@ export function memoireAReinjecter(consignes: ReadonlyArray<Consigne>): string {
   const lignes = triees
     .slice(0, MAX_CONSIGNES_REINJECTEES)
     .map((consigne) => `- ${consigne.phrase}`);
+  // La PROVENANCE et les LIMITES sont dites dans le bloc lui-même.
+  //
+  // Ce fichier est relu au démarrage de chaque session de chaque compte — donc
+  // aussi par les sessions qui travaillent sur un AUTRE projet que celui où la
+  // phrase a été prononcée. Le texte revendiquait la primauté sans dire d'où il
+  // venait : une règle lâchée en déboguant l'interface du cockpit s'annonçait
+  // gagnante face aux règles écrites et versionnées d'un projet qui n'a rien à
+  // voir. C'est la seule collision entre les deux mondes, et elle se répare par
+  // une phrase, pas par une machinerie.
+  //
+  // La hiérarchie tenue : les habitudes cèdent devant ce que l'humain a dit ;
+  // ce que l'humain a dit ici cède devant les règles écrites du projet courant,
+  // qui sont délibérées, versionnées et relues. Et une contradiction se DIT au
+  // lieu de se trancher en silence — c'est le seul cas où l'on ne peut pas
+  // deviner juste.
   return [
     "# Ce qui a été dit une fois et vaut toujours",
     "",
-    "Consignes posées par l'humain lors de sessions précédentes. Elles priment",
-    "sur les habitudes ; en cas de doute, c'est la ligne ci-dessous qui gagne.",
+    "Consignes posées par l'humain dans T3 Code lors de sessions précédentes,",
+    "TOUS PROJETS CONFONDUS : certaines ont pu être dites en travaillant sur un",
+    "autre projet que celui-ci.",
+    "",
+    "Elles priment sur tes habitudes. Elles ne priment PAS sur les règles écrites",
+    "du projet où tu travailles (son CLAUDE.md) : celles-là sont délibérées et",
+    "versionnées. Si l'une de ces lignes contredit une règle du projet, DIS-LE au",
+    "lieu de trancher en silence.",
     "",
     ...lignes,
     "",

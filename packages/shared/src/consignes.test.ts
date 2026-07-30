@@ -39,10 +39,7 @@ describe("extraction des consignes durables", () => {
   });
 
   it("une phrase sans marqueur n'est pas une consigne", () => {
-    assert.deepStrictEqual(
-      extraireConsignes("Le pool est branché et les tests passent."),
-      [],
-    );
+    assert.deepStrictEqual(extraireConsignes("Le pool est branché et les tests passent."), []);
   });
 
   it("le français parlé descriptif ne fabrique JAMAIS de règle — les pièges de l'audit", () => {
@@ -68,7 +65,9 @@ describe("extraction des consignes durables", () => {
   });
 
   it("le code ne pose pas de règle", () => {
-    const message = ["Regarde :", "```ts", "// ne jamais faire ça", "```", "C'est tout."].join("\n");
+    const message = ["Regarde :", "```ts", "// ne jamais faire ça", "```", "C'est tout."].join(
+      "\n",
+    );
     assert.deepStrictEqual(extraireConsignes(message), []);
   });
 
@@ -95,6 +94,27 @@ describe("mémoire réinjectée", () => {
     const rangInterdit = texte.indexOf("Ne construis jamais");
     const rangImpose = texte.indexOf("Vérifie toujours");
     assert.ok(rangInterdit < rangImpose, "l'interdiction doit passer devant");
+  });
+
+  it("dit d'OÙ il vient et ce qu'il ne dépasse pas", () => {
+    // Ce bloc est relu par CHAQUE session de CHAQUE compte, donc aussi par
+    // celles qui travaillent sur un autre projet que celui où la phrase a été
+    // dite. Il revendiquait la primauté sans nommer sa provenance : une règle
+    // lâchée en déboguant le cockpit s'annonçait gagnante face aux règles
+    // écrites et versionnées d'un projet qui n'a rien à voir. C'est la seule
+    // collision entre les deux mondes, et elle se répare par une phrase.
+    const texte = memoireAReinjecter([
+      { phrase: "Ne déploie jamais le vendredi.", nature: "interdit" },
+    ]);
+    assert.ok(texte.includes("TOUS PROJETS CONFONDUS"), "la portée doit être dite");
+    assert.ok(
+      /ne priment PAS sur les règles écrites/u.test(texte),
+      "la limite face aux règles du projet doit être dite",
+    );
+    assert.ok(
+      /DIS-LE au\s+lieu de trancher en silence/u.test(texte),
+      "une contradiction doit se dire, jamais se trancher en silence",
+    );
   });
 
   it("plafonne — une mémoire sans fin coûte plus qu'elle ne rapporte", () => {
