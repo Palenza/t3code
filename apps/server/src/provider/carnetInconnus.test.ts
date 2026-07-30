@@ -94,6 +94,46 @@ describe("carnet des inconnus — le compteur", () => {
     assert.strictEqual(recurrents(deux).length, 1);
   });
 
+  it("MARQUE l'exemplaire coupé au fil-piège — une troncature muette ferait écrire le mauvais motif", () => {
+    const court = noter(VIDE, { message: "court", compte: "a", maintenant: midi });
+    assert.strictEqual(court[0]?.tronque, undefined, "un message entier ne porte pas le drapeau");
+
+    const enorme = "x".repeat(25_000);
+    const coupe = noter(VIDE, { message: enorme, compte: "a", maintenant: midi });
+    assert.strictEqual(coupe[0]?.tronque, true);
+    assert.ok((coupe[0]?.exemple.length ?? 0) < enorme.length, "l'exemplaire doit bien être coupé");
+  });
+
+  it("un carnet PLEIN refuse une signature neuve — et le refus est détectable", () => {
+    // Le plafond est un FIL-PIÈGE : un carnet sain vit à une poignée d'entrées.
+    // Le toucher n'est pas « beaucoup d'inconnus », c'est une normalisation qui
+    // fabrique des signatures à l'infini. Ce que ce test garde, c'est que le
+    // refus soit VISIBLE de l'appelant (carnet inchangé) et non un silence.
+    // Des messages SANS CHIFFRE : tout mot qui en porte un est écrasé en `#`
+    // par la normalisation, si bien qu'une numérotation naïve produirait 200
+    // fois la MÊME signature — ce que ce test a découvert en échouant.
+    let plein: ReadonlyArray<EntreeCarnet> = VIDE;
+    for (let i = 0; i < 200; i += 1) {
+      plein = noter(plein, {
+        message: `panne ${"z".repeat(i + 1)}`,
+        compte: "a",
+        maintenant: midi,
+      });
+    }
+    assert.strictEqual(plein.length, 200, "le carnet doit être arrivé au plafond");
+
+    const apres = noter(plein, {
+      message: "toute nouvelle panne jamais vue",
+      compte: "a",
+      maintenant: midi,
+    });
+    assert.strictEqual(
+      apres,
+      plein,
+      "le carnet ne bouge pas — c'est ce que l'appelant détecte pour crier",
+    );
+  });
+
   it("ignore un message vide plutôt que de compter du néant", () => {
     assert.deepStrictEqual(noter(VIDE, { message: "   ", compte: "a", maintenant: midi }), VIDE);
   });

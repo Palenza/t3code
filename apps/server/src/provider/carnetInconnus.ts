@@ -60,6 +60,12 @@ export interface EntreeCarnet {
   readonly derniereVue: string;
   /** Les comptes touchés : un inconnu vu partout n'est pas un compte cassé. */
   readonly comptes: ReadonlyArray<string>;
+  /**
+   * L'exemplaire a-t-il été COUPÉ au fil-piège ? Une limite silencieuse est
+   * pire que pas de limite (A7) : sans ce drapeau, on lirait un message
+   * amputé en le croyant entier, et on écrirait le mauvais motif.
+   */
+  readonly tronque?: boolean;
 }
 
 export interface Observation {
@@ -69,22 +75,44 @@ export interface Observation {
 }
 
 /**
- * Au-delà, on cesse d'ajouter de NOUVELLES signatures — les existantes
- * continuent de compter. Une avalanche de messages tous différents (un
- * identifiant dans chacun, mal normalisé) ne doit pas faire enfler un fichier
- * sans fin. Le plafond atteint est lui-même un signal : la normalisation laisse
- * passer du variable.
+ * FIL-PIÈGE sur le nombre de signatures distinctes — posé là où seul un carnet
+ * CASSÉ arrive, jamais un carnet sain.
+ *
+ * REÇU : le coût réel est la taille du fichier, réécrit à chaque note. Une
+ * entrée pèse son exemplaire plus ~200 octets de métadonnées ; à 200 signatures
+ * le pire cas théorique est de quelques mégaoctets, et le cas réel de quelques
+ * dizaines de kilooctets — un inconnu est l'exception, pas la règle. Un carnet
+ * sain vit à une poignée d'entrées : toucher ce plafond ne veut pas dire « on a
+ * beaucoup d'inconnus », ça veut dire que la NORMALISATION laisse passer du
+ * variable et fabrique des signatures neuves à l'infini.
+ *
+ * C'est pour ça qu'il crie quand on le touche (A7) : le franchir est un
+ * diagnostic, pas une capacité à augmenter.
  */
 const MAX_SIGNATURES = 200;
 
-/** Un exemplaire tronqué reste lisible ; un pavé de 40 ko ne l'est pas. */
-const MAX_EXEMPLE = 2000;
+/**
+ * FIL-PIÈGE sur la longueur de l'exemplaire.
+ *
+ * PAS DE REÇU — et c'est dit plutôt que maquillé : mesuré le 30/07, il n'existe
+ * encore AUCUN message d'échec sur disque, donc la longueur réelle des messages
+ * du fournisseur est inconnue. Valait 2 000, un chiffre choisi au jugé : une
+ * MINE, puisque tronquer l'exemplaire détruit précisément ce qu'un humain lit
+ * pour écrire le motif manquant.
+ *
+ * Posé large en attendant la mesure, et la troncature est désormais VISIBLE sur
+ * l'entrée — le jour où le fil-piège est touché, on saura la vraie valeur et on
+ * remesurera. Un tronçonnage silencieux, lui, ne se serait jamais su.
+ */
+const MAX_EXEMPLE = 20_000;
 
 /**
  * Le seuil d'arrêt-de-chaîne : deux fois, ce n'est plus un accident.
  *
- * Un compteur, pas une opinion — la règle qu'on s'applique à la main, rendue
- * mécanique.
+ * REÇU : ce nombre n'est pas choisi ici, il est REPRIS. La règle fondatrice dit
+ * « 2 occurrences = bug prioritaire » (CLAUDE.md, réflexes anti-erreur). Le
+ * code ne fait que rendre mécanique une règle qu'on s'appliquait à la main —
+ * changer ce 2 voudrait dire changer la règle, pas régler un curseur.
  */
 export const SEUIL_ARRET_DE_CHAINE = 2;
 
@@ -143,6 +171,7 @@ export function noter(
       {
         signature,
         exemple: message.slice(0, MAX_EXEMPLE),
+        ...(message.length > MAX_EXEMPLE ? { tronque: true } : {}),
         occurrences: 1,
         premiereVue: observation.maintenant,
         derniereVue: observation.maintenant,
@@ -213,6 +242,9 @@ const EntreeSurDisque = Schema.Struct({
   premiereVue: Schema.String,
   derniereVue: Schema.String,
   comptes: Schema.Array(Schema.String),
+  // Optionnel : les carnets écrits avant l'existence du drapeau se relisent
+  // sans lui, et une entrée non tronquée ne le porte pas.
+  tronque: Schema.optional(Schema.Boolean),
 });
 const CarnetSurDisque = Schema.Array(EntreeSurDisque);
 const decodeJsonString = Schema.decodeUnknownEffect(Schema.UnknownFromJsonString);
@@ -296,7 +328,26 @@ export const noterInconnu = Effect.fn("carnet.noter")(function* (
   if (observation.message.trim().length === 0) return;
   const avant = yield* lireFichier();
   const apres = noter(avant, observation);
-  if (apres === avant) return;
+
+  // LE FIL-PIÈGE CRIE QUAND ON LE TOUCHE (A7). Rien n'a bougé alors que le
+  // message n'était pas vide : le carnet est plein et vient de JETER une
+  // signature neuve. Silencieux, ce cas faisait disparaître exactement ce que
+  // le carnet existe pour attraper — et pire, il se serait aggravé tout seul,
+  // puisqu'un carnet saturé l'est parce que la normalisation fabrique des
+  // signatures à l'infini. Le message nomme la limite ET la demande, pour que
+  // l'agent qui le lit puisse agir dessus.
+  if (apres === avant) {
+    yield* Effect.logWarning("carnet: PLEIN — signature neuve JETÉE", {
+      limite: MAX_SIGNATURES,
+      demande: avant.length + 1,
+      compte: observation.compte,
+      message: observation.message.slice(0, 200),
+      quoiFaire:
+        "la normalisation laisse passer du variable : durcir signatureDe(), pas monter la limite",
+    });
+    return;
+  }
+
   yield* ecrireFichier(apres);
 });
 

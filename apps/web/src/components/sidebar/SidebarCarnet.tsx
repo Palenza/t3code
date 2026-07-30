@@ -29,6 +29,7 @@ interface EntreeCarnet {
   readonly premiereVue: string;
   readonly derniereVue: string;
   readonly comptes: ReadonlyArray<string>;
+  readonly tronque?: boolean;
 }
 
 /** Assez rare pour ne rien coûter, assez fréquent pour ne pas dater. */
@@ -133,6 +134,11 @@ export function SidebarCarnet() {
                     : `compte ${entree.comptes[0] ?? "?"}`}
                   {entree.derniereVue !== "" &&
                     ` · vu le ${new Date(entree.derniereVue).toLocaleDateString("fr-FR")}`}
+                  {/* Une troncature muette ferait recopier un message amputé et
+                      écrire le mauvais motif. Elle se dit, donc. */}
+                  {entree.tronque === true && (
+                    <span className="text-warning"> · message COUPÉ, incomplet ci-dessus</span>
+                  )}
                 </p>
               </div>
             );
