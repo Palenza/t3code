@@ -40,17 +40,14 @@ echo "  $RETARD commit(s) d'avance chez Théo"
 # casser la LOGIQUE (l'amont refactore, notre greffe ne suit plus). C'est ce
 # cas-là que le filet ci-dessous attrape (crainte fondateur 29/07 : « s'ils
 # implémentent le voice et que ça vient écraser ce que l'on a fait »).
-NOS_TESTS=(
-  "src/sidebarSpacesStore.test.ts"
-  "src/sidebarThemeStore.test.ts"
-  "src/branding.test.ts"
-  "src/components/threadSidebarWidth.test.ts"
-  "src/components/SidebarStageBackdrop.test.tsx"
-)
-NOS_TESTS_SERVEUR=(
-  "src/provider/Drivers/ClaudeSharedConfig.test.ts"
-  "src/tableauLocalProxy.test.ts"
-)
+# Cette liste écrite à la main portait SEPT fichiers. Le fork en a ajouté
+# CINQUANTE-NEUF. N'y figuraient ni la dictée vocale, ni le pool de comptes,
+# ni le relais, ni les modes de travail — c'est-à-dire précisément les
+# features dont la crainte ci-dessus parle. Le filet annonçait « Nos features
+# tiennent » après avoir ignoré les cinq sixièmes d'entre elles (audit 30/07).
+#
+# On lance donc TOUT. Une liste tenue à la main vieillit à chaque feature
+# ajoutée ; un « tous les tests » ne vieillit jamais.
 
 echo "→ [3/5] Fusion dans $BRANCHE"
 git checkout "$BRANCHE" --quiet
@@ -70,13 +67,26 @@ if [ "$RETARD" -gt 0 ]; then
   fi
   echo "  Fusion faite."
 
-  echo "→ [3bis/5] Nos features tiennent-elles toujours ?"
+  # Les dépendances AVANT les tests. Cette fusion-ci a changé la liste des
+  # paquets (+122 lignes de verrou) ; tester contre l'ancien état donne soit
+  # un faux vert, soit un échec qu'on rapporterait comme « l'amont casse une
+  # de nos features » — un faux diagnostic qui ferait jeter une bonne fusion.
+  echo "→ [3bis/5] Dépendances de l'amont"
   export PATH="$REPO/node_modules/.bin:$PATH"
-  VERT=1
-  (cd "$REPO/apps/web" && vp test run "${NOS_TESTS[@]}") || VERT=0
-  if [ "$VERT" -eq 1 ]; then
-    (cd "$REPO/apps/server" && vp test run "${NOS_TESTS_SERVEUR[@]}") || VERT=0
+  if command -v pnpm > /dev/null 2>&1; then
+    if ! (cd "$REPO" && pnpm install --silent); then
+      echo "✗ Dépendances non installables — on ne teste pas à l'aveugle."
+      git reset --hard "$AVANT_FUSION" --quiet
+      exit 4
+    fi
+  else
+    echo "  pnpm absent : dépendances NON rafraîchies, les tests portent sur l'ancien état."
   fi
+
+  echo "→ [3ter/5] Nos features tiennent-elles toujours ?"
+  VERT=1
+  # TOUS les tests du dépôt, pas une liste tenue à la main.
+  (cd "$REPO" && vp run -r test) || VERT=0
   if [ "$VERT" -eq 0 ]; then
     echo "✗ La mise à jour de l'amont CASSE une de nos features."
     echo "  Fusion annulée, retour à $AVANT_FUSION — l'app installée n'a pas bougé."
@@ -91,9 +101,23 @@ fi
 echo "→ [4/5] Construction du DMG (quelques minutes)"
 export PATH="$REPO/node_modules/.bin:$PATH"
 VERSION=$(node -p "require('$REPO/apps/desktop/package.json').version")
-node scripts/build-desktop-artifact.ts --platform mac --target dmg --arch arm64 --build-version "$VERSION"
+# Le build a SA propre garde. Sans elle, un échec ici laissait le dépôt
+# fusionné, l'app non reconstruite, et le script continuait jusqu'à ouvrir
+# un DMG ANCIEN comme s'il était neuf. C'est arrivé le 30/07 : `cargo`
+# manquait, le build mourait, et rien ne le disait à l'utilisateur.
+if ! node scripts/build-desktop-artifact.ts --platform mac --target dmg --arch arm64 --build-version "$VERSION"; then
+  echo "✗ La construction du DMG a échoué — l'app installée n'a PAS changé."
+  echo "  La fusion, elle, est faite. Pour l'annuler : git reset --hard $AVANT_FUSION"
+  exit 5
+fi
 
-DMG=$(ls -t "$REPO"/release/T3-Code-*-arm64.dmg | head -1)
+# Le DMG doit porter LA version qu'on vient de construire. Prendre « le plus
+# récent » ouvrirait un ancien fichier si le build avait échoué sans le dire.
+DMG="$REPO/release/T3-Code-$VERSION-arm64.dmg"
+if [ ! -f "$DMG" ]; then
+  echo "✗ Aucun DMG en version $VERSION — rien n'est ouvert."
+  exit 5
+fi
 echo "→ [5/5] Prêt : $DMG"
 echo "  Quitte l'app puis glisse la nouvelle dans Applications."
 open "$DMG"
