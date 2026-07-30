@@ -78,6 +78,18 @@ export interface WorkLogEntry {
   toolLifecycleStatus?: WorkLogToolLifecycleStatus;
   /** Originating orchestration activity kind (e.g. `user-input.requested`) for row chrome. */
   sourceActivityKind?: OrchestrationThreadActivity["kind"];
+  /**
+   * Ce qu'un AGENT porte, et que le journal jetait.
+   *
+   * Le flux distingue deux choses que `label` écrasait en une : `description`
+   * est le NOM de la tâche (stable du début à la fin) et `summary` est ce que
+   * l'agent fait à l'instant. On ne lisait que le second — le panneau affichait
+   * donc une phrase mouvante sans jamais dire QUI travaillait.
+   */
+  taskId?: string;
+  taskName?: string;
+  taskTokens?: number;
+  taskLastTool?: string;
 }
 
 interface DerivedWorkLogEntry extends WorkLogEntry {
@@ -631,6 +643,10 @@ export function deriveWorkLogEntries(
   const entries: DerivedWorkLogEntry[] = [];
   for (const activity of ordered) {
     if (activity.kind === "tool.started") continue;
+    // `task.started` reste masqué ICI : le fil de discussion n'a pas à porter
+    // une ligne « démarré » pour chaque agent, et un golden le fige. Le panneau
+    // des tâches, lui, en a besoin pour montrer un agent dès son lancement — il
+    // le lit donc directement dans les activités, sans passer par ce journal.
     if (activity.kind === "task.started") continue;
     if (activity.kind === "context-window.updated") continue;
     if (activity.summary === "Checkpoint captured") continue;
@@ -704,10 +720,40 @@ function toDerivedWorkLogEntry(activity: OrchestrationThreadActivity): DerivedWo
       : null
     : extractToolDetail(payload, title ?? activity.summary);
   const toolCallId = isTaskActivity ? null : extractToolCallId(payload);
+  // Le NOM de l'agent, ses tokens, son dernier outil — trois choses que le
+  // flux envoie et que le journal jetait. Sans le nom, un panneau d'agents
+  // n'affiche que des phrases mouvantes sans savoir QUI parle.
+  const taskName =
+    isTaskActivity && typeof payload?.description === "string" && payload.description.length > 0
+      ? payload.description
+      : undefined;
+  const usage =
+    isTaskActivity && payload?.usage && typeof payload.usage === "object"
+      ? (payload.usage as Record<string, unknown>)
+      : undefined;
+  // On additionne ce que le fournisseur envoie, sans rien deviner : si aucun
+  // champ n'est un nombre, il n'y a PAS de chiffre à montrer.
+  const taskTokens =
+    usage === undefined
+      ? undefined
+      : ["input_tokens", "output_tokens", "cache_read_input_tokens", "cache_creation_input_tokens"]
+          .map((cle) => (typeof usage[cle] === "number" ? (usage[cle] as number) : 0))
+          .reduce((total, valeur) => total + valeur, 0) || undefined;
+  const taskLastTool =
+    isTaskActivity && typeof payload?.lastToolName === "string" && payload.lastToolName.length > 0
+      ? payload.lastToolName
+      : undefined;
+  const taskId =
+    isTaskActivity && typeof payload?.taskId === "string" ? payload.taskId : undefined;
+
   const entry: DerivedWorkLogEntry = {
     id: activity.id,
     createdAt: activity.createdAt,
     turnId: activity.turnId,
+    ...(taskId === undefined ? {} : { taskId }),
+    ...(taskName === undefined ? {} : { taskName }),
+    ...(taskTokens === undefined ? {} : { taskTokens }),
+    ...(taskLastTool === undefined ? {} : { taskLastTool }),
     label: taskLabel || activity.summary,
     tone:
       activity.kind === "task.progress"

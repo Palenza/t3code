@@ -7,8 +7,12 @@ import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/models";
 
 import { cn } from "../../lib/utils";
-import { deriveLatestContextWindowSnapshot, formatContextWindowTokens } from "../../lib/contextWindow";
+import {
+  deriveLatestContextWindowSnapshot,
+  formatContextWindowTokens,
+} from "../../lib/contextWindow";
 import { useProjects, useThreadDetail, useThreadShells } from "../../state/entities";
+import type { WorkLogEntry } from "../../session-logic";
 import { deriveTaskPanelSections } from "./ThreadTasksPanel";
 
 /**
@@ -67,8 +71,55 @@ function RunningTaskCard({ shell, now }: { shell: EnvironmentThreadShell; now: n
         contextWindow?.usedTokens != null
           ? formatContextWindowTokens(contextWindow.usedTokens)
           : null,
-      // Les agents du CLI (task.*) encore actifs — les sous-lignes de la carte.
-      agents: sections.running.filter((entry) => entry.sourceActivityKind === "task.progress"),
+      // Les agents encore actifs.
+      //
+      // Le journal partagé masque `task.started` — c'est voulu, le fil de
+      // discussion n'a pas à porter une ligne « démarré » par agent. Mais le
+      // panneau, lui, en a besoin : sans elle un agent reste INVISIBLE jusqu'à
+      // son premier rapport de progression, parfois très longtemps, pendant
+      // lesquelles ce panneau affirme « rien ne tourne » alors que si.
+      //
+      // On lit donc les départs directement dans les activités, et on ne garde
+      // que ceux qu'aucune progression n'a encore remplacés.
+      agents: ((): ReadonlyArray<WorkLogEntry> => {
+        const enCours = sections.running.filter(
+          (entry) => entry.sourceActivityKind === "task.progress",
+        );
+        const dejaVus = new Set(enCours.map((entry) => entry.taskId).filter(Boolean));
+        const demarrages = turnActivities
+          .filter((activity) => activity.kind === "task.started")
+          .map((activity) => {
+            const payload = (activity.payload ?? {}) as Record<string, unknown>;
+            const taskId = typeof payload["taskId"] === "string" ? payload["taskId"] : undefined;
+            const nom =
+              typeof payload["description"] === "string"
+                ? payload["description"]
+                : activity.summary;
+            // Même forme qu'une progression : un agent qui vient de démarrer
+            // n'a pas encore d'activité ni de tokens, et c'est la vérité — on
+            // n'affiche donc rien à leur place plutôt qu'un zéro.
+            return {
+              id: activity.id,
+              createdAt: activity.createdAt,
+              label: nom,
+              tone: "thinking" as const,
+              ...(taskId === undefined ? {} : { taskId }),
+              taskName: nom,
+            };
+          })
+          .filter((depart) => depart.taskId !== undefined && !dejaVus.has(depart.taskId));
+        // Les terminés ne comptent pas : un agent fini n'est plus « en cours ».
+        const finis = new Set(
+          turnActivities
+            .filter((activity) => activity.kind === "task.completed")
+            .map((activity) => (activity.payload as { taskId?: string } | undefined)?.taskId)
+            .filter(Boolean),
+        );
+        return [
+          ...enCours.filter((entry) => !entry.taskId || !finis.has(entry.taskId)),
+          ...demarrages.filter((depart) => !finis.has(depart.taskId as string)),
+        ];
+      })(),
     };
   }, [detail?.activities, turnId]);
 
@@ -96,16 +147,43 @@ function RunningTaskCard({ shell, now }: { shell: EnvironmentThreadShell; now: n
         </span>
       </div>
       {agents.length > 0 ? (
-        <div className="pt-1.5 pl-5.5">
-          {agents.map((agent) => (
-            <div
-              key={agent.id}
-              className="flex items-center gap-1.5 text-[11px] leading-5 text-muted-foreground/60"
-            >
-              <span className="size-1 shrink-0 rounded-full bg-current" />
-              <span className="min-w-0 truncate">{agent.label}</span>
-            </div>
-          ))}
+        <div className="mt-2 ml-5.5 flex flex-col gap-1.5 border-l border-border/40 pl-2.5">
+          {agents.map((agent) => {
+            // Le NOM est stable, l'ACTIVITÉ change. On ne répète pas la même
+            // phrase deux fois quand le fournisseur n'envoie que l'une.
+            const nom = agent.taskName ?? agent.label;
+            const activite = agent.taskName && agent.label !== agent.taskName ? agent.label : null;
+            return (
+              <div key={agent.id} className="flex min-w-0 items-baseline gap-2">
+                <span
+                  aria-hidden
+                  className="mt-1 size-1.5 shrink-0 animate-pulse self-start rounded-full bg-sky-400/80"
+                />
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-[11.5px] leading-4 font-medium text-foreground/80">
+                    {nom}
+                  </div>
+                  {activite ? (
+                    <div className="truncate text-[11px] leading-4 text-muted-foreground/60">
+                      {activite}
+                    </div>
+                  ) : null}
+                </div>
+                {/* Les chiffres à droite, alignés : on les compare d'un coup
+                    d'œil entre agents. Rien ne s'affiche si rien n'est mesuré —
+                    jamais de zéro inventé. */}
+                <div className="flex shrink-0 items-baseline gap-2 text-[10.5px] tabular-nums text-muted-foreground/50">
+                  {agent.taskLastTool ? (
+                    <span className="max-w-24 truncate">{agent.taskLastTool}</span>
+                  ) : null}
+                  {agent.taskTokens ? (
+                    <span>{formatContextWindowTokens(agent.taskTokens)}</span>
+                  ) : null}
+                  <span>{formatElapsed(agent.createdAt, now)}</span>
+                </div>
+              </div>
+            );
+          })}
         </div>
       ) : null}
     </button>
@@ -172,9 +250,7 @@ export function BackgroundTasksSection() {
         className="mt-1 flex cursor-pointer items-center gap-1 px-2 py-1 text-[11px] font-medium tracking-wide text-muted-foreground/60 uppercase transition-colors hover:text-muted-foreground"
       >
         Terminé <span className="tabular-nums">{done.length}</span>
-        <ChevronRightIcon
-          className={cn("size-3 transition-transform", doneOpen && "rotate-90")}
-        />
+        <ChevronRightIcon className={cn("size-3 transition-transform", doneOpen && "rotate-90")} />
       </button>
       {doneOpen
         ? done.slice(0, DONE_CAP).map((shell) => {
