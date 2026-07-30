@@ -1,3 +1,4 @@
+import desktopPackageJson from "../apps/desktop/package.json" with { type: "json" };
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, it } from "@effect/vitest";
 import * as ConfigProvider from "effect/ConfigProvider";
@@ -97,7 +98,17 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
   });
 
   it("switches desktop packaging product names to nightly for nightly builds", () => {
-    assert.equal(resolveDesktopProductName("0.0.17"), "T3 Code (Alpha)");
+    // Le nom stable N'EST PAS écrit en dur ici. Il l'était — « T3 Code
+    // (Alpha) » — et ce golden est resté rouge à partir du jour où le fork a
+    // été renommé « T3 Code (Raptor) » dans son manifeste. Un golden qui
+    // recopie une marque recasse à chaque renommage, sans rien protéger : ce
+    // que ce test doit garantir, c'est la BASCULE de canal, pas l'orthographe
+    // du nom. Le nom stable a sa source de vérité, le manifeste ; le nom
+    // nightly, lui, est bien écrit en dur dans le résolveur, donc il se vérifie
+    // au littéral.
+    const stable = resolveDesktopProductName("0.0.17");
+    assert.equal(stable, desktopPackageJson.productName ?? "T3 Code");
+    assert.notEqual(stable, "T3 Code (Nightly)");
     assert.equal(resolveDesktopProductName("0.0.17-nightly.20260413.42"), "T3 Code (Nightly)");
   });
 
@@ -763,6 +774,17 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
 
   it.effect("rejects universal builds on Linux and Windows before staging binaries", () =>
     Effect.gen(function* () {
+      // Les architectures acceptées NE SONT PAS les mêmes des deux côtés, et
+      // ce test l'ignorait : il exigeait « x64 + arm64 » pour les deux, alors
+      // que Windows a perdu l'ARM64 en amont — transcribe.cpp ne publie pas de
+      // runtime Windows ARM64. Le golden est resté rouge depuis. Ce qu'il doit
+      // garder, c'est le REFUS d'un build universel hors macOS ; les listes
+      // sont écrites ici en clair pour qu'une perte d'architecture se voie.
+      const attendu = {
+        linux: ["x64", "arm64"],
+        win: ["x64"],
+      } as const;
+
       for (const platform of ["linux", "win"] as const) {
         const error = yield* Effect.flip(
           resolveBuildOptions({
@@ -782,7 +804,7 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
         );
 
         assert.instanceOf(error, UnsupportedDesktopBuildArchitectureError);
-        assert.deepStrictEqual(error.supportedArchitectures, ["x64", "arm64"]);
+        assert.deepStrictEqual(error.supportedArchitectures, attendu[platform]);
       }
     }),
   );

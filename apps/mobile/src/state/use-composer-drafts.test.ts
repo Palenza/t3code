@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it } from "@effect/vitest";
-import { EnvironmentId, ProviderInstanceId } from "@t3tools/contracts";
+import {
+  EnvironmentId,
+  ProviderInstanceId,
+  PROVIDER_SEND_TURN_MAX_ATTACHMENTS,
+} from "@t3tools/contracts";
 
 import { appAtomRegistry } from "./atom-registry";
 import {
@@ -182,7 +186,14 @@ describe("mobile composer drafts", () => {
       previewUri: "data:image/png;base64,YWJj",
     });
     const existingImage = image("existing");
-    const sharedImages = Array.from({ length: 8 }, (_, index) => image(`shared-${index}`));
+    // La longueur vient de la CONSTANTE, plus d'un littéral. Elle valait 8 quand
+    // ce test a été écrit ; l'amont l'a portée à 15, et le test est resté rouge.
+    // Le corriger en « 9 » l'aurait rendu vert tout en cessant d'éprouver quoi
+    // que ce soit : sous une limite de 15, neuf pièces jointes passent toutes.
+    // On en fabrique donc une de PLUS que la limite, pour que le plafond serve.
+    const sharedImages = Array.from({ length: PROVIDER_SEND_TURN_MAX_ATTACHMENTS }, (_, index) =>
+      image(`shared-${index}`),
+    );
 
     const merged = mergeComposerDraftContentState(
       { [draftKey]: { text: "", attachments: [existingImage] } },
@@ -190,9 +201,13 @@ describe("mobile composer drafts", () => {
       { text: "", attachments: sharedImages },
     );
 
-    expect(merged[draftKey]?.attachments).toHaveLength(8);
+    expect(merged[draftKey]?.attachments).toHaveLength(PROVIDER_SEND_TURN_MAX_ATTACHMENTS);
+    // La pièce déjà là garde sa place : c'est tout l'objet du test — le partage
+    // qui déborde ne doit pas évincer ce que l'humain avait mis lui-même.
     expect(merged[draftKey]?.attachments[0]).toEqual(existingImage);
-    expect(merged[draftKey]?.attachments.at(-1)?.id).toBe("shared-6");
+    expect(merged[draftKey]?.attachments.at(-1)?.id).toBe(
+      `shared-${PROVIDER_SEND_TURN_MAX_ATTACHMENTS - 2}`,
+    );
   });
 
   it("restores the exact draft captured before an interrupted share import", () => {

@@ -38,7 +38,7 @@ import {
 } from "@t3tools/shared/dpop";
 import { RELAY_HEALTH_REQUEST_TYP, RELAY_MINT_REQUEST_TYP } from "@t3tools/shared/relayJwt";
 import * as RelayClient from "@t3tools/shared/relayClient";
-import { assert, it } from "@effect/vitest";
+import { assert, it, it as itRacine } from "@effect/vitest";
 import { assertFailure, assertInclude, assertTrue } from "@effect/vitest/utils";
 import * as Clock from "effect/Clock";
 import * as Deferred from "effect/Deferred";
@@ -4493,7 +4493,16 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
     }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
 
-  it.effect("routes websocket rpc subscribeServerConfig emits provider status updates", () =>
+  // `it.live`, PAS `it.effect`. Le flux de statuts est débouncé (200 ms) depuis
+  // qu'on y a joint les remontées de quota, et l'horloge de TEST n'écoule jamais
+  // un debounce toute seule : ce test attendait donc son deuxième événement
+  // jusqu'au dépassement de délai, 120 s durant. Le test dédié
+  // (`providerStatusStream.test.ts`) porte déjà cette note ; celui-ci, qui
+  // traverse le MÊME chemin par le websocket, avait été oublié.
+  // `itRacine.live` : le `it` que `it.layer` passe au bloc n'expose pas `.live`,
+  // et c'est bien d'horloge RÉELLE qu'on a besoin ici. La couche que le bloc
+  // fournit est donc redonnée à la main juste en dessous.
+  itRacine.live("routes websocket rpc subscribeServerConfig emits provider status updates", () =>
     Effect.gen(function* () {
       const nextProviders = [
         {
@@ -4544,7 +4553,7 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
         type: "providerStatuses",
         payload: { providers: nextProviders },
       });
-    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+    }).pipe(Effect.provide(NodeHttpServer.layerTest), Effect.provide(NodeServices.layer)),
   );
 
   it.effect(

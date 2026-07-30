@@ -16,6 +16,12 @@ export default defineConfig({
       "**/dist/**",
       "**/dist-electron/**",
       "**/.{idea,git,cache,output,temp}/**",
+      // Les worktrees parallèles vivent DANS le dépôt, et le lanceur ramassait
+      // leurs tests avec les nôtres : une suite rouge pour du code qui n'est
+      // pas celui qu'on teste, et un résultat qui change selon les worktrees
+      // qui traînent. Travailler à deux chantiers de front est la méthode
+      // ici — donc l'exclusion doit être dans la config, pas dans la tête.
+      "**/.claude/worktrees/**",
     ],
     hookTimeout: 60_000,
     testTimeout: 60_000,
@@ -28,6 +34,7 @@ export default defineConfig({
     ignorePatterns: [
       ".reference",
       ".repos/**",
+      ".claude/worktrees/**",
       ".plans",
       ".alchemy",
       "dist",
@@ -57,6 +64,7 @@ export default defineConfig({
     ignorePatterns: [
       ".repos",
       ".repos/**",
+      ".claude/worktrees/**",
       "dist",
       "dist-electron",
       "node_modules",

@@ -194,8 +194,14 @@ describe("DesktopAppIdentity", () => {
         const identity = yield* DesktopAppIdentity.DesktopAppIdentity;
         yield* identity.configure;
 
-        assert.deepEqual(calls.setName, ["T3 Code (Alpha)"]);
-        assert.equal(calls.setAboutPanelOptions[0]?.applicationName, "T3 Code (Alpha)");
+        // ATTENTION en relisant ce fichier : les « T3 Code (Alpha) » plus haut
+        // sont LÉGITIMES — c'est le nom de l'ancien dossier de données, celui
+        // qu'on migre (`legacyUserDataDirName`), et il ne doit jamais changer.
+        // Ici, en revanche, c'est l'identité COURANTE de l'app : le fork a été
+        // renommé « Raptor » le 29/07 et ces deux lignes étaient restées à
+        // l'ancien nom, laissant ce test rouge sans que personne le voie.
+        assert.deepEqual(calls.setName, ["T3 Code (Raptor)"]);
+        assert.equal(calls.setAboutPanelOptions[0]?.applicationName, "T3 Code (Raptor)");
         assert.equal(calls.setAboutPanelOptions[0]?.applicationVersion, "1.2.3");
         assert.equal(calls.setAboutPanelOptions[0]?.version, "0123456789ab");
         assert.deepEqual(calls.setDockIcon, ["/icon.png"]);
