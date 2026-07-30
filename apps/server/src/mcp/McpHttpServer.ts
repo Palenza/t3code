@@ -22,6 +22,8 @@ import {
   PreviewSnapshotToolkit,
   PreviewStandardToolkit,
 } from "./toolkits/preview/tools.ts";
+import { RepoToolkitHandlersLive } from "./toolkits/repo/handlers.ts";
+import { RepoToolkit } from "./toolkits/repo/tools.ts";
 
 const unauthorized = HttpServerResponse.jsonUnsafe(
   {
@@ -216,10 +218,21 @@ export const PreviewToolkitRegistrationLive = Layer.mergeAll(
   PreviewSnapshotRegistrationLive,
 );
 
+/**
+ * La carte du dépôt (chantier repo-map, absorption aider) : lecture seule,
+ * aucune capacité MCP à exiger — la carte ne touche que le disque local.
+ */
+const RepoToolkitRegistrationLive = McpServer.toolkit(RepoToolkit).pipe(
+  Layer.provide(RepoToolkitHandlersLive),
+);
+
 const McpTransportLive = McpServer.layerHttp({
   name: "T3 Code",
   version: packageJson.version,
   path: "/mcp",
 }).pipe(Layer.provide(McpAuthMiddlewareLive));
 
-export const layer = PreviewToolkitRegistrationLive.pipe(Layer.provideMerge(McpTransportLive));
+export const layer = Layer.mergeAll(
+  PreviewToolkitRegistrationLive,
+  RepoToolkitRegistrationLive,
+).pipe(Layer.provideMerge(McpTransportLive));

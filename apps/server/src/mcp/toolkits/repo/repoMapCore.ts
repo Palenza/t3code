@@ -28,7 +28,8 @@ export interface EntreeCarte {
   readonly definitions: ReadonlyArray<string>;
   /** Combien de fichiers du lot importent celui-ci. */
   readonly degreEntrant: number;
-  readonly score: number;
+  /** Cité par la conversation (focus) — l'ÉTAGE de tri, avant la centralité. */
+  readonly cible: boolean;
 }
 
 const RE_DEFINITION =
@@ -88,44 +89,77 @@ export function resoudreImport(
 }
 
 /**
- * Construit la carte classée.
- *
- * Score = degré entrant (l'importance structurelle : ce que tout le monde
- * importe est ce qu'il faut connaître) + boost ×3 si le fichier est cité par
- * la conversation (`focus` : sous-chaînes de chemins ou noms de symboles).
- * Le ×3 est un choix de départ, pas une mesure — il est ISOLÉ ici pour être
- * recalé le jour où l'usage réel donnera un reçu.
+ * L'extraction d'UN fichier, sans contexte : définitions + spécificateurs
+ * d'import bruts. C'est CETTE forme que l'écorce disque met en cache par
+ * mtime — quelques lignes par fichier, jamais les contenus (des mégaoctets).
+ * La résolution des imports, elle, dépend du LOT (quels chemins existent) et
+ * se rejoue à chaque carte.
  */
+export interface ExtraitFichier {
+  readonly chemin: string;
+  readonly definitions: ReadonlyArray<string>;
+  readonly specificateurs: ReadonlyArray<string>;
+}
+
+export function extraireFichier(chemin: string, contenu: string): ExtraitFichier {
+  const specificateurs: string[] = [];
+  for (const re of [RE_IMPORT, RE_IMPORT_NU]) {
+    for (const m of contenu.matchAll(re)) {
+      const s = m[1] ?? "";
+      if (s.length > 0) specificateurs.push(s);
+    }
+  }
+  return { chemin, definitions: extraireDefinitions(contenu), specificateurs };
+}
+
+/**
+ * Construit la carte classée depuis des extraits.
+ *
+ * Le focus est un ÉTAGE, pas un bonus : les fichiers cités par la
+ * conversation passent DEVANT, puis chacun des deux étages se classe par
+ * degré entrant (ce que tout le monde importe est ce qu'il faut connaître).
+ * La v1 additive (+3×) a été RÉFUTÉE par la preuve E2E sur ce dépôt même :
+ * un fichier de centralité 104 écrasait tout focus — la carte répondait à
+ * côté de la question posée.
+ */
+export function construireCarteDepuisExtraits(
+  extraits: ReadonlyArray<ExtraitFichier>,
+  focus: ReadonlyArray<string> = [],
+): ReadonlyArray<EntreeCarte> {
+  const chemins = new Set(extraits.map((e) => e.chemin));
+  const degre = new Map<string, number>();
+  for (const e of extraits) {
+    for (const s of e.specificateurs) {
+      const cible = resoudreImport(e.chemin, s, chemins);
+      if (cible !== null && cible !== e.chemin) degre.set(cible, (degre.get(cible) ?? 0) + 1);
+    }
+  }
+  const focusMin = focus.map((f) => f.toLowerCase()).filter((f) => f.length > 0);
+  return extraits
+    .map((e) => {
+      const degreEntrant = degre.get(e.chemin) ?? 0;
+      const texte = (e.chemin + "\n" + e.definitions.join("\n")).toLowerCase();
+      const cible = focusMin.some((f) => texte.includes(f));
+      return { chemin: e.chemin, definitions: e.definitions, degreEntrant, cible };
+    })
+    .filter((e) => e.definitions.length > 0 || e.degreEntrant > 0)
+    .sort(
+      (a, b) =>
+        Number(b.cible) - Number(a.cible) ||
+        b.degreEntrant - a.degreEntrant ||
+        a.chemin.localeCompare(b.chemin),
+    );
+}
+
+/** La même carte, depuis des sources brutes — le chemin des tests purs. */
 export function construireCarte(
   sources: ReadonlyArray<SourceFichier>,
   focus: ReadonlyArray<string> = [],
 ): ReadonlyArray<EntreeCarte> {
-  const chemins = new Set(sources.map((s) => s.chemin));
-  const degre = new Map<string, number>();
-  for (const s of sources) {
-    for (const re of [RE_IMPORT, RE_IMPORT_NU]) {
-      for (const m of s.contenu.matchAll(re)) {
-        const cible = resoudreImport(s.chemin, m[1] ?? "", chemins);
-        if (cible !== null && cible !== s.chemin) degre.set(cible, (degre.get(cible) ?? 0) + 1);
-      }
-    }
-  }
-  const focusMin = focus.map((f) => f.toLowerCase()).filter((f) => f.length > 0);
-  return sources
-    .map((s) => {
-      const definitions = extraireDefinitions(s.contenu);
-      const degreEntrant = degre.get(s.chemin) ?? 0;
-      const texte = (s.chemin + "\n" + definitions.join("\n")).toLowerCase();
-      const cible = focusMin.some((f) => texte.includes(f));
-      return {
-        chemin: s.chemin,
-        definitions,
-        degreEntrant,
-        score: degreEntrant + (cible ? 3 * (degreEntrant + 1) : 0),
-      };
-    })
-    .filter((e) => e.definitions.length > 0 || e.degreEntrant > 0)
-    .sort((a, b) => b.score - a.score || a.chemin.localeCompare(b.chemin));
+  return construireCarteDepuisExtraits(
+    sources.map((s) => extraireFichier(s.chemin, s.contenu)),
+    focus,
+  );
 }
 
 /**
