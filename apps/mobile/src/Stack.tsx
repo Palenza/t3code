@@ -47,7 +47,8 @@ import { SettingsAuthRouteScreen } from "./features/settings/SettingsAuthRouteSc
 import { SettingsEnvironmentsRouteScreen } from "./features/settings/SettingsEnvironmentsRouteScreen";
 import { SettingsLegalRouteScreen } from "./features/settings/SettingsLegalRouteScreen";
 import { SettingsRouteScreen } from "./features/settings/SettingsRouteScreen";
-import { SettingsWaitlistRouteScreen } from "./features/settings/SettingsWaitlistRouteScreen";
+// L'écran de liste d'attente Connect est SUPPRIMÉ par l'amont (#4691, sortie
+// publique) : l'importer casserait la compilation. Notre écran de voix reste.
 import { SettingsVoiceRouteScreen } from "./features/settings/SettingsVoiceRouteScreen";
 import { ShowcaseCaptureCoordinator } from "./features/showcase/ShowcaseCaptureCoordinator";
 import {
@@ -198,10 +199,11 @@ const SettingsSheetStack = createNativeStackNavigator({
       },
     }),
     SettingsWaitlist: createNativeStackScreen({
-      screen: SettingsWaitlistRouteScreen,
+      // Keep the old deep link working after the Connect GA launch.
+      screen: SettingsAuthRouteScreen,
       linking: "waitlist",
       options: {
-        title: "Join the waitlist",
+        title: "Sign in",
       },
     }),
   },

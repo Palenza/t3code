@@ -1,10 +1,14 @@
 import { describe, expect, it } from "vite-plus/test";
 import { renderToStaticMarkup } from "react-dom/server";
 
+// L'import réunit les deux côtés : leurs deux nouveaux symboles rejoignent
+// ceux dont notre test de fork se sert.
 import {
+  resolveEnvironmentIdentificationPillLabel,
+  resolveSidebarStageBackdropVariant,
   StageBackdropArt,
   StageBackdropButtonArt,
-  resolveSidebarStageBackdropVariant,
+  useEnvironmentStageLabel,
 } from "./SidebarStageBackdrop";
 
 describe("resolveSidebarStageBackdropVariant", () => {
@@ -17,6 +21,37 @@ describe("resolveSidebarStageBackdropVariant", () => {
       expect(resolveSidebarStageBackdropVariant(stageLabel)).toBe("nightly");
     },
   );
+});
+
+describe("SidebarStageBackdrop", () => {
+  // RÉÉCRIT SCIEMMENT à la fusion du 30/07, pas forcé au vert.
+  //
+  // L'amont n'habille que « Dev » et « Nightly », et rend `null` ailleurs.
+  // Notre fork habille TOUS les canaux — sans quoi « Raptor », qui est le
+  // nôtre, n'aurait aucune identité visuelle. C'est une divergence VOULUE,
+  // déjà couverte par le test au-dessus.
+  //
+  // Ce qui reste vrai des deux côtés et mérite d'être gardé : le drapeau
+  // d'activation. Désactivé, il n'y a pas d'habillage, chez eux comme chez
+  // nous.
+  it("respecte le drapeau d'activation, quel que soit le canal", () => {
+    expect(resolveSidebarStageBackdropVariant("Dev", false)).toBeNull();
+    expect(resolveSidebarStageBackdropVariant("Raptor", false)).toBeNull();
+    expect(resolveSidebarStageBackdropVariant("Nightly", false)).toBeNull();
+  });
+
+  it("resolves supported environment pill labels", () => {
+    expect(resolveEnvironmentIdentificationPillLabel("Dev")).toBe("Dev");
+    expect(resolveEnvironmentIdentificationPillLabel("nightly")).toBe("Nightly");
+    expect(resolveEnvironmentIdentificationPillLabel("Latest")).toBeNull();
+    expect(resolveEnvironmentIdentificationPillLabel("Alpha")).toBeNull();
+  });
+
+  // Le golden amont sur l'unicité des identifiants SVG est RETIRÉ SCIEMMENT :
+  // notre habillage n'est plus un SVG à `defs` mais une texture d'ardoise, il
+  // n'émet donc aucun identifiant et le test attendait « plus de 0 ». Le bloc
+  // suivant le remplace par ce qui compte chez nous — la texture est peinte,
+  // dans les deux tailles.
 });
 
 describe("SidebarStageBackdrop", () => {

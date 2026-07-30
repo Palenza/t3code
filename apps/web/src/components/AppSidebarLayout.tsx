@@ -17,7 +17,7 @@ import { getLocalStorageItem } from "../hooks/useLocalStorage";
 import { resolveShortcutCommand, shortcutLabelForCommand } from "../keybindings";
 import { cn, isMacPlatform } from "../lib/utils";
 import { primaryServerKeybindingsAtom } from "../state/server";
-import { useSidebarV2Enabled } from "../hooks/useSettings";
+import { useEnvironmentIdentificationMode, useSidebarV2Enabled } from "../hooks/useSettings";
 import ThreadSidebar from "./Sidebar";
 import { useSidebarSpacesStore } from "../sidebarSpacesStore";
 import { SidebarEdgePeek, useSidebarPeekStore } from "./sidebar/SidebarEdgePeek";
@@ -69,7 +69,10 @@ function SidebarControl() {
   const keybindings = useAtomValue(primaryServerKeybindingsAtom);
   const { toggleSidebar } = useSidebar();
   const isSidebarVisible = useSidebarVisibility();
-  const stageBackdropVariant = useSidebarStageBackdropVariant();
+  const environmentIdentificationMode = useEnvironmentIdentificationMode();
+  const stageBackdropVariant = useSidebarStageBackdropVariant(
+    environmentIdentificationMode === "artwork",
+  );
   const shortcutLabel = shortcutLabelForCommand(keybindings, "sidebar.toggle");
 
   useEffect(() => {

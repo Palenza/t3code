@@ -3,7 +3,7 @@ import { GaugeIcon, PlugIcon, SettingsIcon, SlidersHorizontalIcon } from "lucide
 import { memo, useCallback, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 
-import { APP_STAGE_LABEL } from "../../branding";
+import { useEnvironmentIdentificationMode } from "../../hooks/useSettings";
 import { cn } from "../../lib/utils";
 import { primaryServerConfigAtom } from "../../state/server";
 import { resolveSidebarStageBadgeLabel } from "../Sidebar.logic";
@@ -11,7 +11,14 @@ import { SidebarModeTravail } from "./SidebarModeTravail";
 import { GeneralSettingsPanel, ProviderSettingsPanel } from "../settings/SettingsPanels";
 import { TableauLocalSettingsPanel } from "../settings/TableauLocalSettings";
 import { Popover, PopoverPopup, PopoverTrigger } from "../ui/popover";
-import { SidebarStageBackdrop, resolveSidebarStageBackdropVariant } from "../SidebarStageBackdrop";
+// L'union des deux côtés en UN seul import : la fusion en avait laissé deux.
+import {
+  resolveEnvironmentIdentificationPillLabel,
+  resolveSidebarStageBackdropVariant,
+  SidebarStageBackdrop,
+  useEnvironmentStageLabel,
+} from "../SidebarStageBackdrop";
+import { Badge } from "../ui/badge";
 import {
   SidebarFooter,
   SidebarHeader,
@@ -30,8 +37,16 @@ export const SidebarChromeHeader = memo(function SidebarChromeHeader({
 }: {
   isElectron: boolean;
 }) {
-  const stageLabel = useSidebarStageLabel();
-  const backdropVariant = resolveSidebarStageBackdropVariant(stageLabel);
+  const stageLabel = useEnvironmentStageLabel();
+  const environmentIdentificationMode = useEnvironmentIdentificationMode();
+  const backdropVariant = resolveSidebarStageBackdropVariant(
+    stageLabel,
+    environmentIdentificationMode === "artwork",
+  );
+  const pillLabel =
+    environmentIdentificationMode === "pill"
+      ? resolveEnvironmentIdentificationPillLabel(stageLabel)
+      : null;
 
   return (
     <SidebarHeader
@@ -49,6 +64,16 @@ export const SidebarChromeHeader = memo(function SidebarChromeHeader({
         )}
       />
       <SidebarBrand onBackdrop={backdropVariant !== null} />
+      {pillLabel ? (
+        <Badge
+          className="relative z-10 ml-1 rounded-full px-1.5 text-muted-foreground"
+          data-environment-identification="pill"
+          size="sm"
+          variant="secondary"
+        >
+          {pillLabel}
+        </Badge>
+      ) : null}
     </SidebarHeader>
   );
 });
@@ -91,16 +116,6 @@ function SidebarBrand({ onBackdrop }: { onBackdrop: boolean }) {
       </span>
     </Link>
   );
-}
-
-function useSidebarStageLabel() {
-  const primaryServerVersion =
-    useAtomValue(primaryServerConfigAtom)?.environment.serverVersion ?? null;
-
-  return resolveSidebarStageBadgeLabel({
-    primaryServerVersion,
-    fallbackStageLabel: APP_STAGE_LABEL,
-  });
 }
 
 function T3Wordmark() {

@@ -8,6 +8,7 @@ import { activeSpaceTheme, useSidebarSpacesStore } from "../sidebarSpacesStore";
 import { resolveSidebarTheme, useSidebarThemeStore } from "../sidebarThemeStore";
 
 export type SidebarStageBackdropVariant = "nightly" | "dev";
+export type EnvironmentIdentificationPillLabel = "Dev" | "Nightly";
 
 // A wide viewBox keeps the 96-unit art height at a fixed scale while sidebar resizing reveals
 // more horizontal canvas instead of zooming the scene.
@@ -15,24 +16,46 @@ const STAGE_BACKDROP_VIEW_BOX = "0 0 8192 96";
 
 export function resolveSidebarStageBackdropVariant(
   stageLabel: string,
+  enabled = true,
 ): SidebarStageBackdropVariant | null {
   // Fork Palenza (28/07/2026) : le ciel étoilé Nightly est le visage de l'app
   // sur TOUS les canaux — l'amont ne l'affiche que sur Nightly (blueprint en
   // Dev, rien en Alpha), or notre build du quotidien est « Alpha ».
+  //
+  // Le drapeau d'activation passe AVANT. Il était placé après le `return`,
+  // donc jamais atteint : couper l'habillage dans les réglages ne coupait
+  // rien. Trouvé le 30/07 par un test écrit pendant la fusion amont — le
+  // code mort ne se voyait pas, le comportement non plus.
+  if (!enabled) return null;
   void stageLabel;
   return "nightly";
+  const normalized = stageLabel.trim().toLowerCase();
+  if (normalized === "nightly") return "nightly";
+  if (normalized === "dev") return "dev";
+  return null;
 }
 
-export function useSidebarStageBackdropVariant(): SidebarStageBackdropVariant | null {
+export function resolveEnvironmentIdentificationPillLabel(
+  stageLabel: string,
+): EnvironmentIdentificationPillLabel | null {
+  const normalized = stageLabel.trim().toLowerCase();
+  if (normalized === "dev") return "Dev";
+  if (normalized === "nightly") return "Nightly";
+  return null;
+}
+
+export function useEnvironmentStageLabel(): string {
   const primaryServerVersion =
     useAtomValue(primaryServerConfigAtom)?.environment.serverVersion ?? null;
 
-  return resolveSidebarStageBackdropVariant(
-    resolveServerBackedAppStageLabel({
-      primaryServerVersion,
-      fallbackStageLabel: APP_STAGE_LABEL,
-    }),
-  );
+  return resolveServerBackedAppStageLabel({
+    primaryServerVersion,
+    fallbackStageLabel: APP_STAGE_LABEL,
+  });
+}
+
+export function useSidebarStageBackdropVariant(enabled = true): SidebarStageBackdropVariant | null {
+  return resolveSidebarStageBackdropVariant(useEnvironmentStageLabel(), enabled);
 }
 
 /** Stage-channel header art; palettes mirror the per-channel app icons in `assets/`. */
