@@ -44,6 +44,7 @@ import {
   type ProviderRuntimeIngestionShape,
 } from "../Services/ProviderRuntimeIngestion.ts";
 import { ServerSettingsService } from "../../serverSettings.ts";
+import { noterInconnu } from "../../provider/carnetInconnus.ts";
 import { candidatsPourDriver, nomDuCompte } from "../../provider/comptesCandidats.ts";
 import { noterEchec, noterSucces, santeDe } from "../../provider/compteSanteStore.ts";
 import { deciderRelais } from "../../provider/relaisDecision.ts";
@@ -793,6 +794,15 @@ const make = Effect.gen(function* () {
           threadId: thread.id,
           compte: compteMort,
           message: entree.message ?? "(vide)",
+        });
+        // Le cri ne suffisait pas : un avertissement dans un fichier que
+        // personne n'ouvre est un état INVISIBLE, et c'est cette invisibilité
+        // qui fait revenir les mêmes pannes. Le carnet le compte, le garde au
+        // redémarrage, et le remonte à l'écran dès la deuxième occurrence.
+        yield* noterInconnu({
+          message: entree.message ?? "",
+          compte: compteMort,
+          maintenant: entree.now,
         });
       }
 
@@ -1854,8 +1864,8 @@ const make = Effect.gen(function* () {
           // cherche dans le détail déjà chargé — sans lui, la bascule seule
           // s'applique et l'humain devra renvoyer sa question.
           const detailPourRejeu = yield* getLoadedThreadDetail();
-          const dernierUtilisateur = [...(detailPourRejeu?.messages ?? [])]
-            .reverse()
+          const dernierUtilisateur = (detailPourRejeu?.messages ?? [])
+            .toReversed()
             .find((m) => m.role === "user");
           yield* tenterRelais({
             event,
@@ -1896,8 +1906,8 @@ const make = Effect.gen(function* () {
         // dans le détail déjà chargé. Sans lui, la bascule seule s'applique,
         // ce qui reste mieux que rien.
         const detailPourRejeu = yield* getLoadedThreadDetail();
-        const dernierUtilisateur = [...(detailPourRejeu?.messages ?? [])]
-          .reverse()
+        const dernierUtilisateur = (detailPourRejeu?.messages ?? [])
+          .toReversed()
           .find((m) => m.role === "user");
 
         yield* tenterRelais({

@@ -43,6 +43,8 @@ export interface ServerDerivedPaths {
   readonly environmentIdPath: string;
   readonly serverRuntimeStatePath: string;
   readonly secretsDir: string;
+  /** Le carnet des messages d'échec que le classement n'a pas su lire. */
+  readonly carnetInconnusPath: string;
 }
 
 export interface DeriveServerPathsOptions {
@@ -114,6 +116,7 @@ export const deriveServerPaths = Effect.fn(function* (
   return {
     stateDir,
     dbPath,
+    carnetInconnusPath: join(stateDir, "carnet-inconnus.json"),
     keybindingsConfigPath: join(stateDir, "keybindings.json"),
     settingsPath: join(stateDir, "settings.json"),
     providerStatusCacheDir,

@@ -4,6 +4,7 @@ import { Link, useNavigate } from "@tanstack/react-router";
 
 import { useEnvironmentIdentificationMode } from "../../hooks/useSettings";
 import { cn } from "../../lib/utils";
+import { SidebarCarnet } from "./SidebarCarnet";
 import { SidebarMemoire } from "./SidebarMemoire";
 import { SidebarModeTravail } from "./SidebarModeTravail";
 import { GeneralSettingsPanel, ProviderSettingsPanel } from "../settings/SettingsPanels";
@@ -258,6 +259,10 @@ export const SidebarChromeFooter = memo(function SidebarChromeFooter() {
           il s'intercalait entre les liens épinglés et la recherche, coupant
           la grille en deux (capture 30/07). Sa place est ici, avec General et
           Providers. */}
+      {/* Le carnet EN PREMIER : une panne que le système n'a pas su lire est
+          la chose la plus urgente à voir, et la seule qui se paie en fils
+          morts si elle reste invisible. */}
+      <SidebarCarnet />
       {/* La mémoire AVANT le mode : ce que l'app a retenu de toi pèse sur
           chaque session, et c'était jusqu'ici invisible et irrévocable. */}
       <SidebarMemoire />

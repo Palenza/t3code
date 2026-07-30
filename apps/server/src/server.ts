@@ -18,10 +18,7 @@ import {
 } from "./http.ts";
 import { fixPath } from "./os-jank.ts";
 import { tableauLocalProxyRouteLayer } from "./tableauLocalProxy.ts";
-import {
-  favorisEnAttenteRouteLayer,
-  favorisEpinglerRouteLayer,
-} from "./favorisEnAttente.ts";
+import { favorisEnAttenteRouteLayer, favorisEpinglerRouteLayer } from "./favorisEnAttente.ts";
 import { forkUpdateEtatRouteLayer, forkUpdateLancerRouteLayer } from "./forkUpdate.ts";
 import { memoireRouteLayer } from "./memoireConsignes.ts";
 import { modeEtatRouteLayer, modePoserRouteLayer } from "./modeActif.ts";
@@ -30,6 +27,8 @@ import * as ExternalLauncher from "./process/externalLauncher.ts";
 import { layerConfig as SqlitePersistenceLayerLive } from "./persistence/Layers/Sqlite.ts";
 import * as ServerLifecycleEvents from "./serverLifecycleEvents.ts";
 import * as AnalyticsService from "./telemetry/AnalyticsService.ts";
+import { carnetRouteLayer } from "./carnetRoute.ts";
+import { configurerCarnet } from "./provider/carnetInconnus.ts";
 import { ProviderSessionDirectoryLive } from "./provider/Layers/ProviderSessionDirectory.ts";
 import * as ProviderSessionRuntime from "./persistence/ProviderSessionRuntime.ts";
 import { ProviderAdapterRegistryLive } from "./provider/Layers/ProviderAdapterRegistry.ts";
@@ -167,6 +166,22 @@ const ResourceDiagnosticsLayerLive = Layer.mergeAll(
   ResourceTelemetryLayerLive,
   ProcessDiagnostics.layer.pipe(Layer.provide(ResourceTelemetryLayerLive)),
   ProcessResourceMonitor.layer.pipe(Layer.provide(ResourceTelemetryLayerLive)),
+);
+
+/**
+ * Dit au carnet des inconnus où vivre, avant que le premier échec n'arrive.
+ *
+ * Une couche minuscule et sans service : le carnet garde ses observations en
+ * mémoire tant qu'aucun chemin n'est posé, donc un câblage tardif ne perd rien
+ * — mais un câblage ABSENT ferait tout oublier au redémarrage, et le seuil de
+ * deux occurrences ne serait jamais atteint. C'est cette ligne qui rend le
+ * comptage durable.
+ */
+const CarnetInconnusLive = Layer.effectDiscard(
+  Effect.gen(function* () {
+    const config = yield* ServerConfig.ServerConfig;
+    configurerCarnet(config.carnetInconnusPath);
+  }),
 );
 
 const RelayClientLive = Layer.unwrap(
@@ -334,6 +349,7 @@ const AuthLayerLive = EnvironmentAuth.layer.pipe(
 );
 
 const CloudManagedEndpointRuntimeLive = Layer.mergeAll(
+  CarnetInconnusLive,
   RelayClientLive,
   CloudManagedEndpointRuntime.layer.pipe(
     Layer.provide(ServerSecretStore.layer),
@@ -433,6 +449,7 @@ export const makeRoutesLayer = Layer.mergeAll(
     modeEtatRouteLayer,
     modePoserRouteLayer,
     memoireRouteLayer,
+    carnetRouteLayer,
     assetRouteLayer,
     staticAndDevRouteLayer,
     websocketRpcRouteLayer,
