@@ -62,6 +62,20 @@ export interface Verdict {
   readonly nature: NatureEchec;
   /** Quand ce compte peut re-servir ; absent si mort ou si ce n'est pas sa faute. */
   readonly repriseA?: string;
+  /**
+   * Le message a-t-il été RECONNU, ou est-on tombé dans le repli prudent ?
+   *
+   * Deux pannes réelles ont traversé ce classement sans être vues, la même
+   * nuit du 30/07 : « out of usage credits » et « OAuth session expired and
+   * could not be refreshed ». Aucune ne correspondait à un motif, chacune est
+   * devenue un « transitoire » silencieux, et le fondateur s'est retrouvé
+   * devant un fil mort sans explication.
+   *
+   * Ajouter un motif après coup ne corrige que le cas d'hier. Ce drapeau
+   * corrige la CLASSE : un message inconnu se signale, avec son texte exact,
+   * au lieu de se déguiser en verdict.
+   */
+  readonly reconnu: boolean;
 }
 
 /**
@@ -77,6 +91,12 @@ const CAUSES_MORTELLES: ReadonlyArray<RegExp> = [
   /refresh[_ ]token[_ ]reused/i,
   /unauthorized[_ ]client/i,
   /authentication token has been invalidated/i,
+  // Vue en vrai le 30/07 : « Failed to authenticate: OAuth session expired and
+  // could not be refreshed ». Le rafraîchissement a DÉJÀ échoué — attendre ne
+  // sert à rien, il faut se reconnecter. Elle passait pour « transitoire ».
+  /oauth session expired/i,
+  /session expired and could not be refreshed/i,
+  /could not be refreshed/i,
 ];
 
 /** Un quota atteint — le compte reviendra, mais pas tout de suite. */
@@ -145,7 +165,7 @@ export function classerEchec(entree: {
   const message = entree.message ?? "";
 
   if (CAUSES_MORTELLES.some((motif) => motif.test(message))) {
-    return { nature: "authentification-morte" };
+    return { nature: "authentification-morte", reconnu: true };
   }
 
   // 4xx hors 401/408/429 : c'est NOTRE requête qui est mauvaise. Basculer
@@ -153,7 +173,7 @@ export function classerEchec(entree: {
   const code = entree.code;
   if (code !== undefined && code >= 400 && code < 500) {
     if (code !== 401 && code !== 408 && code !== 429) {
-      return { nature: "notre-faute" };
+      return { nature: "notre-faute", reconnu: true };
     }
   }
 
@@ -166,23 +186,27 @@ export function classerEchec(entree: {
   if (CAUSES_SOLDE.some((motif) => motif.test(message))) {
     return {
       nature: "quota",
+      reconnu: true,
       repriseA:
         entree.repriseAnnoncee ??
         new Date(entree.maintenant + REPRISE_SOLDE_MS).toISOString(),
     };
   }
   if (code === 429 || CAUSES_QUOTA.some((motif) => motif.test(message))) {
-    return { nature: "quota", repriseA };
+    return { nature: "quota", repriseA, reconnu: true };
   }
   if (code === 401) {
-    return { nature: "transitoire", repriseA };
+    return { nature: "transitoire", repriseA, reconnu: true };
   }
   if (code !== undefined && code >= 500) {
-    return { nature: "transitoire", repriseA };
+    return { nature: "transitoire", repriseA, reconnu: true };
   }
   // Rien d'identifiable : transitoire, avec un refroidissement prudent. On
-  // n'invente pas une mort qu'on ne peut pas prouver.
-  return { nature: "transitoire", repriseA };
+  // n'invente pas une mort qu'on ne peut pas prouver — mais on ne fait plus
+  // SEMBLANT de savoir : `reconnu: false` oblige l'appelant à le dire tout
+  // haut, avec le texte exact. C'est comme ça que la taxonomie apprend du
+  // réel au lieu d'attendre que le fondateur bute dessus.
+  return { nature: "transitoire", repriseA, reconnu: false };
 }
 
 /** L'état d'un compte à un instant donné, refroidissement expiré compris. */

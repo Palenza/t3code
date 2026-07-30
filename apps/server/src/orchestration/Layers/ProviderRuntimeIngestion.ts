@@ -782,6 +782,20 @@ const make = Effect.gen(function* () {
         maintenant: Date.parse(entree.now),
       });
 
+      // Un message que le classement n'a pas RECONNU se crie, avec son texte
+      // exact. Deux pannes réelles ont traversé ce classement en silence la
+      // même nuit — chacune déguisée en « transitoire », chacune laissant un
+      // fil mort sans explication. Ajouter un motif ne corrige que le cas
+      // d'hier ; ce cri-là fait apprendre la taxonomie du réel, avant que le
+      // fondateur ne bute dessus.
+      if (decision.type !== "laisser" && decision.verdict.reconnu === false) {
+        yield* Effect.logWarning("relais: MESSAGE D'ÉCHEC INCONNU — à classer", {
+          threadId: thread.id,
+          compte: compteMort,
+          message: entree.message ?? "(vide)",
+        });
+      }
+
       // La santé se met à jour dans TOUS les cas où le compte est en cause —
       // même sans remplaçant, pour que le prochain tour parte ailleurs.
       if (decision.type !== "laisser") {

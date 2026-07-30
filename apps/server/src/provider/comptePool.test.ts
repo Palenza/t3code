@@ -38,6 +38,32 @@ describe("classement des échecs", () => {
     }
   });
 
+  it("une session OAuth expirée est MORTE — la phrase exacte vue le 30/07", () => {
+    // « Failed to authenticate: OAuth session expired and could not be
+    // refreshed » ne correspondait à AUCUN motif : elle passait pour un
+    // hoquet transitoire, et le fil restait mort. Le rafraîchissement a déjà
+    // échoué — attendre ne ranime rien, il faut se reconnecter.
+    const verdict = classerEchec({
+      message: "Failed to authenticate: OAuth session expired and could not be refreshed",
+      maintenant: MAINTENANT,
+    });
+    assert.strictEqual(verdict.nature, "authentification-morte");
+    assert.strictEqual(verdict.reconnu, true);
+  });
+
+  it("un message INCONNU s'avoue inconnu au lieu de se déguiser en verdict", () => {
+    // Le vrai correctif de la nuit du 30/07. Deux pannes reelles avaient
+    // traversé ce classement sans être vues ; ajouter un motif ne corrige que
+    // le cas d'hier. Ici on fige la CLASSE : tout ce qui n'est pas reconnu le
+    // DIT, et l'appelant le crie avec le texte exact.
+    const verdict = classerEchec({
+      message: "Une panne que personne n'a encore jamais vue passer ici",
+      maintenant: MAINTENANT,
+    });
+    assert.strictEqual(verdict.nature, "transitoire");
+    assert.strictEqual(verdict.reconnu, false);
+  });
+
   it("le SOLDE épuisé est reconnu — la phrase exacte vue le 30/07", () => {
     // Cette phrase-là, mot pour mot, a tué un tour en « Runtime error » : aucun
     // motif de quota ne l'attrapait, donc le relais n'a pas tiré. Elle est
@@ -136,7 +162,7 @@ describe("santé d'un compte", () => {
   });
 
   it("« notre faute » ne punit pas le compte", () => {
-    const apres = appliquerEchec(sain("A"), { nature: "notre-faute" }, "400");
+    const apres = appliquerEchec(sain("A"), { nature: "notre-faute", reconnu: true }, "400");
     assert.strictEqual(apres.etat, "ok");
   });
 });
