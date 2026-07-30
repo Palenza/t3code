@@ -111,7 +111,10 @@ export function SidebarModeTravail() {
           description:
             corps.comptes === 0
               ? "Aucun compte n'a de dossier de configuration propre — rien n'a été restreint."
-              : `${corps.comptes} compte${(corps.comptes ?? 0) > 1 ? "s" : ""} concerné${(corps.comptes ?? 0) > 1 ? "s" : ""}.`,
+              : // La PORTÉE est dite, pas seulement le nombre : « 3 comptes
+                // concernés » ne laissait pas deviner que TOUS les fils, de
+                // TOUS les projets, venaient d'être désarmés d'un coup.
+                `${corps.comptes} compte${(corps.comptes ?? 0) > 1 ? "s" : ""} — s'applique à tous tes fils, dans tous tes projets.`,
         }),
       );
     } catch {
@@ -136,16 +139,31 @@ export function SidebarModeTravail() {
               type="button"
               aria-label="Mode de travail"
               className={cn(
-                "flex h-7 w-full cursor-pointer items-center gap-2 rounded-lg px-2 text-left transition-colors hover:bg-sidebar-row-hover",
+                "flex w-full cursor-pointer items-center gap-2 rounded-lg px-2 text-left transition-colors",
+                // Un mode restrictif DÉSARME tous les agents, sur tous les
+                // comptes, dans tous les projets. Il portait un simple liseré
+                // gris : le 30/07 le fondateur a passé un tour entier à
+                // diagnostiquer « Bash exists but is not enabled in this
+                // context » sans faire le lien avec ce bouton. Un réglage qui
+                // casse le travail doit CRIER, pas chuchoter.
                 restreint
-                  ? "text-sidebar-foreground ring-1 ring-sidebar-border"
-                  : "text-sidebar-foreground/55",
+                  ? "h-auto flex-col items-start gap-0.5 bg-amber-500/15 py-1.5 text-amber-200 ring-1 ring-amber-400/40 hover:bg-amber-500/25"
+                  : "h-7 text-sidebar-foreground/55 hover:bg-sidebar-row-hover",
               )}
             >
-              <ShieldIcon className="size-3.5 shrink-0" />
-              <span className="min-w-0 flex-1 truncate text-[12px] font-medium">
-                {modeActif?.nom ?? "Mode de travail"}
+              <span className="flex w-full items-center gap-2">
+                <ShieldIcon className="size-3.5 shrink-0" />
+                <span className="min-w-0 flex-1 truncate text-[12px] font-medium">
+                  {modeActif?.nom ?? "Mode de travail"}
+                </span>
               </span>
+              {restreint ? (
+                <span className="pl-[22px] text-[11px] leading-tight text-amber-200/80">
+                  {modeActif?.slug === "revue"
+                    ? "Tes agents ne peuvent NI écrire NI lancer de commande — partout."
+                    : "Écriture restreinte pour tous tes agents — partout."}
+                </span>
+              ) : null}
             </button>
           }
         />
