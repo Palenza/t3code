@@ -65,14 +65,22 @@ const GRADIENT_SWATCHES: ReadonlyArray<readonly [string, string, string]> = [
 ];
 
 /**
- * Les tailles d'Arc, MESURÉES sur l'enregistrement du vrai panneau (30/07,
- * frames 734 px de large pour un panneau de ~367 px CSS, donc ÷2) :
- * dominante 70 px → 35, satellite 42 px → 21. Le rapport est de 1,67, pas
- * de 1,7 comme je l'avais estimé — mais mes valeurs absolues étaient trop
- * grosses de 25 % pour la dominante et trop grosses aussi pour les
- * satellites, ce qui écrasait la toile.
+ * Les tailles d'Arc, MESURÉES sur 1 919 frames du vrai panneau (30/07,
+ * capture Retina 734 px de large, donc CSS = pixels ÷ 2).
+ *
+ *   dominante   68 px → 34 CSS   (σ 0,0 — jamais 67 ni 69)
+ *   satellite   40 px → 20 CSS   (σ 0,0)
+ *   satellite   40 px → 20 CSS   (σ 0,1)
+ *   rapport                1,700 (σ 0,001)
+ *
+ * Deux enseignements que l'œil n'avait pas donnés. D'abord les tailles sont
+ * FIXES : sur 1 919 frames, pas un pixel d'écart — elles ne réagissent ni à
+ * la position du rond, ni à sa couleur, ni au mode d'apparence.
+ *
+ * Ensuite les deux satellites sont IDENTIQUES. J'avais codé 21 puis 18, un
+ * dégradé que j'avais inventé : rien ne le porte dans la mesure.
  */
-const STOP_SIZES_PX = [35, 21, 18] as const;
+const STOP_SIZES_PX = [34, 20, 20] as const;
 
 const APPEARANCE_CHOICES = [
   { value: "auto", icon: SparklesIcon, label: "Suivre le système" },
