@@ -747,6 +747,16 @@ export const makeVcsDriverShape = Effect.fn("makeGitVcsDriverShape")(function* (
         return false;
       }
 
+      // Le sauvetage se capture APRÈS avoir résolu la cible (une cible
+      // introuvable ne doit pas laisser une ref de sauvetage orpheline) et
+      // AVANT le moindre écrasement.
+      if (input.rescueRef !== undefined) {
+        yield* checkpoints.captureCheckpoint({
+          cwd: input.cwd,
+          checkpointRef: input.rescueRef,
+        });
+      }
+
       yield* execute({
         operation,
         cwd: input.cwd,

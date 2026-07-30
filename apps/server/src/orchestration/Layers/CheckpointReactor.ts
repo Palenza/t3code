@@ -22,6 +22,7 @@ import { makeDrainableWorker } from "@t3tools/shared/DrainableWorker";
 import { parseTurnDiffFilesFromUnifiedDiff } from "../../checkpointing/Diffs.ts";
 import {
   checkpointRefForThreadTurn,
+  rescueRefForThreadRevert,
   resolveThreadWorkspaceCwd,
 } from "../../checkpointing/Utils.ts";
 import * as CheckpointStore from "../../checkpointing/CheckpointStore.ts";
@@ -675,10 +676,18 @@ const make = Effect.gen(function* () {
       return;
     }
 
+    // L'état qu'on s'apprête à écraser est capturé d'abord : un revert doit
+    // être un aller-retour possible, jamais une destruction (cline, absorbé).
+    const rescueRef = rescueRefForThreadRevert(
+      event.payload.threadId,
+      event.payload.turnCount,
+      Date.parse(now),
+    );
     const restored = yield* checkpointStore.restoreCheckpoint({
       cwd: sessionRuntime.value.cwd,
       checkpointRef: targetCheckpointRef,
       fallbackToHead: event.payload.turnCount === 0,
+      rescueRef,
     });
     if (!restored) {
       yield* appendRevertFailureActivity({
@@ -689,6 +698,11 @@ const make = Effect.gen(function* () {
       }).pipe(Effect.catch(() => Effect.void));
       return;
     }
+
+    yield* Effect.logInfo("revert: état d'avant-restauration sauvegardé", {
+      threadId: event.payload.threadId,
+      rescueRef,
+    });
 
     // Refresh the workspace entry index so the @-mention file picker
     // reflects the reverted filesystem state.

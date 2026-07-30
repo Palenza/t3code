@@ -31,6 +31,8 @@ export interface RestoreCheckpointInput {
   readonly cwd: string;
   readonly checkpointRef: CheckpointRef;
   readonly fallbackToHead?: boolean;
+  /** Capture l'état courant sous cette ref avant l'écrasement (réversibilité). */
+  readonly rescueRef?: CheckpointRef;
 }
 
 export interface DiffCheckpointsInput {

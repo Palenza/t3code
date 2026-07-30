@@ -7,7 +7,7 @@ import * as PlatformError from "effect/PlatformError";
 import { ChildProcessSpawner } from "effect/unstable/process";
 import { assert, it } from "@effect/vitest";
 
-import { GitCommandError } from "@t3tools/contracts";
+import { CheckpointRef, GitCommandError } from "@t3tools/contracts";
 import * as ServerConfig from "../config.ts";
 import * as GitVcsDriver from "./GitVcsDriver.ts";
 import * as VcsProcess from "./VcsProcess.ts";
@@ -108,3 +108,60 @@ it.effect("GitVcsDriver forwards execute env to the VCS process", () => {
     ),
   );
 });
+
+it.effect("restore avec rescueRef : l'état écrasé reste RÉCUPÉRABLE — jamais une destruction", () =>
+  Effect.gen(function* () {
+    const fileSystem = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const cwd = yield* fileSystem.makeTempDirectoryScoped({ prefix: "t3-rescue-" });
+    const git = (args: ReadonlyArray<string>) =>
+      Effect.gen(function* () {
+        const driver = yield* GitVcsDriver.GitVcsDriver;
+        yield* driver.execute({
+          operation: "GitVcsDriver.test.rescue",
+          cwd,
+          args,
+          timeoutMs: 10_000,
+        });
+      });
+    yield* git(["init"]);
+    yield* git(["config", "user.email", "test@test.com"]);
+    yield* git(["config", "user.name", "Test"]);
+    yield* fileSystem.writeFileString(path.join(cwd, "suivi.txt"), "v1");
+    yield* git(["add", "."]);
+    yield* git(["commit", "-m", "base"]);
+
+    const shape = yield* GitVcsDriver.makeVcsDriverShape();
+    const checkpoints = shape.checkpoints;
+    assert.isDefined(checkpoints);
+    if (!checkpoints) return;
+
+    const cible = CheckpointRef.make("refs/t3code/test/turn-0");
+    yield* checkpoints.captureCheckpoint({ cwd, checkpointRef: cible });
+
+    // Le travail d'APRÈS le checkpoint — ce que la restauration va écraser.
+    yield* fileSystem.writeFileString(path.join(cwd, "nouveau.txt"), "créé après le checkpoint");
+    yield* fileSystem.writeFileString(path.join(cwd, "suivi.txt"), "v2");
+
+    const sauvetage = CheckpointRef.make("refs/t3code/test/rescue-1");
+    const restaure = yield* checkpoints.restoreCheckpoint({
+      cwd,
+      checkpointRef: cible,
+      rescueRef: sauvetage,
+    });
+    assert.isTrue(restaure);
+
+    // L'écrasement a bien eu lieu — c'est le contrat de restore…
+    assert.strictEqual(yield* fileSystem.readFileString(path.join(cwd, "suivi.txt")), "v1");
+    assert.isFalse(yield* fileSystem.exists(path.join(cwd, "nouveau.txt")));
+
+    // …mais RIEN n'est perdu : le sauvetage ramène l'état d'avant, intégralement.
+    const revenu = yield* checkpoints.restoreCheckpoint({ cwd, checkpointRef: sauvetage });
+    assert.isTrue(revenu);
+    assert.strictEqual(
+      yield* fileSystem.readFileString(path.join(cwd, "nouveau.txt")),
+      "créé après le checkpoint",
+    );
+    assert.strictEqual(yield* fileSystem.readFileString(path.join(cwd, "suivi.txt")), "v2");
+  }).pipe(Effect.scoped, Effect.provide(GitContractLayer)),
+);

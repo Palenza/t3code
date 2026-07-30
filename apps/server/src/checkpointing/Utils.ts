@@ -9,6 +9,22 @@ export function checkpointRefForThreadTurn(threadId: ThreadId, turnCount: number
   );
 }
 
+/**
+ * La ref de SAUVETAGE d'une restauration : l'état du workspace tel qu'il
+ * était juste avant qu'un revert ne l'écrase. Horodatée en millisecondes —
+ * deux reverts successifs vers le même tour ne doivent pas s'écraser l'un
+ * l'autre, sinon le second sauvetage détruit le premier.
+ */
+export function rescueRefForThreadRevert(
+  threadId: ThreadId,
+  turnCount: number,
+  horodatageMs: number,
+): CheckpointRef {
+  return CheckpointRef.make(
+    `${CHECKPOINT_REFS_PREFIX}/${Encoding.encodeBase64Url(threadId)}/rescue/${turnCount}-${horodatageMs}`,
+  );
+}
+
 export function resolveThreadWorkspaceCwd(input: {
   readonly thread: {
     readonly projectId: ProjectId;

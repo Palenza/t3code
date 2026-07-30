@@ -23,6 +23,14 @@ export interface VcsRestoreCheckpointInput {
   readonly cwd: string;
   readonly checkpointRef: CheckpointRef;
   readonly fallbackToHead?: boolean;
+  /**
+   * Si fourni, l'état COURANT du workspace est capturé sous cette ref AVANT
+   * l'écrasement. Une restauration détruit les fichiers non suivis créés
+   * depuis le checkpoint — sans sauvetage, cette perte est silencieuse et
+   * définitive. Absorption du shadow-git de cline : la restauration devient
+   * RÉVERSIBLE au lieu d'être seulement annoncée.
+   */
+  readonly rescueRef?: CheckpointRef;
 }
 
 export interface VcsDiffCheckpointsInput {
