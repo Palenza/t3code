@@ -5,35 +5,38 @@ import {
   ChevronRightIcon,
   MinusIcon,
   MoonIcon,
+  PencilIcon,
   PlusIcon,
-  SparklesIcon,
-  SunIcon,
 } from "lucide-react";
 
 import { cn } from "../../lib/utils";
 import { useSidebarSpacesStore } from "../../sidebarSpacesStore";
 import {
   makeSidebarThemeFromColors,
+  SIDEBAR_THEME_GRAIN_URL,
   useSidebarThemeStore,
   type SidebarTheme,
   type SidebarThemeStop,
 } from "../../sidebarThemeStore";
 
 /**
- * L'éditeur de thème d'Arc, reconstruit sur les ~24 captures fondateur
- * (3e passe — la bonne). Ce que les captures enseignent :
+ * L'éditeur de thème d'Arc — recalé sur la MÉTROLOGIE du 30/07 soir :
+ * 4 965 frames réelles à 120 Hz, résolution native, mesurées par programme
+ * (scripts mesure_frames/mesure2/synthese, session du 30/07).
  *
- * LA TOILE EST UNE PALETTE INVISIBLE. Déplacer le GROS rond ne déplace pas
- * qu'un point : ça MODULE sa couleur — horizontalement la teinte dérive,
- * verticalement elle s'éclaircit jusqu'au délavé ou fonce. Et les deux
- * satellites ne portent jamais la même couleur : ils sont recalculés en
- * HARMONIE (teintes voisines ±40°) à chaque geste. Un seul geste = position,
- * nuance et accords.
+ * Ce que la mesure a tranché contre l'implémentation précédente :
  *
- * TROIS RONDS MAXIMUM. La première page du nuancier = couleurs UNIES : un
- * clic pose UNE dominante (les satellites existants se réaccordent) ; « + »
- * ajoute un satellite harmonique, jusqu'à trois. La flèche → page des
- * GRADIENTS : un clic pose les trois ronds d'un coup.
+ * LE TRIO EST UN ASSEMBLAGE RIGIDE PENDANT LE GLISSÉ. Ratio de déplacement
+ * satellite/dominante : médiane 0,98 (p10 0,80 · p90 1,12) sur 244 mesures.
+ * Le retard élastique d'avant (transition left/top 75 ms) était une faute —
+ * en glissé, AUCUNE transition ; les transitions ne servent que les sauts
+ * discrets (clic nuancier, promotion).
+ *
+ * RAYON COMMUN, ANGLES PROPRES. Les trois ronds vivent à la même distance
+ * du centre de la toile (rayons mesurés 107/108/115 puis 163/164/174 selon
+ * l'instant), mais leurs écarts angulaires VARIENT (61°, 92°, 149° observés) :
+ * le ±42° forcé d'avant n'existe pas. Chaque rond garde SON angle ; bouger
+ * la dominante fixe l'angle de celle-ci et le rayon de tous.
  */
 
 const MAX_ARC_STOPS = 3;
@@ -51,51 +54,38 @@ const SOLID_SWATCHES: ReadonlyArray<string> = [
   "#6b5b95",
 ];
 
-/** Page 2 — gradients : un rond pose les TROIS couleurs préréglées. */
+/**
+ * Page 2 — les 9 gradients de la page 2 d'Arc, relevés sur les frames
+ * (crème, rose, mauve sombre, orange-rouge, or, vert-jaune, turquoise,
+ * bleu-violet, ardoise). Un clic pose les trois ronds d'un coup.
+ */
 const GRADIENT_SWATCHES: ReadonlyArray<readonly [string, string, string]> = [
-  ["#fbd87f", "#f2977a", "#f2a3c0"],
-  ["#4caf7d", "#fbd87f", "#e4572e"],
-  ["#4a7fd4", "#4caf7d", "#a8e6a3"],
-  ["#5db3f0", "#2e9e6b", "#4fd1c5"],
-  ["#8e5bd4", "#f2a3c0", "#5db3f0"],
-  ["#f2a3c0", "#9b6fc3", "#5b8def"],
-  ["#f28c28", "#e4572e", "#c2185b"],
-  ["#2b2f55", "#4a3f78", "#7a5299"],
-  ["#8d5a3b", "#c98d5f", "#f2dcc0"],
+  ["#f4efe2", "#efe6d4", "#e6d9c2"],
+  ["#f6b4c8", "#f2a3c0", "#e78fb2"],
+  ["#8a6a86", "#7c5f79", "#6a4f68"],
+  ["#f08a62", "#e8785a", "#d95f70"],
+  ["#f2cd68", "#eebb4d", "#e8a53f"],
+  ["#c8e065", "#a8d455", "#8fc94f"],
+  ["#59d8b2", "#4fd1c5", "#3fb8c9"],
+  ["#7d92e8", "#7a82e0", "#8f6fd9"],
+  ["#63638f", "#565683", "#4a4a70"],
 ];
 
-/**
- * Les tailles d'Arc, MESURÉES sur 1 919 frames du vrai panneau (30/07,
- * capture Retina 734 px de large, donc CSS = pixels ÷ 2).
- *
- *   dominante   68 px → 34 CSS   (σ 0,0 — jamais 67 ni 69)
- *   satellite   40 px → 20 CSS   (σ 0,0)
- *   satellite   40 px → 20 CSS   (σ 0,1)
- *   rapport                1,700 (σ 0,001)
- *
- * Deux enseignements que l'œil n'avait pas donnés. D'abord les tailles sont
- * FIXES : sur 1 919 frames, pas un pixel d'écart — elles ne réagissent ni à
- * la position du rond, ni à sa couleur, ni au mode d'apparence.
- *
- * Ensuite les deux satellites sont IDENTIQUES. J'avais codé 21 puis 18, un
- * dégradé que j'avais inventé : rien ne le porte dans la mesure.
- */
+/** Tailles d'Arc (1 919 frames, σ 0) : dominante 34 css, satellites 20. */
 const STOP_SIZES_PX = [34, 20, 20] as const;
 
+/**
+ * Deux apparences, plus trois : ordre fondateur du 30/07 — « le mode clair,
+ * on va l'enlever, on garde le dark et l'automatique ».
+ */
 const APPEARANCE_CHOICES = [
-  { value: "auto", icon: SparklesIcon, label: "Suivre le système" },
-  { value: "light", icon: SunIcon, label: "Toujours clair" },
-  { value: "dark", icon: MoonIcon, label: "Toujours sombre" },
+  { value: "auto", label: "Suivre le système" },
+  { value: "dark", label: "Toujours sombre" },
 ] as const;
 
 // ---------------------------------------------------------------- couleur
-// LA ROUE INVISIBLE, reconstruite depuis 10 761 frames de la vidéo
-// fondateur (60 fps, 835 frames de drag mesurées) : la TEINTE est l'angle
-// autour du centre de la toile (est 355°, sud 86°, ouest 186°, nord 264° —
-// hue ≈ angle − 5°), la couleur est PLEINE au centre et pâlit vers le bord
-// (l 0,42 → 0,86, « presque blanc sans jamais l'être »). Chaque rond prend
-// la couleur de la roue LÀ OÙ IL EST — les satellites « touchent d'autres
-// gradients » parce qu'ils échantillonnent d'autres angles.
+// LA ROUE INVISIBLE (10 761 frames, vidéo précédente) : teinte = angle
+// autour du centre (hue ≈ angle − 5°), pleine au centre, pâle au bord.
 
 function hslToHex(h: number, s: number, l: number): string {
   const hue = ((h % 360) + 360) % 360;
@@ -143,7 +133,7 @@ function hexToHsl(hex: string): { h: number; s: number; l: number } {
   return { h, s: s * 100, l: l * 100 };
 }
 
-/** La couleur de la roue à une position de toile (mesures de la vidéo). */
+/** La couleur de la roue à une position de toile. */
 function wheelColorAt(x: number, y: number): string {
   const dx = x - 0.5;
   const dy = y - 0.5;
@@ -156,8 +146,6 @@ function wheelColorAt(x: number, y: number): string {
 
 /** L'inverse : où poser un rond pour obtenir (au plus près) cette couleur. */
 function wheelPositionOf(hex: string): { x: number; y: number } {
-  // La saturation ne sert pas ici : sur la molette, la position ne dépend que
-  // de la teinte (angle) et de la clarté (rayon).
   const { h, l } = hexToHsl(hex);
   const angle = ((h + 5) * Math.PI) / 180;
   const distFromLight = (Math.min(86, Math.max(42, l)) - 42) / 75;
@@ -168,11 +156,48 @@ function wheelPositionOf(hex: string): { x: number; y: number } {
   };
 }
 
+const clampToile = (value: number) => Math.max(0.04, Math.min(0.96, value));
+
+/** L'angle d'un arrêt autour du centre de la toile, en radians. */
+const angleDe = (stop: { x: number; y: number }) => Math.atan2(stop.y - 0.5, stop.x - 0.5);
+
 /**
- * `spaceId` vise un espace PRÉCIS plutôt que l'espace courant. Le tableau des
- * espaces en a besoin : on y ouvre le pinceau de la colonne « Pirate » alors
- * qu'on est posé dans « Design », et sans ça on repeindrait le mauvais.
- * Absent, le panneau garde son comportement d'origine — l'espace actif.
+ * Replace le trio pour une dominante posée en (x, y) : le trio TOURNE ET
+ * RESPIRE EN BLOC autour du centre de la toile. Chaque satellite garde son
+ * ÉCART D'ANGLE relatif à la dominante (écarts variés mesurés : 61°, 92°,
+ * 149° selon l'arrangement) ; tous partagent le rayon du pointeur. C'est la
+ * seule loi compatible avec les DEUX mesures : équidistances au centre
+ * conservées, et ratio de déplacement satellite/dominante ≈ 1 pendant le
+ * glissé. Un satellite manquant naît à ±140° (écartements larges observés).
+ */
+function replacerTrio(
+  stops: ReadonlyArray<SidebarThemeStop>,
+  x: number,
+  y: number,
+  count: number,
+): SidebarThemeStop[] {
+  const rayon = Math.min(0.46, Math.hypot(x - 0.5, y - 0.5));
+  const angleDominante = Math.atan2(y - 0.5, x - 0.5);
+  const ancienne = stops[0];
+  const angleAncien = ancienne === undefined ? angleDominante : angleDe(ancienne);
+  return Array.from({ length: count }, (_, index) => {
+    const existant = stops[index];
+    const ecart =
+      index === 0
+        ? 0
+        : existant !== undefined
+          ? angleDe(existant) - angleAncien
+          : ((index === 1 ? 140 : -140) * Math.PI) / 180;
+    const angle = angleDominante + ecart;
+    const px = index === 0 ? clampToile(x) : clampToile(0.5 + Math.cos(angle) * rayon);
+    const py = index === 0 ? clampToile(y) : clampToile(0.5 + Math.sin(angle) * rayon);
+    return { color: wheelColorAt(px, py), x: px, y: py };
+  });
+}
+
+/**
+ * `spaceId` vise un espace PRÉCIS plutôt que l'espace courant (tableau des
+ * espaces). Absent, le panneau édite l'espace actif.
  */
 export function SpaceThemePanel({ spaceId }: { readonly spaceId?: string } = {}) {
   const spaces = useSidebarSpacesStore((state) => state.spaces);
@@ -201,32 +226,11 @@ export function SpaceThemePanel({ spaceId }: { readonly spaceId?: string } = {})
   // ------------------------------------------------------------- la toile
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const draggingRef = useRef(false);
+  // L'état ne sert que le STYLE : glissé = zéro transition (assemblage
+  // rigide mesuré), saut discret = glissade 200 ms.
+  const [enGlisse, setEnGlisse] = useState(false);
 
   const dominant = current.stops[0] ?? { color: wheelColorAt(0.62, 0.4), x: 0.62, y: 0.4 };
-
-  /**
-   * LA GÉOMÉTRIE MESURÉE (2 captures Arc, 60 fps, 4 397 frames à 3 ronds) :
-   * les trois ronds vivent sur UN MÊME CERCLE centré sur la toile — leurs
-   * distances au centre sont égales (rapport satellite/dominante = 1,00
-   * médian) — et ils sont espacés d'environ 42° d'ANGLE, ce qui fait croître
-   * leur écartement avec le rayon (corrélation r=0,71 ; 0,10 près du centre,
-   * 0,27 à mi-course). D'où le « pattern de cercle » : bouger la souris fait
-   * TOURNER le trio et change son rayon, jamais glisser des points libres.
-   */
-  const SATELLITE_ANGLE_DEG = 42;
-  const groupStops = useCallback((x: number, y: number, count: number): SidebarThemeStop[] => {
-    const angle = Math.atan2(y - 0.5, x - 0.5);
-    const radius = Math.min(0.46, Math.hypot(x - 0.5, y - 0.5));
-    const clamp = (value: number) => Math.max(0.04, Math.min(0.96, value));
-    const step = (SATELLITE_ANGLE_DEG * Math.PI) / 180;
-    return Array.from({ length: count }, (_, index) => {
-      // 0 = dominante à l'angle du pointeur ; 1 et 2 = ±42° sur le MÊME cercle.
-      const offset = index === 0 ? 0 : index === 1 ? -step : step;
-      const px = clamp(0.5 + Math.cos(angle + offset) * radius);
-      const py = clamp(0.5 + Math.sin(angle + offset) * radius);
-      return { color: wheelColorAt(px, py), x: px, y: py };
-    });
-  }, []);
 
   const moveGroup = useCallback(
     (clientX: number, clientY: number) => {
@@ -235,38 +239,50 @@ export function SpaceThemePanel({ spaceId }: { readonly spaceId?: string } = {})
       const rect = canvas.getBoundingClientRect();
       const x = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
       const y = Math.max(0, Math.min(1, (clientY - rect.top) / rect.height));
-      apply({ ...current, stops: groupStops(x, y, current.stops.length) });
+      apply({ ...current, stops: replacerTrio(current.stops, x, y, current.stops.length) });
     },
-    [apply, current, groupStops],
+    [apply, current],
   );
+
+  const finDeGlisse = useCallback(() => {
+    draggingRef.current = false;
+    setEnGlisse(false);
+  }, []);
 
   const applySolid = useCallback(
     (color: string) => {
-      // Roue ABSOLUE : la couleur désigne une POSITION — le groupe y saute
-      // (mesuré sur la vidéo : le trio se replace au clic du nuancier).
       const position = wheelPositionOf(color);
-      apply({ ...current, stops: groupStops(position.x, position.y, current.stops.length) });
+      apply({
+        ...current,
+        stops: replacerTrio(current.stops, position.x, position.y, current.stops.length),
+      });
     },
-    [apply, current, groupStops],
+    [apply, current],
   );
 
   const applyGradient = useCallback(
     (trio: readonly [string, string, string]) => {
-      // Le gradient pose TROIS ronds ancrés sur la position-roue du premier.
+      // Le gradient pose TROIS ronds d'un coup, ancrés sur le premier ton.
       const position = wheelPositionOf(trio[0]);
-      apply({ ...current, stops: groupStops(position.x, position.y, 3) });
+      apply({ ...current, stops: replacerTrio([], position.x, position.y, 3) });
     },
-    [apply, current, groupStops],
+    [apply, current],
   );
 
   const addStop = useCallback(() => {
     if (current.stops.length >= MAX_ARC_STOPS) return;
-    apply({ ...current, stops: groupStops(dominant.x, dominant.y, current.stops.length + 1) });
-  }, [apply, current, dominant.x, dominant.y, groupStops]);
+    apply({
+      ...current,
+      stops: replacerTrio(current.stops, dominant.x, dominant.y, current.stops.length + 1),
+    });
+  }, [apply, current, dominant.x, dominant.y]);
   const removeStop = useCallback(() => {
     if (current.stops.length <= 1) return;
-    apply({ ...current, stops: groupStops(dominant.x, dominant.y, current.stops.length - 1) });
-  }, [apply, current, dominant.x, dominant.y, groupStops]);
+    apply({
+      ...current,
+      stops: replacerTrio(current.stops, dominant.x, dominant.y, current.stops.length - 1),
+    });
+  }, [apply, current, dominant.x, dominant.y]);
 
   const isDarkCanvas =
     current.appearance === "dark" ||
@@ -278,31 +294,27 @@ export function SpaceThemePanel({ spaceId }: { readonly spaceId?: string } = {})
     ? "text-white/50 hover:text-white/80"
     : "text-neutral-400 hover:text-neutral-600";
 
+  // Glissé : rigide. Saut discret : glissade. (Mesure : ratio 0,98 en drag.)
+  const transitionRonds = enGlisse
+    ? "none"
+    : "left 200ms cubic-bezier(0.22,1,0.36,1), top 200ms cubic-bezier(0.22,1,0.36,1), background-color 120ms";
+
   return (
-    // Le PANNEAU ENTIER suit le mode édité (☀️ = crème translucide, 🌙 =
-    // nuit translucide) — nuancier, vague et molette compris, comme sur les
-    // captures : Arc n'a jamais un bas sombre sous une toile claire.
+    // 358 × 510 css MESURÉS (bords à ±1 px sur frame claire et sombre),
+    // coins larges. Verre mince : la toile laisse passer, le socle est laiteux.
     <div
       className={cn(
-        // VRAI liquid glass (reproche fondateur : « on ne voit pas à
-        // travers ») : le verre est MINCE — 34 % de teinte, le flou et la
-        // saturation font le reste, comme Arc. Au-delà de ~50 % ce n'est
-        // plus du verre, c'est un panneau peint.
-        // Le verre d'Arc n'est pas uniforme (captures 30/07) : la TOILE laisse
-        // passer le fond presque net, le SOCLE des contrôles est laiteux. Ce
-        // contraste est ce qui fait lire l'un comme une fenêtre et l'autre
-        // comme un pupitre — un verre unique donnait une plaque plate.
-        // 367 px : largeur MESURÉE (734 px de capture ÷ 2).
-        "flex w-[367px] flex-col overflow-hidden rounded-lg backdrop-blur-2xl backdrop-saturate-150 transition-colors",
+        "flex w-[358px] flex-col overflow-hidden rounded-2xl backdrop-blur-2xl backdrop-saturate-150 transition-colors",
         isDarkCanvas ? "bg-neutral-900/28" : "bg-white/28",
       )}
     >
-      {/* La toile-palette : tout le haut du panneau, pointillée, sans
-          sous-carte encadrée. */}
+      {/* La toile-palette : pointillée. Panneau total 510 css (mesure bords
+          13→1033 crop) ; la séparation toile/socle mesurée oscille entre 369
+          et 393 selon la frame — 372 tient les deux. */}
       <div
         ref={canvasRef}
         className={cn(
-          "relative h-[360px] touch-none rounded-t-lg bg-[radial-gradient(circle,var(--dot)_1px,transparent_1px)] bg-[size:9px_9px]",
+          "relative h-[372px] touch-none rounded-t-2xl bg-[radial-gradient(circle,var(--dot)_1px,transparent_1px)] bg-[size:9px_9px]",
           isDarkCanvas
             ? "[--dot:color-mix(in_oklab,white_22%,transparent)]"
             : "[--dot:color-mix(in_oklab,black_18%,transparent)]",
@@ -310,12 +322,10 @@ export function SpaceThemePanel({ spaceId }: { readonly spaceId?: string } = {})
         onPointerMove={(event) => {
           if (draggingRef.current) moveGroup(event.clientX, event.clientY);
         }}
-        onPointerUp={() => {
-          draggingRef.current = false;
-        }}
+        onPointerUp={finDeGlisse}
       >
         <div className="absolute inset-x-0 top-3 flex items-center justify-center gap-2">
-          {APPEARANCE_CHOICES.map(({ value, icon: Icon, label }) => (
+          {APPEARANCE_CHOICES.map(({ value, label }) => (
             <button
               key={value}
               type="button"
@@ -323,7 +333,7 @@ export function SpaceThemePanel({ spaceId }: { readonly spaceId?: string } = {})
               title={label}
               onClick={() => apply({ ...current, appearance: value })}
               className={cn(
-                "flex size-7 cursor-pointer items-center justify-center rounded-lg transition-colors",
+                "t3-etoiles flex size-7 cursor-pointer items-center justify-center rounded-lg transition-colors",
                 current.appearance === value
                   ? isDarkCanvas
                     ? "bg-white/15 text-white"
@@ -331,7 +341,7 @@ export function SpaceThemePanel({ spaceId }: { readonly spaceId?: string } = {})
                   : mutedControl,
               )}
             >
-              <Icon className="size-4" />
+              {value === "auto" ? <EtoilesScintillantes /> : <MoonIcon className="size-4" />}
             </button>
           ))}
         </div>
@@ -339,42 +349,41 @@ export function SpaceThemePanel({ spaceId }: { readonly spaceId?: string } = {})
           const size = STOP_SIZES_PX[index + 1] ?? 20;
           return (
             <button
-              // Ici l'index EST l'identité stable. Une clé bâtie sur la couleur
-              // ou la position remonterait le bouton au premier pixel de
-              // glissé — or c'est précisément pendant le glissé qu'il doit
-              // rester le même élément. Un `id` par arrêt réglerait ça
-              // proprement, mais il faudrait migrer les thèmes déjà rangés sur
-              // disque : cher pour un avertissement.
+              // L'index EST l'identité stable pendant le glissé (une clé
+              // couleur/position remonterait le bouton à chaque frame).
               // eslint-disable-next-line react/no-array-index-key
               key={index}
               type="button"
               aria-label={`Prendre cette couleur comme dominante`}
               onPointerDown={(event) => {
-                // Cliquer un satellite le PROMEUT en dominante : le trio
-                // tourne pour l'amener à l'angle du pointeur (mesuré sur la
-                // vidéo : « si je clique sur un petit rond, ça me fait la
-                // sélection du grand »).
+                // Promotion : le satellite DEVIENT la dominante, sur place —
+                // échange de rôles, pas de rotation du trio.
                 event.preventDefault();
                 event.stopPropagation();
-                apply({ ...current, stops: groupStops(stop.x, stop.y, current.stops.length) });
+                const stops = [...current.stops];
+                const [promu] = stops.splice(index + 1, 1);
+                if (promu === undefined) return;
+                apply({ ...current, stops: [promu, ...stops] });
               }}
-              className="absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer rounded-full shadow-sm ring-2 ring-white transition-[left,top,background-color] duration-75 hover:scale-110"
+              className="absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer rounded-full shadow-sm ring-2 ring-white hover:scale-110"
               style={{
                 left: `${stop.x * 100}%`,
                 top: `${stop.y * 100}%`,
                 width: size,
                 height: size,
                 backgroundColor: stop.color,
+                transition: transitionRonds,
               }}
             />
           );
         })}
         <button
           type="button"
-          aria-label="Mélanger — la position module la couleur, les satellites s'accordent"
+          aria-label="Mélanger — la position module la couleur, les satellites gardent leur angle"
           onPointerDown={(event) => {
             event.preventDefault();
             draggingRef.current = true;
+            setEnGlisse(true);
             try {
               event.currentTarget.setPointerCapture(event.pointerId);
             } catch {
@@ -384,16 +393,15 @@ export function SpaceThemePanel({ spaceId }: { readonly spaceId?: string } = {})
           onPointerMove={(event) => {
             if (draggingRef.current) moveGroup(event.clientX, event.clientY);
           }}
-          onPointerUp={() => {
-            draggingRef.current = false;
-          }}
-          className="absolute -translate-x-1/2 -translate-y-1/2 cursor-grab rounded-full shadow-md ring-[3px] ring-white transition-[background-color] duration-75 active:cursor-grabbing"
+          onPointerUp={finDeGlisse}
+          className="absolute -translate-x-1/2 -translate-y-1/2 cursor-grab rounded-full shadow-md ring-[3px] ring-white active:cursor-grabbing"
           style={{
             left: `${dominant.x * 100}%`,
             top: `${dominant.y * 100}%`,
             width: STOP_SIZES_PX[0],
             height: STOP_SIZES_PX[0],
             backgroundColor: dominant.color,
+            transition: transitionRonds,
           }}
         />
         <div className="absolute inset-x-0 bottom-2.5 flex items-center justify-center gap-4">
@@ -424,13 +432,10 @@ export function SpaceThemePanel({ spaceId }: { readonly spaceId?: string } = {})
         </div>
       </div>
 
-      {/* Le SOCLE : nuancier + vague + molette sur un verre plus dense que la
-          toile — c'est ce qui les fait lire comme un pupitre sous une fenêtre
-          (captures Arc 30/07), au lieu d'une seule plaque uniforme. */}
+      {/* Le SOCLE laiteux : nuancier + vague + molette. */}
       <div className={cn("flex flex-col", isDarkCanvas ? "bg-neutral-900/45" : "bg-white/55")}>
-        {/* Le nuancier : page 1 des UNIS (un rond = la dominante), flèche →
-            page des GRADIENTS (un rond = les trois d'un coup). */}
-        <div className="flex items-center gap-1.5 px-3 pt-2.5 pb-1">
+        {/* Le nuancier GLISSE entre ses pages (mesure : ~300 ms par page). */}
+        <div className="flex items-center gap-1.5 px-3 pt-3 pb-1.5">
           <button
             type="button"
             aria-label="Couleurs unies"
@@ -443,13 +448,18 @@ export function SpaceThemePanel({ spaceId }: { readonly spaceId?: string } = {})
           >
             <ChevronLeftIcon className="size-4" />
           </button>
-          <div className="flex flex-1 items-center justify-between">
-            {swatchPage === 0
-              ? SOLID_SWATCHES.map((color) => (
+          <div className="relative flex-1 overflow-hidden">
+            <div
+              className="flex w-[200%] transition-transform duration-300 ease-[cubic-bezier(0.25,1,0.5,1)] motion-reduce:transition-none"
+              style={{ transform: swatchPage === 0 ? "translateX(0%)" : "translateX(-50%)" }}
+            >
+              <div className="flex w-1/2 items-center justify-between">
+                {SOLID_SWATCHES.map((color) => (
                   <button
                     key={color}
                     type="button"
                     aria-label={`Couleur ${color}`}
+                    tabIndex={swatchPage === 0 ? 0 : -1}
                     onClick={() => applySolid(color)}
                     className="size-6 cursor-pointer rounded-full ring-1 ring-black/10 transition-transform hover:scale-110"
                     style={{
@@ -458,20 +468,27 @@ export function SpaceThemePanel({ spaceId }: { readonly spaceId?: string } = {})
                         : color,
                     }}
                   />
-                ))
-              : GRADIENT_SWATCHES.map((trio) => (
+                ))}
+              </div>
+              <div className="flex w-1/2 items-center justify-between">
+                {GRADIENT_SWATCHES.map((trio) => (
                   <button
                     key={trio.join("-")}
                     type="button"
                     aria-label={`Gradient ${trio.join(", ")}`}
+                    tabIndex={swatchPage === 1 ? 0 : -1}
                     onClick={() => applyGradient(trio)}
-                    className="size-6 cursor-pointer rounded-full ring-1 ring-black/10 transition-transform hover:scale-110"
+                    // Le liseré d'Arc : un anneau INTÉRIEUR sombre du propre
+                    // ton de la pastille (relevé sur zoom natif).
+                    className="size-6 cursor-pointer rounded-full shadow-[inset_0_0_0_2px_rgba(0,0,0,0.14)] transition-transform hover:scale-110"
                     style={{
                       background: `linear-gradient(135deg, ${trio[0]} 0%, ${trio[1]} 50%, ${trio[2]} 100%)`,
                       ...(isDarkCanvas ? { filter: "brightness(0.78)" } : {}),
                     }}
                   />
                 ))}
+              </div>
+            </div>
           </div>
           <button
             type="button"
@@ -488,7 +505,7 @@ export function SpaceThemePanel({ spaceId }: { readonly spaceId?: string } = {})
         </div>
 
         {/* La vague d'intensité + la molette de grain. */}
-        <div className="flex items-center gap-4 px-4 pt-1 pb-3.5">
+        <div className="flex items-center gap-3 px-4 pt-1.5 pb-4">
           <IntensityWave
             dark={isDarkCanvas}
             value={current.intensity}
@@ -496,6 +513,7 @@ export function SpaceThemePanel({ spaceId }: { readonly spaceId?: string } = {})
           />
           <GrainDial
             dark={isDarkCanvas}
+            couleur={dominant.color}
             value={current.grain}
             onChange={(grain) => apply({ ...current, grain })}
           />
@@ -506,9 +524,46 @@ export function SpaceThemePanel({ spaceId }: { readonly spaceId?: string } = {})
 }
 
 /**
- * Le slider d'Arc : la sinusoïde n'est pas un rail décoratif — SON AMPLITUDE
- * EST LA VALEUR. Presque plate quand la couleur est délavée, pleine quand
- * elle assume. La pilule reste la poignée de position.
+ * Les étoiles de l'apparence automatique — elles SCINTILLENT au survol
+ * (mesure : bouffées de ~200 ms toutes les 0,5-1 s pendant 7,5 s de survol
+ * observées sur la cellule de l'icône). Trois étoiles, délais décalés ;
+ * l'animation vit dans index.css (`t3-etoile-scintille`).
+ */
+function EtoilesScintillantes() {
+  return (
+    <svg viewBox="0 0 16 16" className="size-4" aria-hidden>
+      <path
+        className="t3-etoile"
+        d="M6 1.2 7.3 4.2 10.3 5.5 7.3 6.8 6 9.8 4.7 6.8 1.7 5.5 4.7 4.2Z"
+        fill="currentColor"
+      />
+      <path
+        className="t3-etoile t3-etoile-2"
+        d="M11.8 6.6 12.6 8.4 14.4 9.2 12.6 10 11.8 11.8 11 10 9.2 9.2 11 8.4Z"
+        fill="currentColor"
+      />
+      <path
+        className="t3-etoile t3-etoile-3"
+        d="M7.6 10.8 8.2 12.2 9.6 12.8 8.2 13.4 7.6 14.8 7 13.4 5.6 12.8 7 12.2Z"
+        fill="currentColor"
+      />
+    </svg>
+  );
+}
+
+/**
+ * La vague d'Arc, re-mesurée à 120 Hz (4 965 frames, natif). Contre la
+ * version précédente, deux corrections tranchées par la mesure :
+ *
+ * — UNE SEULE VAGUE CONTINUE, pleine largeur, amplitude UNIFORME : la
+ *   demi-amplitude suit la course (≈ 1 css à 10 %, 14,25 css à 95 %,
+ *   linéaire), la longueur d'onde est FIXE (36 css, σ 1,1-1,9 sur toute la
+ *   plage utile). La « queue » après la poignée a la MÊME amplitude — elle
+ *   est seulement PLUS PÂLE (luminance de trait 117-122 avant la poignée,
+ *   165-172 après, sur les mêmes frames). L'ancienne queue à 0,55× n'existe
+ *   pas.
+ * — La vague roule sur une PISTE : bande arrondie pâle de 16 css, pleine
+ *   largeur, que les crêtes débordent. Trait 3,5 css. Poignée 22 × 54 css.
  */
 function IntensityWave(props: { dark: boolean; value: number; onChange: (value: number) => void }) {
   const railRef = useRef<HTMLDivElement | null>(null);
@@ -519,38 +574,24 @@ function IntensityWave(props: { dark: boolean; value: number; onChange: (value: 
     const rect = rail.getBoundingClientRect();
     props.onChange(Math.max(0, Math.min(1, (clientX - rect.left) / rect.width)));
   };
-  /**
-   * La vague d'Arc, MESURÉE image par image (enregistrement 30/07, 2 878
-   * frames à 60 fps du vrai panneau).
-   *
-   * Ce que la mesure a tranché, contre deux lectures fausses d'affilée :
-   * l'amplitude EST la valeur. Au minimum la vague est une ligne PARFAITEMENT
-   * plate ; plus la poignée va à droite, plus les ondulations montent en
-   * HAUTEUR. Ma première version partait d'un plancher non nul (jamais plate),
-   * la seconde faisait varier la longueur ondulée à amplitude fixe (plate
-   * nulle part). Les frames à 2 %, 55 % et 85 % de course ne laissent aucun
-   * doute.
-   *
-   * Et un détail que seule la frame à 55 % montre : la vague CONTINUE après
-   * la poignée, mais plus basse et plus pâle. Deux traits, donc — le rempli
-   * et le reste — jamais un seul.
-   */
-  const [wavePath, waveTailPath] = useMemo(() => {
+  // Largeur de rail = 358 − px-4 (32) − gap-3 (12) − molette (72) : le
+  // viewBox colle au rendu 1:1, la longueur d'onde reste 36 css, mesurée.
+  const LARGEUR = 242;
+  const HAUTEUR = 56;
+  const [remplie, pale] = useMemo(() => {
     const valeur = Math.max(0, Math.min(1, props.value));
-    const amplitude = valeur * 9;
-    const bascule = valeur * 160;
-    const trace = (depuis: number, jusqu: number, hauteur: number): string => {
+    const amplitude = valeur * 14.25;
+    const xPoignee = 4 + valeur * (LARGEUR - 8);
+    const trace = (depuis: number, jusqu: number): string => {
+      if (jusqu - depuis < 2) return "";
       const points: string[] = [];
       for (let x = depuis; x <= jusqu; x += 2) {
-        const y = 14 - Math.sin((x / 22) * Math.PI * 2) * hauteur;
+        const y = HAUTEUR / 2 - Math.sin((x / 36) * Math.PI * 2) * amplitude;
         points.push(`${x === depuis ? "M" : "L"}${x} ${y.toFixed(1)}`);
       }
       return points.join(" ");
     };
-    return [
-      trace(0, Math.max(2, bascule), amplitude),
-      trace(Math.max(2, bascule), 160, amplitude * 0.55),
-    ];
+    return [trace(4, xPoignee), trace(xPoignee, LARGEUR - 4)];
   }, [props.value]);
   return (
     <div
@@ -580,102 +621,189 @@ function IntensityWave(props: { dark: boolean; value: number; onChange: (value: 
       onPointerUp={() => {
         draggingRef.current = false;
       }}
-      className="relative h-10 flex-1 cursor-pointer touch-none outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      className="relative h-[60px] flex-1 cursor-pointer touch-none outline-none focus-visible:ring-2 focus-visible:ring-ring"
     >
-      <svg viewBox="0 0 160 28" className="absolute inset-y-1 w-full" preserveAspectRatio="none">
-        {/* Le RESTE d'abord, sous le rempli : plus bas, plus pâle. */}
+      {/* La piste : bande pâle que la vague déborde (mesure : 16 css). */}
+      <span
+        aria-hidden
+        className={cn(
+          "absolute top-1/2 right-0 left-0 h-4 -translate-y-1/2 rounded-full",
+          props.dark ? "bg-white/12" : "bg-white/45",
+        )}
+      />
+      <svg
+        viewBox={`0 0 ${LARGEUR} ${HAUTEUR}`}
+        className="absolute inset-x-0 top-1/2 h-[56px] w-full -translate-y-1/2"
+        preserveAspectRatio="xMidYMid meet"
+      >
+        {/* Après la poignée : MÊME amplitude, trait pâle. */}
         <path
-          d={waveTailPath}
+          d={pale}
           fill="none"
-          stroke={props.dark ? "rgb(255 255 255 / 0.20)" : "rgb(60 60 65 / 0.22)"}
+          stroke={props.dark ? "rgb(255 255 255 / 0.26)" : "rgb(52 62 58 / 0.24)"}
           strokeWidth="3.5"
           strokeLinecap="round"
         />
         <path
-          d={wavePath}
+          d={remplie}
           fill="none"
-          stroke={props.dark ? "rgb(255 255 255 / 0.55)" : "rgb(60 60 65 / 0.62)"}
+          stroke={props.dark ? "rgb(255 255 255 / 0.72)" : "rgb(52 62 58 / 0.68)"}
           strokeWidth="3.5"
           strokeLinecap="round"
         />
       </svg>
       <span
         aria-hidden
-        className="absolute top-1/2 h-10 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white shadow-md ring-1 ring-black/10"
+        className="absolute top-1/2 h-[54px] w-[22px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-white shadow-md ring-1 ring-black/10"
         style={{ left: `${props.value * 100}%` }}
       />
     </div>
   );
 }
 
-/** La molette de grain : cadran pointillé, index qui tourne, disque central
- * révélé au survol. Drag vertical (+ flèches clavier). */
-function GrainDial(props: { dark: boolean; value: number; onChange: (value: number) => void }) {
-  const draggingRef = useRef<{ startY: number; startValue: number } | null>(null);
-  const DOTS = 12;
-  const angle = -135 + props.value * 270;
+/**
+ * La molette de grain d'Arc, mesurée : 20 CRANS de 18° (19 pointillés + la
+ * pilule qui occupe le cran courant ; repos observés uniquement à 0° et 18°),
+ * pilule TANGENTE à l'anneau, disque central de 40 css qui porte l'aperçu
+ * GRAINÉ de la couleur dominante (vide + crayon à zéro).
+ *
+ * ROUE INFINIE : on tourne dans les deux sens sans butée ; passer le cran
+ * max remet à zéro (mesuré en plein tour : grain plein → nul → plein,
+ * t = 42 s et 44 s de la capture). C'est un geste ROTATIF, pas un drag
+ * vertical.
+ */
+function GrainDial(props: {
+  dark: boolean;
+  couleur: string;
+  value: number;
+  onChange: (value: number) => void;
+}) {
+  const CRANS = 20;
+  const PAS = 360 / CRANS;
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const rotationRef = useRef<{ dernierAngle: number; accumule: number } | null>(null);
+  const notch = Math.max(0, Math.min(CRANS - 1, Math.round(props.value * (CRANS - 1))));
+
+  const angleDuPointeur = (clientX: number, clientY: number): number | null => {
+    const root = rootRef.current;
+    if (root === null) return null;
+    const rect = root.getBoundingClientRect();
+    const dx = clientX - (rect.left + rect.width / 2);
+    const dy = clientY - (rect.top + rect.height / 2);
+    return (Math.atan2(dy, dx) * 180) / Math.PI;
+  };
+  const poserCran = (prochain: number) => {
+    const borne = ((prochain % CRANS) + CRANS) % CRANS;
+    props.onChange(borne / (CRANS - 1));
+  };
+
   return (
     <div
+      ref={rootRef}
       role="slider"
-      aria-label="Grain de la texture"
+      aria-label="Grain de la texture — roue sans fin, le cran après le maximum revient à zéro"
       aria-valuemin={0}
-      aria-valuemax={100}
-      aria-valuenow={Math.round(props.value * 100)}
+      aria-valuemax={CRANS - 1}
+      aria-valuenow={notch}
       tabIndex={0}
       onKeyDown={(event) => {
-        if (event.key === "ArrowDown") props.onChange(Math.max(0, props.value - 0.05));
-        if (event.key === "ArrowUp") props.onChange(Math.min(1, props.value + 0.05));
+        if (event.key === "ArrowDown" || event.key === "ArrowLeft") poserCran(notch - 1);
+        if (event.key === "ArrowUp" || event.key === "ArrowRight") poserCran(notch + 1);
+      }}
+      onWheel={(event) => {
+        poserCran(notch + (event.deltaY > 0 ? -1 : 1));
       }}
       onPointerDown={(event) => {
-        draggingRef.current = { startY: event.clientY, startValue: props.value };
+        const angle = angleDuPointeur(event.clientX, event.clientY);
+        if (angle === null) return;
+        rotationRef.current = { dernierAngle: angle, accumule: 0 };
         try {
           event.currentTarget.setPointerCapture(event.pointerId);
         } catch {
-          // Sans capture, le drag vit tant que le pointeur reste au-dessus.
+          // Sans capture, la rotation vit tant que le pointeur survole.
         }
       }}
       onPointerMove={(event) => {
-        const drag = draggingRef.current;
-        if (drag === null) return;
-        const delta = (drag.startY - event.clientY) / 90;
-        props.onChange(Math.max(0, Math.min(1, drag.startValue + delta)));
+        const rotation = rotationRef.current;
+        if (rotation === null) return;
+        const angle = angleDuPointeur(event.clientX, event.clientY);
+        if (angle === null) return;
+        let delta = angle - rotation.dernierAngle;
+        if (delta > 180) delta -= 360;
+        if (delta < -180) delta += 360;
+        rotation.dernierAngle = angle;
+        rotation.accumule += delta;
+        const crans = Math.trunc(rotation.accumule / PAS);
+        if (crans !== 0) {
+          rotation.accumule -= crans * PAS;
+          poserCran(notch + crans);
+        }
       }}
       onPointerUp={() => {
-        draggingRef.current = null;
+        rotationRef.current = null;
       }}
-      className="group relative size-12 shrink-0 cursor-ns-resize touch-none outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      className="relative size-[72px] shrink-0 cursor-grab touch-none outline-none focus-visible:ring-2 focus-visible:ring-ring active:cursor-grabbing"
     >
-      <span
-        aria-hidden
-        className={cn(
-          "absolute left-1/2 top-1/2 size-7 -translate-x-1/2 -translate-y-1/2 rounded-full opacity-0 transition-opacity group-hover:opacity-100",
-          props.dark ? "bg-white/15" : "bg-black/10",
-        )}
-      />
-      {Array.from({ length: DOTS }, (_, index) => {
-        const dotAngle = (index / DOTS) * 360;
+      {/* Les 20 crans : allumés jusqu'au cran courant, la pilule POSÉE sur
+          le cran courant, tangente à l'anneau. */}
+      {Array.from({ length: CRANS }, (_, index) => {
+        if (index === notch) return null;
+        const allume = index < notch;
         return (
           <span
             key={index}
             aria-hidden
             className={cn(
-              "absolute left-1/2 top-1/2 size-[3px] rounded-full",
-              props.dark ? "bg-white/40" : "bg-black/30",
+              "absolute top-1/2 left-1/2 size-[6px] rounded-full transition-colors",
+              allume
+                ? props.dark
+                  ? "bg-white/85"
+                  : "bg-black/55"
+                : props.dark
+                  ? "bg-white/30"
+                  : "bg-black/20",
             )}
             style={{
-              transform: `translate(-50%, -50%) rotate(${dotAngle}deg) translateY(-21px)`,
+              transform: `translate(-50%, -50%) rotate(${index * PAS - 90}deg) translateX(30px)`,
             }}
           />
         );
       })}
       <span
         aria-hidden
-        className={cn(
-          "absolute left-1/2 top-1/2 h-3 w-[3px] -translate-x-1/2 rounded-full",
-          props.dark ? "bg-white/80" : "bg-black/60",
-        )}
-        style={{ transform: `translate(-50%, -50%) rotate(${angle}deg) translateY(-13px)` }}
+        className="absolute top-1/2 left-1/2 h-[16px] w-[10px] rounded-full bg-white shadow-sm ring-1 ring-black/10"
+        style={{
+          transform: `translate(-50%, -50%) rotate(${notch * PAS - 90}deg) translateX(30px) rotate(90deg)`,
+        }}
       />
+      {notch > 0 ? (
+        <span
+          aria-hidden
+          className="absolute top-1/2 left-1/2 size-10 -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-full ring-1 ring-black/15"
+          style={{
+            backgroundColor: `color-mix(in oklab, ${props.couleur} 52%, ${props.dark ? "#2a2e2c" : "#c9cdc9"})`,
+          }}
+        >
+          {/* L'aperçu vivant : le grain lui-même, dosé par la valeur. */}
+          <span
+            className="absolute inset-0 mix-blend-overlay"
+            style={{
+              backgroundImage: `url("${SIDEBAR_THEME_GRAIN_URL}")`,
+              opacity: 0.35 + 0.65 * props.value,
+            }}
+          />
+        </span>
+      ) : (
+        <span
+          aria-hidden
+          className={cn(
+            "absolute top-1/2 left-1/2 flex size-10 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full transition-colors",
+            props.dark ? "text-white/60" : "text-black/45",
+          )}
+        >
+          <PencilIcon className="size-3.5" />
+        </span>
+      )}
     </div>
   );
 }

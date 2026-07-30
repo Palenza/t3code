@@ -1640,6 +1640,45 @@ label:has(> select#reasoning-effort) select {
  * du 29/07 : contraste 1,6 sur magenta, illisible. Sous voile, l'encre
  * reprend son opacité pleine, décidée par le contraste (voir
  * `sidebarThemeInk`). Retirer l'attribut restaure le rendu amont exact. */
-[data-app-sidebar][data-wash-ink] :is([class*="text-muted-foreground/"], [class*="text-sidebar-muted-foreground/"], [class*="text-sidebar-foreground/"], [class*="text-foreground/"]) {
+[data-app-sidebar][data-wash-ink]
+  :is(
+    [class*="text-muted-foreground/"],
+    [class*="text-sidebar-muted-foreground/"],
+    [class*="text-sidebar-foreground/"],
+    [class*="text-foreground/"]
+  ) {
   color: var(--sidebar-muted-foreground);
+}
+
+/* Les étoiles de l'apparence automatique (éditeur de thème) : elles
+ * SCINTILLENT au survol — mesuré sur la capture Arc du 30/07 (bouffées de
+ * ~200 ms toutes les 0,5-1 s pendant le survol). Trois étoiles décalées. */
+@keyframes t3-etoile-scintille {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scale(0.7);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+.t3-etoile {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.t3-etoiles:hover .t3-etoile {
+  animation: t3-etoile-scintille 1.4s ease-in-out infinite;
+}
+.t3-etoiles:hover .t3-etoile-2 {
+  animation-delay: 0.45s;
+}
+.t3-etoiles:hover .t3-etoile-3 {
+  animation-delay: 0.9s;
+}
+@media (prefers-reduced-motion: reduce) {
+  .t3-etoiles:hover .t3-etoile {
+    animation: none;
+  }
 }
