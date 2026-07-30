@@ -1885,12 +1885,38 @@ const make = Effect.gen(function* () {
       if (event.type === "runtime.error") {
         const runtimeErrorMessage = event.payload.message;
 
+        // LE REJEU MANQUAIT SUR CE CHEMIN. `turn.completed` le portait déjà,
+        // pas celui-ci — or c'est LUI que l'humain voit : le fil affiche
+        // « Runtime error » et s'arrête. Le relais basculait donc bien de
+        // compte, mais la question restait sans réponse, et il fallait la
+        // renvoyer à la main. C'est exactement ce qui s'est passé le 30/07
+        // sur « out of usage credits » : deux « go » morts de suite.
+        //
+        // Même source que l'autre chemin — le dernier message de l'humain
+        // dans le détail déjà chargé. Sans lui, la bascule seule s'applique,
+        // ce qui reste mieux que rien.
+        const detailPourRejeu = yield* getLoadedThreadDetail();
+        const dernierUtilisateur = [...(detailPourRejeu?.messages ?? [])]
+          .reverse()
+          .find((m) => m.role === "user");
+
         yield* tenterRelais({
           event,
           thread,
           message: runtimeErrorMessage,
           turnId: toTurnId(event.turnId) ?? undefined,
           now,
+          ...(dernierUtilisateur === undefined
+            ? {}
+            : {
+                rejouer: {
+                  messageId: dernierUtilisateur.id,
+                  text: dernierUtilisateur.text,
+                  attachments: dernierUtilisateur.attachments ?? [],
+                  runtimeMode: thread.session?.runtimeMode ?? "full-access",
+                  interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+                },
+              }),
         });
 
         const shouldApplyRuntimeError = !STRICT_PROVIDER_LIFECYCLE_GUARD
