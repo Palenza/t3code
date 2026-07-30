@@ -19,12 +19,30 @@ BRANCHE="${T3_FORK_BRANCH:-travail}"
 cd "$REPO"
 
 echo "→ [1/5] État du dépôt"
+# Un dépôt sale ne REFUSE plus la mise à jour : il la bloquait pour toujours
+# dès qu'un chantier laissait un fichier en vol (vécu 30/07 — le fondateur
+# clique « Mettre à jour », reçoit « dépôt pas propre », et ne peut RIEN y
+# faire). Les modifications sont mises de côté (stash, non-suivis compris)
+# et RESTAURÉES quoi qu'il arrive — trap EXIT, donc aussi sur échec.
+STASH_FAIT=0
 SALE=$(git status --porcelain)
 if [ -n "$SALE" ]; then
-  echo "✗ Le dépôt a des modifications non commitées — rien n'est touché."
+  echo "  Modifications non commitées — mises de côté le temps de la mise à jour, restaurées à la fin :"
   echo "$SALE" | head -10
-  exit 1
+  git stash push -u -m "t3-maj-auto" --quiet
+  STASH_FAIT=1
 fi
+restaurer_stash() {
+  if [ "$STASH_FAIT" -eq 1 ]; then
+    if git stash pop --quiet; then
+      echo "→ Modifications locales RESTAURÉES."
+    else
+      echo "⚠️ CONFLIT en restaurant tes modifications locales — RIEN n'est perdu :"
+      echo "   elles t'attendent dans « git stash list » (t3-maj-auto). Résous avec « git stash pop »."
+    fi
+  fi
+}
+trap restaurer_stash EXIT
 
 echo "→ [2/5] Récupération de l'amont (pingdotgg/t3code)"
 git remote get-url upstream >/dev/null 2>&1 || \

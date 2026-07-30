@@ -151,15 +151,74 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
   // mort pour qu'un long geste ne saute pas trois espaces d'un coup.
   const spaceSwipeAccumRef = useRef(0);
   const spaceSwipeLastFireRef = useRef(0);
+  const spaceSwipeSettleRef = useRef<number | null>(null);
+  // Le geste se VOIT pendant qu'il se fait. Avant, rien ne bougeait jusqu'au
+  // seuil puis l'espace sautait d'un coup — « l'animation est très nulle, pas
+  // fluide » (fondateur, 30/07). Désormais le contenu SUIT les doigts (offset
+  // amorti en tanh, plafonné à 44 px), retombe en ressort si le geste
+  // n'aboutit pas, et traverse en deux temps quand il aboutit. Tout est en
+  // transitions CSS + setTimeout — jamais de rAF : une fenêtre cachée ne le
+  // tire pas (leçon 30/07, overlay resté invisible).
+  const innerDe = (cible: HTMLDivElement): HTMLElement | null =>
+    cible.querySelector<HTMLElement>("[data-slot=sidebar-inner]");
+  const suivreLeDoigt = (cible: HTMLDivElement, accum: number) => {
+    const inner = innerDe(cible);
+    if (inner === null) return;
+    const offset = Math.tanh(-accum / 220) * 44;
+    inner.style.willChange = "transform";
+    inner.style.transition = "none";
+    inner.style.transform = `translateX(${offset}px)`;
+  };
+  const retomber = (cible: HTMLDivElement) => {
+    const inner = innerDe(cible);
+    if (inner === null) return;
+    inner.style.transition = "transform 240ms cubic-bezier(0.22, 1, 0.36, 1)";
+    inner.style.transform = "translateX(0px)";
+  };
+  const traverser = (cible: HTMLDivElement, direction: 1 | -1, bascule: () => void) => {
+    const inner = innerDe(cible);
+    if (inner === null) {
+      bascule();
+      return;
+    }
+    // Sortie du côté du geste, entrée par le côté opposé — 150 ms + 200 ms.
+    inner.style.transition = "transform 150ms cubic-bezier(0.4, 0, 1, 1), opacity 150ms linear";
+    inner.style.transform = `translateX(${direction * 72}px)`;
+    inner.style.opacity = "0.25";
+    window.setTimeout(() => {
+      bascule();
+      inner.style.transition = "none";
+      inner.style.transform = `translateX(${direction * -56}px)`;
+      // Reflow forcé : sans lui, le navigateur fusionne les deux écritures et
+      // l'entrée partirait du mauvais côté.
+      void inner.offsetWidth;
+      inner.style.transition =
+        "transform 200ms cubic-bezier(0.22, 1, 0.36, 1), opacity 200ms linear";
+      inner.style.transform = "translateX(0px)";
+      inner.style.opacity = "1";
+    }, 150);
+  };
   const handleSidebarWheel = useCallback((event: ReactWheelEvent<HTMLDivElement>) => {
     if (Math.abs(event.deltaX) <= Math.abs(event.deltaY)) {
+      if (spaceSwipeAccumRef.current !== 0) retomber(event.currentTarget);
       spaceSwipeAccumRef.current = 0;
       return;
     }
     const now = Date.now();
     if (now - spaceSwipeLastFireRef.current < 450) return;
     spaceSwipeAccumRef.current += event.deltaX;
-    if (Math.abs(spaceSwipeAccumRef.current) < 110) return;
+    // Un geste qui s'arrête sans atteindre le seuil retombe en douceur.
+    if (spaceSwipeSettleRef.current !== null) window.clearTimeout(spaceSwipeSettleRef.current);
+    const cible = event.currentTarget;
+    spaceSwipeSettleRef.current = window.setTimeout(() => {
+      spaceSwipeAccumRef.current = 0;
+      retomber(cible);
+    }, 140);
+    if (Math.abs(spaceSwipeAccumRef.current) < 110) {
+      suivreLeDoigt(cible, spaceSwipeAccumRef.current);
+      return;
+    }
+    if (spaceSwipeSettleRef.current !== null) window.clearTimeout(spaceSwipeSettleRef.current);
     // ATTENTION AU SIGNE. Avec le défilement naturel de macOS, deux doigts qui
     // partent vers la DROITE produisent un deltaX NÉGATIF : le contenu suit les
     // doigts, donc la fenêtre recule. Je lisais ce signe tel quel, et tout le
@@ -176,10 +235,15 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
     // sens : vers la droite on REMONTE — d'espace en espace jusqu'à la vue
     // principale, puis d'un cran de plus jusqu'à la bibliothèque.
     if (versLaDroite > 0 && useSidebarSpacesStore.getState().activeSpaceId === null) {
+      // La bibliothèque est un survol : la sidebar retombe pendant qu'il
+      // s'ouvre, pas de traversée — deux animations concurrentes se battraient.
+      retomber(cible);
       useBibliothequeStore.getState().ouvrir("espaces");
       return;
     }
-    useSidebarSpacesStore.getState().cycleSpace(versLaDroite);
+    traverser(cible, versLaDroite, () => {
+      useSidebarSpacesStore.getState().cycleSpace(versLaDroite);
+    });
   }, []);
 
   /**

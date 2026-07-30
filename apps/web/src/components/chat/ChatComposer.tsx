@@ -43,6 +43,7 @@ import {
   replaceTextRange,
   shouldSubmitComposerOnEnter,
 } from "../../composer-logic";
+import { ModeTravailComposerControl } from "../sidebar/SidebarModeTravail";
 import { deriveComposerSendState, readFileAsDataUrl } from "../ChatView.logic";
 import {
   dataTransferHasComposerMention,
@@ -379,6 +380,8 @@ const ComposerFooterModeControls = memo(function ComposerFooterModeControls(prop
       </Tooltip>
 
       {interactionModeToggle}
+
+      <ModeTravailComposerControl />
 
       {props.showPlanToggle ? (
         <>
@@ -3323,34 +3326,34 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                 ) : null}
               </div>
             )}
-              {showMobilePendingAnswerActions ? (
-                <div
-                  data-chat-composer-mobile-pending-actions="true"
-                  className="absolute bottom-0 right-0 flex justify-end"
-                >
-                  <ComposerPrimaryActions
-                    compact
-                    pendingAction={pendingPrimaryAction}
-                    isRunning={false}
-                    showPlanFollowUpPrompt={false}
-                    promptHasText={false}
-                    isSendBusy={isSendBusy}
-                    sendDisabledReason={sendDisabledReason}
-                    isConnecting={isConnecting}
-                    isEnvironmentUnavailable={
-                      environmentUnavailable !== null ||
-                      noProviderAvailable ||
-                      projectSelectionRequired
-                    }
-                    isPreparingWorktree={false}
-                    hasSendableContent={false}
-                    preserveComposerFocusOnPointerDown
-                    onPreviousPendingQuestion={onPreviousActivePendingUserInputQuestion}
-                    onInterrupt={handleInterruptPrimaryAction}
-                    onImplementPlanInNewThread={handleImplementPlanInNewThreadPrimaryAction}
-                  />
-                </div>
-              ) : null}
+            {showMobilePendingAnswerActions ? (
+              <div
+                data-chat-composer-mobile-pending-actions="true"
+                className="absolute bottom-0 right-0 flex justify-end"
+              >
+                <ComposerPrimaryActions
+                  compact
+                  pendingAction={pendingPrimaryAction}
+                  isRunning={false}
+                  showPlanFollowUpPrompt={false}
+                  promptHasText={false}
+                  isSendBusy={isSendBusy}
+                  sendDisabledReason={sendDisabledReason}
+                  isConnecting={isConnecting}
+                  isEnvironmentUnavailable={
+                    environmentUnavailable !== null ||
+                    noProviderAvailable ||
+                    projectSelectionRequired
+                  }
+                  isPreparingWorktree={false}
+                  hasSendableContent={false}
+                  preserveComposerFocusOnPointerDown
+                  onPreviousPendingQuestion={onPreviousActivePendingUserInputQuestion}
+                  onInterrupt={handleInterruptPrimaryAction}
+                  onImplementPlanInNewThread={handleImplementPlanInNewThreadPrimaryAction}
+                />
+              </div>
+            ) : null}
           </div>
 
           {/* Bottom toolbar */}

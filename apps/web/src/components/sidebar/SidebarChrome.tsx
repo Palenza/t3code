@@ -5,8 +5,8 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import { useEnvironmentIdentificationMode } from "../../hooks/useSettings";
 import { cn } from "../../lib/utils";
 import { SidebarCarnet } from "./SidebarCarnet";
-import { SidebarMemoire } from "./SidebarMemoire";
 import { SidebarModeTravail } from "./SidebarModeTravail";
+import { SidebarMemoire } from "./SidebarMemoire";
 import { GeneralSettingsPanel, ProviderSettingsPanel } from "../settings/SettingsPanels";
 import { TableauLocalSettingsPanel } from "../settings/TableauLocalSettings";
 import { Popover, PopoverPopup, PopoverTrigger } from "../ui/popover";
@@ -217,7 +217,7 @@ function QuickSettingLink({
         // Un panneau de 696 px n'y tient pas, et aucun alignement n'y change
         // rien. Il devient donc un APERÇU qui défile — jamais rogné, jamais
         // hors champ — et le contenu entier reste à un clic, sur sa page.
-        className="max-h-full w-[min(720px,60vw)] overflow-hidden p-0"
+        className="h-[min(72vh,40rem)] max-h-(--available-height) w-[min(720px,60vw)] overflow-hidden p-0"
         viewportClassName="max-h-full overflow-y-auto overscroll-contain p-0 [--viewport-inline-padding:0px]"
       >
         <div className="px-5 py-4">
@@ -263,10 +263,12 @@ export const SidebarChromeFooter = memo(function SidebarChromeFooter() {
           la chose la plus urgente à voir, et la seule qui se paie en fils
           morts si elle reste invisible. */}
       <SidebarCarnet />
+      {/* Le REGLAGE vit dans le composeur (à côté de Build) ; ici ne reste que
+          le CRI quand un mode restrictif désarme les agents. */}
+      <SidebarModeTravail />
       {/* La mémoire AVANT le mode : ce que l'app a retenu de toi pèse sur
           chaque session, et c'était jusqu'ici invisible et irrévocable. */}
       <SidebarMemoire />
-      <SidebarModeTravail />
       <SidebarMenu>
         {SIDEBAR_QUICK_LINKS.map((link) => (
           <SidebarMenuItem key={link.to}>

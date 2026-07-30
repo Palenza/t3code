@@ -52,7 +52,7 @@ function decrirePerimetre(motifs: ReadonlyArray<string>): string {
  * Silencieux tant qu'aucun mode restrictif n'est posé : un badge permanent
  * pour dire « rien n'est restreint » serait du bruit.
  */
-export function SidebarModeTravail() {
+function useModeTravail() {
   const [disponibles, setDisponibles] = useState<ReadonlyArray<ModeDisponible>>([]);
   const [actif, setActif] = useState<string | null>(null);
   const [ouvert, setOuvert] = useState(false);
@@ -130,11 +130,101 @@ export function SidebarModeTravail() {
     }
   }, []);
 
-  if (disponibles.length === 0) return null;
   const modeActif = disponibles.find((mode) => mode.slug === actif) ?? null;
-  // Sans restriction, le sélecteur ne s'affiche pas : un badge permanent qui
-  // dit « rien n'est bloqué » est du bruit.
   const restreint = (modeActif?.perimetre.length ?? 0) > 0 || modeActif?.slug === "revue";
+  return { disponibles, actif, ouvert, setOuvert, poser, modeActif, restreint };
+}
+
+/**
+ * Le choix des modes — partagé par toutes les surfaces qui l'affichent.
+ */
+function ModeTravailChoix({
+  disponibles,
+  actif,
+  poser,
+}: {
+  readonly disponibles: ReadonlyArray<ModeDisponible>;
+  readonly actif: string | null;
+  readonly poser: (slug: string | null) => Promise<void>;
+}) {
+  return (
+    <>
+      {/* Ce que ce réglage EST, dit en une phrase — « je ne sais pas ce que ça
+          veut dire » (reproche 30/07). */}
+      <p className="px-2.5 pt-1 pb-2 text-xs leading-snug text-muted-foreground">
+        Ce que tes agents ont le DROIT de faire, sur tous tes comptes : chaque mode restreint
+        l'écriture et les commandes. Il reste actif jusqu'à ce que tu en choisisses un autre.
+      </p>
+      {disponibles.map((mode) => (
+        <button
+          key={mode.slug}
+          type="button"
+          onClick={() => void poser(mode.slug)}
+          className={cn(
+            "flex w-full cursor-pointer flex-col gap-0.5 rounded-md px-2.5 py-2 text-left transition-colors hover:bg-accent",
+            mode.slug === actif && "bg-accent",
+          )}
+        >
+          <span className="text-sm font-medium">{mode.nom}</span>
+          <span className="text-xs text-muted-foreground">{mode.role}</span>
+          {mode.perimetre.length > 0 ? (
+            <span className="text-xs text-muted-foreground">
+              {decrirePerimetre(mode.perimetre)} — approbation demandée ailleurs
+            </span>
+          ) : mode.slug === "revue" ? (
+            <span className="text-xs text-muted-foreground">Aucune écriture possible</span>
+          ) : null}
+        </button>
+      ))}
+    </>
+  );
+}
+
+/**
+ * La variante COMPOSEUR — à côté de Build, là où l'on décide ce qu'un tour a
+ * le droit de faire (déplacement fondateur 30/07 : « s'il est utile, il doit
+ * être à côté du build »). Amber quand un mode restrictif est posé : un
+ * réglage qui désarme les agents doit crier là où l'on tape.
+ */
+export function ModeTravailComposerControl() {
+  const { disponibles, actif, ouvert, setOuvert, poser, modeActif, restreint } = useModeTravail();
+  if (disponibles.length === 0) return null;
+  return (
+    <Popover open={ouvert} onOpenChange={setOuvert}>
+      <PopoverTrigger
+        render={
+          <button
+            type="button"
+            aria-label={`Mode de travail : ${modeActif?.nom ?? "aucune restriction"}`}
+            className={cn(
+              "flex h-7 shrink-0 cursor-pointer items-center gap-1.5 rounded-md px-2 text-xs whitespace-nowrap transition-colors",
+              restreint
+                ? "bg-amber-500/15 text-amber-300 ring-1 ring-amber-400/40 hover:bg-amber-500/25"
+                : "text-muted-foreground/70 hover:text-foreground/80",
+            )}
+          >
+            <ShieldIcon className="size-3.5 shrink-0" />
+            <span className="hidden sm:inline">
+              {restreint ? (modeActif?.nom ?? "Mode") : "Mode"}
+            </span>
+          </button>
+        }
+      />
+      <PopoverPopup side="top" className="w-80 p-1.5">
+        <ModeTravailChoix disponibles={disponibles} actif={actif} poser={poser} />
+      </PopoverPopup>
+    </Popover>
+  );
+}
+
+/**
+ * L'ancienne surface latérale — conservée UNIQUEMENT comme bannière d'alerte
+ * quand un mode restrictif est actif : le composeur porte le réglage, la
+ * sidebar porte le cri.
+ */
+export function SidebarModeTravail() {
+  const { disponibles, ouvert, setOuvert, actif, poser, modeActif, restreint } = useModeTravail();
+  if (disponibles.length === 0 || !restreint) return null;
 
   return (
     <div className="px-2 pb-1">
@@ -174,31 +264,7 @@ export function SidebarModeTravail() {
           }
         />
         <PopoverPopup className="w-80 p-1.5">
-          {disponibles.map((mode) => (
-            <button
-              key={mode.slug}
-              type="button"
-              onClick={() => void poser(mode.slug)}
-              className={cn(
-                "flex w-full cursor-pointer flex-col gap-0.5 rounded-md px-2.5 py-2 text-left transition-colors hover:bg-accent",
-                mode.slug === actif && "bg-accent",
-              )}
-            >
-              <span className="text-sm font-medium">{mode.nom}</span>
-              <span className="text-xs text-muted-foreground">{mode.role}</span>
-              {mode.perimetre.length > 0 ? (
-                <span className="text-xs text-muted-foreground">
-                  {/* Les motifs bruts (`**​/*.md`, `docs/**`) s'affichaient tels
-                      quels. Des étoiles et des barres obliques ne disent rien à
-                      qui n'écrit pas de code — et c'est justement la personne
-                      qui doit décider si ce mode la protège. */}
-                  {decrirePerimetre(mode.perimetre)} — approbation demandée ailleurs
-                </span>
-              ) : mode.slug === "revue" ? (
-                <span className="text-xs text-muted-foreground">Aucune écriture possible</span>
-              ) : null}
-            </button>
-          ))}
+          <ModeTravailChoix disponibles={disponibles} actif={actif} poser={poser} />
         </PopoverPopup>
       </Popover>
     </div>

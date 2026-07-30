@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { useRouter } from "@tanstack/react-router";
-import { GlobeIcon, LayersIcon, PaletteIcon, PlusIcon } from "lucide-react";
+import { GlobeIcon, LayersIcon, PaletteIcon, PlusIcon, StarIcon } from "lucide-react";
 
 import { settlePromise } from "@t3tools/client-runtime/state/runtime";
 
@@ -598,7 +598,10 @@ export function SidebarFavoritesGrid() {
       {/* Un intertitre, parce que deux pilules collées sous le bandeau ne
           disent pas ce qu'elles sont (capture 30/07) — et il donne au même
           moment la respiration qui manquait sous la marque. */}
-      <p className="px-2 pt-1.5 pb-0.5 text-[11px] font-medium text-sidebar-muted-foreground/70">
+      {/* Décollé du bandeau de marque (reproche 30/07 : « trop à la lisière ») et
+          une étoile pour dire ce que c'est sans le lire. */}
+      <p className="flex items-center gap-1.5 px-2 pt-4 pb-1 text-[11px] font-medium text-sidebar-muted-foreground/70">
+        <StarIcon className="size-3 shrink-0" />
         Favoris
       </p>
       {favorites.map((favorite) => {

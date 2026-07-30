@@ -152,33 +152,11 @@ export const forkUpdateLancerRouteLayer = HttpRouter.add(
     if (rebuildRunning) {
       return HttpServerResponse.jsonUnsafe({ started: false, reason: "already-running" });
     }
-    // PRÉ-VOL. Le script refuse un dépôt sale — mais il le découvrait APRÈS
-    // qu'on ait annoncé « quelques minutes, la nouvelle app s'ouvre toute
-    // seule ». On promettait, puis on se dédisait. Une condition qui se
-    // vérifie en 30 ms ne doit jamais être découverte après une promesse.
-    //
-    // Le script re-vérifie : il reste l'autorité, ceci n'est qu'un refus
-    // précoce. Deux contrôles qui divergeraient seraient pires qu'un seul,
-    // c'est pourquoi la commande est la MÊME (`git status --porcelain`).
-    const sale = yield* Effect.callback<string | null>((resume) => {
-      NodeChildProcess.execFile(
-        "git",
-        ["status", "--porcelain"],
-        { cwd: FORK_REPO, timeout: 5_000 },
-        (erreur, sortie) => {
-          // Une erreur de git n'est PAS un dépôt propre : on laisse passer et
-          // le script tranchera, plutôt que de refuser sur une non-réponse.
-          resume(Effect.succeed(erreur !== null ? null : sortie.trim() || null));
-        },
-      );
-    });
-    if (sale !== null) {
-      return HttpServerResponse.jsonUnsafe({
-        started: false,
-        reason: "depot-sale",
-        fichiers: sale.split("\n").slice(0, 10),
-      });
-    }
+    // Le dépôt sale ne refuse PLUS rien : le script met les modifications de
+    // côté (stash) et les restaure quoi qu'il arrive. L'ancien pré-vol
+    // transformait tout chantier en vol en panne de mise à jour permanente —
+    // « Dépôt pas propre » sans aucun geste possible (vécu 30/07). Une seule
+    // autorité : le script.
     // `spawn` fails ASYNCHRONOUSLY (a missing `t3-maj` emits `error` on the
     // next tick), so answering right after the call would report started:true
     // for a command that never ran (trouvaille essaim 29/07). The response

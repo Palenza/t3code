@@ -118,7 +118,7 @@ export function SidebarForkUpdatePill() {
       toastManager.add(
         stackedThreadToast({
           type: "error",
-          title: body.reason === "depot-sale" ? "Dépôt pas propre" : "Update non lancée",
+          title: "Update non lancée",
           description:
             body.reason === "depot-sale"
               ? `Des modifications ne sont pas commitées — rien n'a été touché.${
