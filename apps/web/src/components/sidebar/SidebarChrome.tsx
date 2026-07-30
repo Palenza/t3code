@@ -1,12 +1,10 @@
-import { useAtomValue } from "@effect/atom-react";
 import { GaugeIcon, PlugIcon, SettingsIcon, SlidersHorizontalIcon } from "lucide-react";
 import { memo, useCallback, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 
 import { useEnvironmentIdentificationMode } from "../../hooks/useSettings";
 import { cn } from "../../lib/utils";
-import { primaryServerConfigAtom } from "../../state/server";
-import { resolveSidebarStageBadgeLabel } from "../Sidebar.logic";
+import { SidebarMemoire } from "./SidebarMemoire";
 import { SidebarModeTravail } from "./SidebarModeTravail";
 import { GeneralSettingsPanel, ProviderSettingsPanel } from "../settings/SettingsPanels";
 import { TableauLocalSettingsPanel } from "../settings/TableauLocalSettings";
@@ -260,6 +258,9 @@ export const SidebarChromeFooter = memo(function SidebarChromeFooter() {
           il s'intercalait entre les liens épinglés et la recherche, coupant
           la grille en deux (capture 30/07). Sa place est ici, avec General et
           Providers. */}
+      {/* La mémoire AVANT le mode : ce que l'app a retenu de toi pèse sur
+          chaque session, et c'était jusqu'ici invisible et irrévocable. */}
+      <SidebarMemoire />
       <SidebarModeTravail />
       <SidebarMenu>
         {SIDEBAR_QUICK_LINKS.map((link) => (
