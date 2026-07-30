@@ -1474,6 +1474,38 @@ const stageResourceMonitor = Effect.fn("stageResourceMonitor")(function* (input:
 }) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
+
+  // SANS RUST, ON PASSE — bruyamment.
+  //
+  // L'amont a ajouté un moniteur de ressources écrit en Rust (30/07). Sa
+  // compilation exige `cargo`, que ce Mac n'a pas — et le script l'exigeait
+  // sans porte de sortie. Résultat mesuré : PLUS AUCUN DMG ne sortait, et le
+  // bouton « Mise à jour » de l'app mourait à l'étape 4/5 après avoir déjà
+  // fusionné l'amont, sans marche arrière.
+  //
+  // Ce fork ne se sert pas de ce moniteur. Faire dépendre la fabrication de
+  // l'app entière d'un outil qu'on n'utilise pas est un mauvais échange. On
+  // saute donc l'étape — mais on le DIT : un binaire manquant en silence
+  // serait pire que l'échec qu'on répare.
+  const cargoDisponible = yield* Effect.gen(function* () {
+    const sonde = yield* resolveSpawnCommand("cargo", ["--version"]);
+    yield* runCommand(
+      ChildProcess.make(sonde.command, sonde.args, {
+        cwd: input.repoRoot,
+        shell: sonde.shell,
+      }),
+      { label: "cargo --version", verbose: false },
+    );
+    return true;
+  }).pipe(Effect.orElseSucceed(() => false));
+  if (!cargoDisponible) {
+    yield* Effect.logWarning(
+      "[desktop-artifact] cargo absent — moniteur de ressources NON embarqué. " +
+        "L'app se construit sans lui ; installe Rust (rustup) si tu le veux.",
+    );
+    return;
+  }
+
   const manifestPath = path.join(input.repoRoot, "native/resource-monitor/Cargo.toml");
   const executableName = resourceMonitorExecutableName(input.platform);
   const rustTargets = resolveResourceMonitorRustTargets(input.platform, input.arch);
