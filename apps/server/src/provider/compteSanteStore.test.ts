@@ -27,7 +27,7 @@ describe("registre de santé des comptes", () => {
   });
 
   it("un quota atteint écarte le compte jusqu'à son heure de reprise", () => {
-    noterEchec(id("A"), quotaAtteint(), "usage limit reached");
+    noterEchec(id("A"), quotaAtteint(), "usage limit reached", MAINTENANT);
 
     const sante = santeDe(id("A"));
     assert.strictEqual(sante.etat, "refroidissement");
@@ -36,14 +36,14 @@ describe("registre de santé des comptes", () => {
   });
 
   it("le refroidissement se lève tout seul à l'heure dite", () => {
-    noterEchec(id("A"), quotaAtteint(), "usage limit reached");
+    noterEchec(id("A"), quotaAtteint(), "usage limit reached", MAINTENANT);
 
     const uneHeureApres = MAINTENANT + 3_600_000;
     assert.deepStrictEqual(comptesUtilisables([id("A")], uneHeureApres), [id("A")]);
   });
 
   it("un jeton révoqué ne revient jamais, même dans cent jours", () => {
-    noterEchec(id("A"), jetonRevoque(), "token_revoked");
+    noterEchec(id("A"), jetonRevoque(), "token_revoked", MAINTENANT);
 
     assert.strictEqual(santeDe(id("A")).etat, "mort");
     assert.deepStrictEqual(comptesUtilisables([id("A")], MAINTENANT + 100 * 86_400_000), []);
@@ -52,7 +52,7 @@ describe("registre de santé des comptes", () => {
   it("une réussite répare un compte marqué mort à tort", () => {
     // La seule preuve qui vaut : si un tour passe, le compte est bon, quoi
     // qu'on ait déduit d'un message d'erreur mal formulé.
-    noterEchec(id("A"), jetonRevoque(), "token_revoked");
+    noterEchec(id("A"), jetonRevoque(), "token_revoked", MAINTENANT);
     noterSucces(id("A"));
 
     assert.strictEqual(santeDe(id("A")).etat, "ok");
@@ -64,12 +64,12 @@ describe("registre de santé des comptes", () => {
       tics += 1;
     });
 
-    noterEchec(id("A"), quotaAtteint(), "usage limit reached");
+    noterEchec(id("A"), quotaAtteint(), "usage limit reached", MAINTENANT);
     // Trois échecs de plus pendant le même refroidissement : rien n'a changé,
     // l'interface ne doit pas se repeindre trois fois.
-    noterEchec(id("A"), quotaAtteint(), "usage limit reached");
-    noterEchec(id("A"), quotaAtteint(), "usage limit reached");
-    noterEchec(id("A"), quotaAtteint(), "usage limit reached");
+    noterEchec(id("A"), quotaAtteint(), "usage limit reached", MAINTENANT);
+    noterEchec(id("A"), quotaAtteint(), "usage limit reached", MAINTENANT);
+    noterEchec(id("A"), quotaAtteint(), "usage limit reached", MAINTENANT);
 
     stop();
     assert.strictEqual(tics, 1);
@@ -93,9 +93,47 @@ describe("registre de santé des comptes", () => {
       message: "messages: field required",
       maintenant: MAINTENANT,
     });
-    noterEchec(id("A"), verdict, "requête invalide");
+    noterEchec(id("A"), verdict, "requête invalide", MAINTENANT);
 
     assert.strictEqual(santeDe(id("A")).etat, "ok");
     assert.deepStrictEqual(comptesUtilisables([id("A")], MAINTENANT), [id("A")]);
+  });
+});
+
+describe("le compteur d'échecs d'affilée", () => {
+  beforeEach(viderSantes);
+
+  const hoquet = () =>
+    classerEchec({ code: 500, message: "upstream hiccup", maintenant: MAINTENANT });
+
+  it("survit d'un échec à l'autre, même quand l'écran ne change pas", () => {
+    // Le registre ne PRÉVIENT les abonnés que si l'état visible bouge — sinon
+    // trois échecs pendant un refroidissement repeindraient l'interface trois
+    // fois. Le piège : cette économie d'affichage jetait aussi le compteur, et
+    // l'attente ne grandissait jamais.
+    noterEchec(id("A"), hoquet(), "500", MAINTENANT);
+    noterEchec(id("A"), hoquet(), "500", MAINTENANT);
+    const apres = noterEchec(id("A"), hoquet(), "500", MAINTENANT);
+    assert.strictEqual(apres.echecsDAffilee, 3);
+    assert.strictEqual(santeDe(id("A")).echecsDAffilee, 3);
+  });
+
+  it("une réussite REMET tout à zéro — c'est la seule preuve qui vaut", () => {
+    noterEchec(id("A"), hoquet(), "500", MAINTENANT);
+    noterEchec(id("A"), hoquet(), "500", MAINTENANT);
+    noterSucces(id("A"));
+    assert.strictEqual(santeDe(id("A")).echecsDAffilee, undefined);
+
+    // Et le compte repart de l'attente courte, pas de là où il s'était arrêté.
+    const repris = noterEchec(id("A"), hoquet(), "500", MAINTENANT);
+    assert.strictEqual(repris.echecsDAffilee, 1);
+  });
+
+  it("l'attente GRANDIT vraiment au fil des échecs", () => {
+    const heures = (iso: string | undefined) => (Date.parse(iso ?? "") - MAINTENANT) / 3_600_000;
+    const attentes = [1, 2, 3, 4, 5].map(() =>
+      heures(noterEchec(id("A"), hoquet(), "500", MAINTENANT).repriseA),
+    );
+    assert.deepStrictEqual(attentes, [1, 1, 4, 4, 12]);
   });
 });

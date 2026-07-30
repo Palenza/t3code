@@ -44,6 +44,14 @@ export interface SanteCompte {
   readonly repriseA?: string;
   /** Ce qui l'a mis là — affiché tel quel, jamais deviné. */
   readonly raison?: string;
+  /**
+   * Échecs « transitoires » d'affilée depuis la dernière réussite.
+   *
+   * Le mot « transitoire » est une CLAIM, pas un fait : c'est ce que le message
+   * d'erreur laisse croire. Quand la même claim se répète, elle devient fausse
+   * — et sans ce compteur, on la croyait indéfiniment.
+   */
+  readonly echecsDAffilee?: number;
 }
 
 /**
@@ -141,6 +149,32 @@ const REPRISE_SOLDE_MS = 12 * 60 * 60_000;
  * rafraîchissement), et une installation à un seul compte doit pouvoir s'en
  * remettre sans attendre une heure. Un 429 est une vraie fenêtre de quota.
  */
+/**
+ * L'escalade des transitoires — multiplicateurs appliqués à l'attente que le
+ * verdict a calculée, selon le nombre d'échecs d'affilée.
+ *
+ * Le principe vient de l'usine Palenza, où l'attente n'est pas une punition
+ * uniforme mais une PRÉDICTION DE FERTILITÉ : ce qui a échoué six fois de suite
+ * n'a pas la même chance de marcher au septième essai qu'au deuxième. Ici
+ * l'attente de départ vaut d'être respectée — elle est DÉDUITE d'un signal réel
+ * (401 → 5 min, 429 → 1 h) — donc les deux premiers essais la gardent telle
+ * quelle, et l'escalade ne commence qu'après.
+ *
+ * Sans cela, un compte définitivement cassé mais dont l'erreur ressemble à un
+ * hoquet était retenté toutes les heures, à vie.
+ */
+const PALIERS_TRANSITOIRE = [1, 1, 4, 4, 12] as const;
+
+/**
+ * L'attente ne dépasse JAMAIS ça, quel que soit le nombre d'échecs.
+ *
+ * Contrairement à l'usine, un compte ne devient jamais « dormant » ici : la
+ * dormance rendrait les trois comptes inutilisables en même temps lors d'une
+ * panne globale (réseau coupé), et l'app n'aurait plus aucun compte. Un
+ * plafond long arrête la boucle de retentatives sans jamais fermer la porte.
+ */
+const PLAFOND_TRANSITOIRE_MS = 12 * 60 * 60_000;
+
 const REPRISE_401_MS = 5 * 60_000;
 const REPRISE_429_MS = 60 * 60_000;
 const REPRISE_DEFAUT_MS = 60 * 60_000;
@@ -178,8 +212,7 @@ export function classerEchec(entree: {
   }
 
   const repriseA =
-    entree.repriseAnnoncee ??
-    new Date(entree.maintenant + delaiRepriseMs(code)).toISOString();
+    entree.repriseAnnoncee ?? new Date(entree.maintenant + delaiRepriseMs(code)).toISOString();
 
   // Le solde AVANT le quota : « out of usage credits » ne doit pas être
   // confondu avec une limite qui repart d'elle-même dans l'heure.
@@ -188,8 +221,7 @@ export function classerEchec(entree: {
       nature: "quota",
       reconnu: true,
       repriseA:
-        entree.repriseAnnoncee ??
-        new Date(entree.maintenant + REPRISE_SOLDE_MS).toISOString(),
+        entree.repriseAnnoncee ?? new Date(entree.maintenant + REPRISE_SOLDE_MS).toISOString(),
     };
   }
   if (code === 429 || CAUSES_QUOTA.some((motif) => motif.test(message))) {
@@ -306,15 +338,45 @@ export function appliquerEchec(
   sante: SanteCompte,
   verdict: Verdict,
   raison: string,
+  maintenant: number,
 ): SanteCompte {
+  // Notre bug : le compte n'y est pour rien, il ne se dégrade pas et le
+  // compteur ne bouge pas. Le compter reviendrait à punir un compte sain pour
+  // une requête qu'on a mal formée.
   if (verdict.nature === "notre-faute") return sante;
+
   if (verdict.nature === "authentification-morte") {
     return { instanceId: sante.instanceId, etat: "mort", raison };
   }
+
+  // Le quota porte une reprise MESURÉE : le fournisseur a dit quand il revient.
+  // L'escalader serait remplacer un fait par une supposition.
+  if (verdict.nature === "quota") {
+    return {
+      instanceId: sante.instanceId,
+      etat: "refroidissement",
+      ...(verdict.repriseA === undefined ? {} : { repriseA: verdict.repriseA }),
+      raison,
+    };
+  }
+
+  const echecsDAffilee = (sante.echecsDAffilee ?? 0) + 1;
+  const base =
+    verdict.repriseA === undefined
+      ? REPRISE_DEFAUT_MS
+      : Math.max(0, Date.parse(verdict.repriseA) - maintenant);
+  const palier =
+    PALIERS_TRANSITOIRE[Math.min(echecsDAffilee - 1, PALIERS_TRANSITOIRE.length - 1)] ?? 1;
+  const attente = Math.min(
+    Number.isNaN(base) ? REPRISE_DEFAUT_MS : base * palier,
+    PLAFOND_TRANSITOIRE_MS,
+  );
+
   return {
     instanceId: sante.instanceId,
     etat: "refroidissement",
-    ...(verdict.repriseA === undefined ? {} : { repriseA: verdict.repriseA }),
+    repriseA: new Date(maintenant + attente).toISOString(),
     raison,
+    echecsDAffilee,
   };
 }

@@ -64,14 +64,25 @@ export function noterEchec(
   instanceId: ProviderInstanceId,
   verdict: Verdict,
   raison: string,
+  /**
+   * L'instant, DONNÉ par l'appelant. Pas de `Date.now()` ici : le dépôt lit le
+   * temps par l'horloge d'Effect, et une horloge cachée dans un module rendrait
+   * ce calcul intestable et faux sous horloge simulée.
+   */
+  maintenant: number,
 ): SanteCompte {
   const avant = santeDe(instanceId);
-  const apres = appliquerEchec(avant, verdict, raison);
-  if (apres.etat === avant.etat && apres.repriseA === avant.repriseA) {
-    return avant;
-  }
+  const apres = appliquerEchec(avant, verdict, raison, maintenant);
+  // Rien n'a bougé DU TOUT (notre-faute) : ni écriture, ni tic.
+  if (apres === avant) return avant;
+  // Le compteur, lui, doit être gardé même quand l'état affiché ne change pas :
+  // c'est lui qui fait grandir l'attente au prochain échec. On écrit toujours,
+  // on ne PRÉVIENT que si l'humain verrait une différence — un compte qui échoue
+  // trois fois pendant son refroidissement ne doit pas repeindre l'interface
+  // trois fois.
+  const memeEtat = apres.etat === avant.etat && apres.repriseA === avant.repriseA;
   parInstance.set(instanceId, apres);
-  prevenir();
+  if (!memeEtat) prevenir();
   return apres;
 }
 

@@ -809,7 +809,7 @@ const make = Effect.gen(function* () {
       // La santé se met à jour dans TOUS les cas où le compte est en cause —
       // même sans remplaçant, pour que le prochain tour parte ailleurs.
       if (decision.type !== "laisser") {
-        noterEchec(compteMort, decision.verdict, entree.message);
+        noterEchec(compteMort, decision.verdict, entree.message, Date.parse(entree.now));
       }
 
       if (decision.type !== "basculer") {

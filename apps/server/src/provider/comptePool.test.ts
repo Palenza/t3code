@@ -93,7 +93,11 @@ describe("classement des échecs", () => {
       "No credits remaining on this account",
       "You are out of credits",
     ]) {
-      assert.strictEqual(classerEchec({ message, maintenant: MAINTENANT }).nature, "quota", message);
+      assert.strictEqual(
+        classerEchec({ message, maintenant: MAINTENANT }).nature,
+        "quota",
+        message,
+      );
     }
   });
 
@@ -162,7 +166,12 @@ describe("santé d'un compte", () => {
   });
 
   it("« notre faute » ne punit pas le compte", () => {
-    const apres = appliquerEchec(sain("A"), { nature: "notre-faute", reconnu: true }, "400");
+    const apres = appliquerEchec(
+      sain("A"),
+      { nature: "notre-faute", reconnu: true },
+      "400",
+      MAINTENANT,
+    );
     assert.strictEqual(apres.etat, "ok");
   });
 });
@@ -296,5 +305,105 @@ describe("choix du compte", () => {
       maintenant: MAINTENANT,
     });
     assert.strictEqual(choisi?.instanceId, id("A"));
+  });
+});
+
+describe("l'attente des transitoires est une PRÉDICTION, pas une constante", () => {
+  /** Combien de temps un compte reste écarté, en heures. */
+  const attenteHeures = (sante: SanteCompte): number =>
+    (Date.parse(sante.repriseA ?? "") - MAINTENANT) / 3_600_000;
+
+  // Des instants LITTÉRAUX, jamais recalculés : un test qui refait le calcul de
+  // l'implémentation dérive avec elle et finit par ne plus rien prouver.
+  // (MAINTENANT = 2026-07-29T22:00:00Z)
+  const DANS_1H = "2026-07-29T23:00:00.000Z";
+  const DANS_6H = "2026-07-30T04:00:00.000Z";
+  const DANS_12H = "2026-07-30T10:00:00.000Z";
+
+  const transitoire = (repriseA: string) => ({
+    nature: "transitoire" as const,
+    repriseA,
+    reconnu: true,
+  });
+
+  it("respecte l'attente MESURÉE aux deux premiers échecs", () => {
+    // Le verdict a déduit cette attente d'un signal réel (401 → 5 min,
+    // 429 → 1 h). L'escalader d'entrée remplacerait un fait par une supposition.
+    const un = appliquerEchec(sain("A"), transitoire(DANS_1H), "hoquet", MAINTENANT);
+    assert.strictEqual(attenteHeures(un), 1);
+    assert.strictEqual(un.echecsDAffilee, 1);
+
+    const deux = appliquerEchec(un, transitoire(DANS_1H), "hoquet", MAINTENANT);
+    assert.strictEqual(attenteHeures(deux), 1);
+    assert.strictEqual(deux.echecsDAffilee, 2);
+  });
+
+  it("ESCALADE quand la même panne se répète — « transitoire » devient faux", () => {
+    let sante = sain("A");
+    const attentes: number[] = [];
+    for (let essai = 0; essai < 6; essai += 1) {
+      sante = appliquerEchec(sante, transitoire(DANS_1H), "hoquet", MAINTENANT);
+      attentes.push(attenteHeures(sante));
+    }
+    // Avant ce changement, cette suite valait [1, 1, 1, 1, 1, 1] : un compte
+    // définitivement cassé dont l'erreur ressemble à un hoquet était retenté
+    // toutes les heures, à vie.
+    assert.deepStrictEqual(attentes, [1, 1, 4, 4, 12, 12]);
+    assert.strictEqual(sante.echecsDAffilee, 6);
+  });
+
+  it("ne dépasse JAMAIS le plafond, même sur une attente de départ énorme", () => {
+    let sante = sain("A");
+    for (let essai = 0; essai < 5; essai += 1) {
+      sante = appliquerEchec(sante, transitoire(DANS_6H), "hoquet", MAINTENANT);
+    }
+    // 6 h × 12 = 72 h sans plafond. Un compte écarté trois jours pour un
+    // hoquet serait pire que le mal.
+    assert.strictEqual(attenteHeures(sante), 12);
+  });
+
+  it("n'escalade PAS un quota — le fournisseur a dit quand il revient", () => {
+    const reprise = DANS_12H;
+    let sante = sain("A");
+    for (let essai = 0; essai < 5; essai += 1) {
+      sante = appliquerEchec(
+        sante,
+        { nature: "quota", repriseA: reprise, reconnu: true },
+        "à sec",
+        MAINTENANT,
+      );
+    }
+    // La reprise est MESURÉE, pas devinée : l'escalader la rendrait fausse.
+    assert.strictEqual(sante.repriseA, reprise);
+    assert.strictEqual(sante.echecsDAffilee, undefined);
+  });
+
+  it("notre propre bug ne fait PAS grandir l'attente d'un compte sain", () => {
+    const avant = appliquerEchec(sain("A"), transitoire(DANS_1H), "hoquet", MAINTENANT);
+    const apres = appliquerEchec(
+      avant,
+      { nature: "notre-faute", reconnu: true },
+      "400",
+      MAINTENANT,
+    );
+    // Punir un compte pour une requête qu'on a mal formée l'écarterait pour
+    // rien — et masquerait notre propre bug derrière un compte « malade ».
+    assert.strictEqual(apres.echecsDAffilee, 1);
+    assert.strictEqual(apres, avant);
+  });
+
+  it("un message INCONNU escalade aussi — c'est là que ça compte le plus", () => {
+    // Un message qu'on n'a pas su lire est rangé en « transitoire » par
+    // prudence. Sans escalade, cette prudence devenait une boucle infinie.
+    const inconnu = {
+      nature: "transitoire" as const,
+      repriseA: transitoire(DANS_1H).repriseA,
+      reconnu: false,
+    };
+    let sante = sain("A");
+    for (let essai = 0; essai < 5; essai += 1) {
+      sante = appliquerEchec(sante, inconnu, "message jamais vu", MAINTENANT);
+    }
+    assert.strictEqual(attenteHeures(sante), 12);
   });
 });
