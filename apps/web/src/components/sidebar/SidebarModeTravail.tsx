@@ -88,6 +88,8 @@ export function SidebarModeTravail() {
       const corps = (await reponse.json()) as {
         pose?: boolean;
         comptes?: number;
+        comptesTotal?: number;
+        comptesSautes?: number;
         raison?: string;
       };
       if (corps.pose !== true) {
@@ -111,10 +113,14 @@ export function SidebarModeTravail() {
           description:
             corps.comptes === 0
               ? "Aucun compte n'a de dossier de configuration propre — rien n'a été restreint."
-              : // La PORTÉE est dite, pas seulement le nombre : « 3 comptes
-                // concernés » ne laissait pas deviner que TOUS les fils, de
-                // TOUS les projets, venaient d'être désarmés d'un coup.
-                `${corps.comptes} compte${(corps.comptes ?? 0) > 1 ? "s" : ""} — s'applique à tous tes fils, dans tous tes projets.`,
+              : // La portée EXACTE, comptes sautés compris. On disait « 3 comptes »
+                // sans dire sur combien — or un compte sans dossier propre est
+                // SAUTÉ, et sur cette machine c'est le principal : douze des
+                // quatorze fils actifs continuaient d'écrire malgré la
+                // bannière « partout » (audit 30/07).
+                (corps.comptesSautes ?? 0) > 0
+                ? `${corps.comptes} compte${(corps.comptes ?? 0) > 1 ? "s" : ""} sur ${corps.comptesTotal} — ${corps.comptesSautes} sans dossier propre n'${(corps.comptesSautes ?? 0) > 1 ? "ont" : "a"} PAS été restreint${(corps.comptesSautes ?? 0) > 1 ? "s" : ""}.`
+                : `${corps.comptes} compte${(corps.comptes ?? 0) > 1 ? "s" : ""} sur ${corps.comptesTotal} — tous restreints.`,
         }),
       );
     } catch {
@@ -160,8 +166,8 @@ export function SidebarModeTravail() {
               {restreint ? (
                 <span className="pl-[22px] text-[11px] leading-tight text-amber-200/80">
                   {modeActif?.slug === "revue"
-                    ? "Tes agents ne peuvent NI écrire NI lancer de commande — partout."
-                    : "Écriture restreinte pour tous tes agents — partout."}
+                    ? "Tes agents ne peuvent NI écrire NI lancer de commande."
+                    : "Écriture restreinte pour tes agents."}
                 </span>
               ) : null}
             </button>

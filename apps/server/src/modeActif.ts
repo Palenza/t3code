@@ -4,7 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 
-import { appliquerModeAuHome } from "./provider/Drivers/ClaudeModePermissions.ts";
+import { appliquerModeAuHome, lireModeDuHome } from "./provider/Drivers/ClaudeModePermissions.ts";
 import { resolveClaudeHomePath } from "./provider/Drivers/ClaudeHome.ts";
 import { ServerSettingsService } from "./serverSettings.ts";
 import {
@@ -44,6 +44,37 @@ export function modeActif(): ModeTravail | null {
   return modeCourant;
 }
 
+/**
+ * Relit sur le DISQUE le mode reellement pose, tous comptes confondus.
+ *
+ * Rend `undefined` quand la lecture n'a rien pu conclure (reglages illisibles,
+ * aucun compte a dossier propre) : dans ce cas on ne touche pas a l'etat en
+ * memoire plutot que de le vider a tort. Rend `null` quand le disque dit
+ * clairement qu'aucun mode n'est pose.
+ */
+const relireModeSurDisque = Effect.fn("relireModeSurDisque")(function* () {
+  const settings = yield* (yield* ServerSettingsService).getSettings;
+  const instances = settings.providerInstances;
+  let lu: ModeTravail | null | undefined = undefined;
+  for (const [, config] of Object.entries(instances)) {
+    if (config.driver !== "claudeAgent") continue;
+    const brut = config.config;
+    const homePath =
+      typeof brut === "object" && brut !== null && typeof (brut as { homePath?: unknown }).homePath === "string"
+        ? (brut as { homePath: string }).homePath
+        : "";
+    if (homePath.trim().length === 0) continue;
+    const resolu = yield* resolveClaudeHomePath({ homePath });
+    const mode = yield* lireModeDuHome(resolu, MODES_LIVRES);
+    // Le PLUS restrictif l'emporte : si un seul compte porte encore un refus,
+    // l'utilisateur doit le voir. Mieux vaut annoncer une restriction qui ne
+    // vaut que pour un compte que d'en cacher une qui mord.
+    if (mode !== null) return mode;
+    lu = lu === undefined ? null : lu;
+  }
+  return lu;
+});
+
 const trouverMode = (slug: string | null): ModeTravail | null | undefined =>
   slug === null ? null : MODES_LIVRES.find((mode) => mode.slug === slug);
 
@@ -64,6 +95,13 @@ export const modeEtatRouteLayer = HttpRouter.add(
     const request = yield* HttpServerRequest.HttpServerRequest;
     const refus = gardeLocale(request);
     if (refus !== null) return refus;
+    // Le disque fait foi, pas la memoire du serveur. Au redemarrage l'ecran
+    // redevenait gris pendant que la CLI appliquait toujours les refus — les
+    // agents repondaient « Bash exists but is not enabled » sans que rien ne
+    // l'explique. On relit ce qui est REELLEMENT pose.
+    const surDisque = yield* relireModeSurDisque();
+    if (surDisque !== undefined) modeCourant = surDisque;
+
     return HttpServerResponse.jsonUnsafe(
       {
         actif: modeCourant === null ? null : modeCourant.slug,
@@ -127,10 +165,16 @@ export const modePoserRouteLayer = HttpRouter.add(
     }
 
     modeCourant = mode;
+    // La PORTÉE REELLE, pas seulement le nombre d'appliques. Un compte sans
+    // dossier propre est SAUTE — et sur cette machine c'est le compte
+    // principal, celui qui porte douze des quatorze fils actifs. Dire
+    // « 3 comptes » laissait croire a « partout » ; il faut dire sur combien.
     return HttpServerResponse.jsonUnsafe({
       pose: true,
       mode: mode === null ? null : mode.slug,
       comptes: appliques,
+      comptesTotal: vises.length,
+      comptesSautes: vises.length - appliques,
     });
   }).pipe(
     Effect.catchCause((cause) =>

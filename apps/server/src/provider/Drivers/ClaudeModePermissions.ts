@@ -31,6 +31,62 @@ const encodeSettings = Schema.encodeSync(Schema.fromJsonString(SettingsInconnus)
  * en vigueur pour toujours, et l'utilisateur chercherait longtemps pourquoi
  * son agent refuse d'écrire.
  */
+/**
+ * RELIT le mode posé sur le disque, pour un dossier de compte donné.
+ *
+ * Le mode ne vivait qu'en mémoire du serveur, alors que ses refus, eux, sont
+ * écrits sur le disque. Au redémarrage l'écran redevenait donc gris — « aucun
+ * mode » — pendant que la CLI continuait d'appliquer les refus. Les agents
+ * répondaient « Bash exists but is not enabled in this context » et rien
+ * n'expliquait pourquoi. Une heure de diagnostic à l'aveugle, payée le 30/07.
+ *
+ * Le disque fait foi. On le relit.
+ */
+export const lireModeDuHome = Effect.fn("lireModeDuHome")(function* (
+  homePath: string,
+  candidats: ReadonlyArray<ModeTravail>,
+): Effect.fn.Return<ModeTravail | null, never, Path.Path | FileSystem.FileSystem> {
+  const path = yield* Path.Path;
+  const fs = yield* FileSystem.FileSystem;
+  const brut = yield* fs
+    .readFileString(path.join(homePath, "settings.json"))
+    .pipe(Effect.orElseSucceed(() => ""));
+  if (brut.trim().length === 0) return null;
+
+  let permissions: { deny?: unknown; allow?: unknown } | null = null;
+  try {
+    const lu = decodeSettings(brut);
+    const p = lu["permissions"];
+    permissions = typeof p === "object" && p !== null ? (p as { deny?: unknown; allow?: unknown }) : null;
+  } catch {
+    return null;
+  }
+  if (permissions === null) return null;
+
+  const enTexte = (valeur: unknown) =>
+    Array.isArray(valeur) ? [...valeur].filter((v): v is string => typeof v === "string").sort() : [];
+  const denyLu = enTexte(permissions.deny);
+  const allowLu = enTexte(permissions.allow);
+  if (denyLu.length === 0 && allowLu.length === 0) return null;
+
+  // On reconnaît le mode par ce qu'il PRODUIT, pas par un marqueur qu'on
+  // aurait ajouté : un marqueur mentirait si l'utilisateur éditait le fichier
+  // à la main, la signature des règles, non.
+  const memeListe = (a: ReadonlyArray<string>, b: ReadonlyArray<string>) =>
+    a.length === b.length && a.every((valeur, index) => valeur === b[index]);
+
+  for (const mode of candidats) {
+    const attendu = reglesPour(mode);
+    if (
+      memeListe([...attendu.deny].sort(), denyLu) &&
+      memeListe([...attendu.allow].sort(), allowLu)
+    ) {
+      return mode;
+    }
+  }
+  return null;
+});
+
 export const appliquerModeAuHome = Effect.fn("appliquerModeAuHome")(function* (
   homePath: string,
   mode: ModeTravail | null,
