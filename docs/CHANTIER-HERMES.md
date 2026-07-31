@@ -16,13 +16,13 @@ plan.
 
 ## Où en est le catalogue — au 01/08/2026
 
-**34 livrés · 5 partiels · 26 écartés sur pièce · 20 restants.**
+**34 livrés · 5 partiels · 27 écartés sur pièce · 19 restants.**
 
 Chaque ligne a été INSTRUITE : aucune n'est restée sans qu'on aille voir. Un
 écart porte toujours sa raison, et une raison porte un reçu quand elle repose
 sur une mesure.
 
-Ce que les 20 restants attendent vraiment — c'est la seule question utile :
+Ce que les 19 restants attendent vraiment — c'est la seule question utile :
 
 |       | quoi                                                               | qui décide                                                                                                                         |
 | ----- | ------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
@@ -104,28 +104,47 @@ la raison — un écart sans raison se rouvre tous les mois.
   base en mémoire, avec nos réglages actuels (`unicode61
 remove_diacritics 2`) contre `trigram` :
 
-                                              requête      unicode61 (le nôtre)   trigram
-                                              数据  (2)          0                   0
-                                              数据库 (3)          0                   1
-                                              東京  (2)          0                   0
-                                              chat               1                   1
-                                              dort               1                   1
+                                                requête      unicode61 (le nôtre)   trigram
+                                                数据  (2)          0                   0
+                                                数据库 (3)          0                   1
+                                                東京  (2)          0                   0
+                                                chat               1                   1
+                                                dort               1                   1
 
-                                          Donc **notre index ne trouve JAMAIS rien en CJK**, pas même sur trois
-                                          caractères — ce n'est pas une dégradation, c'est un mur. `trigram` le
-                                          lève dès 3 caractères sans toucher au français.
-                                          Reste hors de portée : les termes CJK de **1-2 caractères**, et c'est
-                                          précisément ce que leur bigramme compilé existe pour couvrir.
-                                          **On ne bascule PAS aujourd'hui** : produit français d'abord, un index
-                                          trigramme pèse plus lourd (une entrée par fenêtre de 3), et personne
-                                          n'attend cette recherche. Mais le jour où un utilisateur CJK arrive, la
-                                          décision est un MOT dans la migration 036 — plus un chantier natif.
-                                          `native/fts5_cjk/` **(copie C, désormais optionnelle)**
+                                            Donc **notre index ne trouve JAMAIS rien en CJK**, pas même sur trois
+                                            caractères — ce n'est pas une dégradation, c'est un mur. `trigram` le
+                                            lève dès 3 caractères sans toucher au français.
+                                            Reste hors de portée : les termes CJK de **1-2 caractères**, et c'est
+                                            précisément ce que leur bigramme compilé existe pour couvrir.
+                                            **On ne bascule PAS aujourd'hui** : produit français d'abord, un index
+                                            trigramme pèse plus lourd (une entrée par fenêtre de 3), et personne
+                                            n'attend cette recherche. Mais le jour où un utilisateur CJK arrive, la
+                                            décision est un MOT dans la migration 036 — plus un chantier natif.
+                                            `native/fts5_cjk/` **(copie C, désormais optionnelle)**
 
-- [ ] **7 · PTC — appel d'outils programmatique** — le modèle écrit un script
-      qui appelle nos outils, N tours → 1. Seul le `stdout` revient. Chez nous il
-      passe par notre serveur MCP, pas par un socket Unix.
-      `tools/code_execution_tool.py` (2 014)
+- [–] **7 · ~~PTC — appel d'outils programmatique~~** — **Écarté : le CLI le
+  porte déjà.** Troisième ligne fermée le 01/08 en fouillant le binaire du CLI
+  que T3 lance, après le n°8 et le n°54. Les chaînes de schéma sont sans
+  ambiguïté :
+
+      execute JavaScript with programmatic tool access
+      JavaScript code to execute. Supports top-level await.
+        State persists across calls.
+      The code that was executed
+      Return value from the code execution
+      Captured console.log output
+      Names of tools registered during this execution
+
+  C'est exactement leur `code_execution_tool.py` : un bac à sable JavaScript
+  où les outils sont ENREGISTRÉS et appelables, avec état persistant entre les
+  appels, et seule la sortie qui revient. Le gain de contexte que la ligne
+  promettait — N tours → 1 — est donc déjà disponible.
+  T3 ne restreint aucun outil sur la session principale (`allowedTools` n'y
+  est jamais posé), donc rien de notre côté ne le cache.
+  Écrire le nôtre par-dessus notre serveur MCP doublerait un moteur qu'on ne
+  possède pas — le verdict des n°25, n°26 et n°30, appliqué au plus gros
+  morceau du niveau 1. `tools/code_execution_tool.py` (2 014)
+
 - [–] **8 · ~~`/goal` — la boucle Ralph~~** — **Écarté : on l'a déjà, et
   c'est celui qu'on utilise.** La question était ouverte parce que je ne
   trouvais pas le bundle du CLI. Trouvé le 01/08 dans
