@@ -3072,8 +3072,57 @@ describe("ProviderRuntimeIngestion", () => {
     const activity = thread.activities.find(
       (candidate: ProviderRuntimeTestActivity) => candidate.kind === "context-compaction",
     );
-    expect(activity?.summary).toBe("Context compacted");
+    // Codex n'envoie aucune métrique de compactage : on le DIT au lieu
+    // d'inventer des chiffres. (Le golden disait « Context compacted » —
+    // remplacé sciemment, cf. le test suivant qui porte le vrai cas.)
+    expect(activity?.summary).toBe("Contexte compacté (détail indisponible)");
     expect(activity?.tone).toBe("info");
+  });
+
+  it("says what a compaction actually threw away when the provider reports it", async () => {
+    // La charge RÉELLE du 31/07 : Claude fournit avant/après, la durée, le
+    // cumul et les messages préservés. « Context compacted » n'en montrait
+    // rien — or c'est l'événement le plus destructeur du système (A7).
+    const harness = await createHarness();
+
+    harness.emit({
+      type: "thread.state.changed",
+      eventId: asEventId("evt-thread-compacted-riche"),
+      provider: ProviderDriverKind.make("claude"),
+      createdAt: "2026-01-01T00:00:00.000Z",
+      threadId: asThreadId("thread-1"),
+      turnId: asTurnId("turn-1"),
+      payload: {
+        state: "compacted",
+        detail: {
+          type: "system",
+          subtype: "compact_boundary",
+          compact_metadata: {
+            trigger: "auto",
+            pre_tokens: 998_926,
+            post_tokens: 17_453,
+            cumulative_dropped_tokens: 1_965_823,
+            duration_ms: 143_707,
+            preserved_messages: { uuids: ["a", "b", "c"] },
+          },
+        },
+      },
+    });
+
+    const thread = await waitForThread(harness.readModel, (entry) =>
+      entry.activities.some(
+        (activity: ProviderRuntimeTestActivity) => activity.kind === "context-compaction",
+      ),
+    );
+    const activity = thread.activities.find(
+      (candidate: ProviderRuntimeTestActivity) => candidate.kind === "context-compaction",
+    );
+
+    expect(activity?.summary).toContain("98,3 % jeté");
+    expect(activity?.summary).toContain("3 message(s) gardé(s) mot pour mot");
+    expect(activity?.summary).toContain("2 min 24");
+    // La charge brute reste intacte : la phrase s'ajoute, elle ne remplace rien.
+    expect(activity?.payload).toMatchObject({ state: "compacted" });
   });
 
   it("projects Codex task lifecycle chunks into thread activities", async () => {

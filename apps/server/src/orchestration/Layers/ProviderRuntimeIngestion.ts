@@ -27,6 +27,7 @@ import * as Cache from "effect/Cache";
 import * as Cause from "effect/Cause";
 import * as Crypto from "effect/Crypto";
 import * as Duration from "effect/Duration";
+import { resumeDeCompactage } from "../../contexte/Compactage.ts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -594,17 +595,24 @@ export function runtimeEventToActivities(
         return [];
       }
 
+      // La charge porte tout — avant/après, durée, cumul, combien de messages
+      // survivent mot pour mot — et le résumé affiché disait « Context
+      // compacted ». L'événement le plus destructeur du système était le seul
+      // à ne rien dire de ce qu'il fait (A7). On la construit d'abord, on la
+      // fait PARLER ensuite.
+      const chargeDeCompactage = {
+        state: event.payload.state,
+        ...(event.payload.detail !== undefined ? { detail: event.payload.detail } : {}),
+      };
+
       return [
         {
           id: event.eventId,
           createdAt: event.createdAt,
           tone: "info",
           kind: "context-compaction",
-          summary: "Context compacted",
-          payload: {
-            state: event.payload.state,
-            ...(event.payload.detail !== undefined ? { detail: event.payload.detail } : {}),
-          },
+          summary: resumeDeCompactage(chargeDeCompactage),
+          payload: chargeDeCompactage,
           turnId: toTurnId(event.turnId) ?? null,
           ...maybeSequence,
         },
