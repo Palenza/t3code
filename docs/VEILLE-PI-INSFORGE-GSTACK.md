@@ -166,6 +166,119 @@ nous — à instruire, pas à conclure.
 
 ---
 
+---
+
+## 5 · LES BRANCHES — 908 creusées, couverture 100 %
+
+Les trois `main` ne montrent qu'une part du travail. Voici tout le reste.
+
+| dépôt        | branches (hors main) | en avance sur main |                     orphelines |
+| ------------ | -------------------: | -----------------: | -----------------------------: |
+| **gstack**   |                  308 |            **300** | 3 (histoire de mars, réécrite) |
+| **InsForge** |                  552 |             **98** |                              0 |
+| **pi**       |                   48 |             **40** |                              0 |
+| **TOTAL**    |              **908** |            **438** |                              3 |
+
+### La méthode, et l'erreur qu'elle a failli laisser passer
+
+Première passe en parallèle (`xargs -P 14`) avec `2>/dev/null` : **pi rendait
+23 branches sur 48**, et le silence ressemblait à un résultat. Les branches
+manquantes marchaient toutes en appel direct — c'était la charge, pas la
+donnée. Reprise en SÉQUENTIEL avec les échecs BRUYANTS : **48/48, zéro échec**.
+gstack en perdait 3 de la même façon.
+
+C'est exactement la classe de panne qu'A7 vise : une limite atteinte
+silencieusement. Mon propre `2>/dev/null` l'a fabriquée. Le contrôle de
+couverture (`comm` entre attendues et obtenues) est ce qui l'a attrapée — pas
+le compte de lignes, qui semblait juste.
+
+_Note de réconciliation_ : j'ai écrit « 376 sommets » plus haut et il y a 553
+branches sur InsForge. Ce n'est pas une contradiction — **21 branches partagent
+un même commit**, il y a 375 sommets DISTINCTS (376 au premier relevé, une
+branche a bougé entre les deux).
+
+### La trouvaille : `garrytan/prompt-injection-guard`
+
+74 commits, 41 fichiers, **non fusionnée**. C'est la pièce la plus directement
+utile des trois dépôts, parce qu'elle traite NOTRE I2 (« contenu tiers =
+hostile ») avec une architecture que nous n'avons pas.
+
+**Leurs six couches**, telles qu'écrites dans leur en-tête :
+
+| couche  | quoi                                                                                       |
+| ------- | ------------------------------------------------------------------------------------------ |
+| L1–L3   | marquage de données, dépouillement du DOM, liste noire d'URL — **des motifs**              |
+| **L4**  | classifieur ONNX local (TestSavantAI BERT-small, ~112 Mo) sur snapshots ET sorties d'outil |
+| **L4b** | classifieur de transcript par **Haiku**, AVANT l'appel d'outil                             |
+| **L5**  | **canari** — on injecte un marqueur et on vérifie s'il ressort                             |
+| L6      | agrégation par seuils (`combineVerdict`)                                                   |
+
+**Trois choses à retenir, et la deuxième est la plus fine :**
+
+1. **Leurs seuils portent leur reçu** : `BLOCK 0.85 · WARN 0.60 · LOG_ONLY 0.40`,
+   « calibrés contre BrowseSafe-Bench (200 cas) + corpus bénin (50 pages) ».
+   C'est notre A2 appliqué par quelqu'un d'autre.
+
+2. **Le classifieur de transcript est VOLONTAIREMENT aveugle** aux résultats
+   d'outil et à la chaîne de pensée du modèle — « les attaques d'auto-persuasion
+   fuient par ces canaux-là ». Autrement dit : donner PLUS de contexte au garde
+   l'affaiblit. Ce n'est pas intuitif, et ça se teste.
+
+3. **Le blocage ATTEND une décision humaine** au lieu de tuer — « wait-for-decision
+   instead of hard-kill », avec une bannière Allow/Block et un
+   `POST /security-decision`. Leur repli quand le modèle ne charge pas est
+   déclaré : `degraded` → verdict `safe`, donc **fail-open**, signalé par l'icône.
+
+**Leur effort de test** : 13 fichiers, ~2 800 lignes — adversarial, e2e,
+Playwright réel, contrats de source, bench.
+
+**Notre état, mesuré** : `gardeDeSortieDOutil.ts` 101 l. + `MotifsDeMenace.ts`
+337 l. + `SortieDOutil.ts` 264 l. = **702 lignes de MOTIFS**, 1 366 lignes de
+tests. Zéro couche modèle, zéro canari, zéro agrégation par seuils — vérifié
+par recherche, pas supposé. Nous sommes à leur L1–L3.
+
+### Ce que les branches de pi disent de leur feuille de route
+
+Les 40 branches non fusionnées montrent où ils vont — et deux surprises :
+
+- **ils construisent des approbations** (`approvals` 12 c., `better-approvals`,
+  « project trust approvals ») alors que leur page d'accueil vend l'absence de
+  popup de permission. La position minimaliste bouge ;
+- **ils construisent un serveur** (`feat/coding-agent-server-backend`,
+  `feat/unix-socket-cli`, `feat/coding-agent-remote-client-controller`) — donc
+  ils convergent vers l'architecture que Raptor a déjà.
+
+Trois correctifs d'API valent une lecture, parce qu'ils décrivent des cas
+réels vécus en production :
+
+- `fix/handle-empty-usage-anthropic-message-delta` — un `message_delta` peut
+  arriver **sans objet `usage` du tout**, et pas seulement avec des champs
+  nuls. Ils notent aussi que les jetons de raisonnement vivent dans
+  `output_tokens_details.thinking_tokens`, **absent du type Usage du SDK
+  0.91.1**, « vérifié contre l'API live » ;
+- `fix-issue-7253` — préserver les événements d'agent pendant la compaction ;
+- `fix-issue-7150` — refuser les prompts pendant une compaction manuelle.
+
+Nous passons par le SDK, donc une partie ne nous concerne pas. Mais la
+compaction manuelle et les événements perdus sont des chemins que nous avons.
+
+### gstack : où va l'effort
+
+284 des 300 branches sont sous `garrytan/`. Les plus grosses disent l'axe :
+`gstack-as-browser` (77 c.), `prompt-injection-guard` (74), `community-mode`
+(68), `team-supabase-store` (64), `browser-improvements` (64),
+`chrome-extension-ctrl` (58), `browserharness` (58). **Le navigateur est leur
+chantier central**, très au-delà de nos outils `preview_*`.
+
+### InsForge : rien de neuf
+
+98 branches, toutes du backend — `compute` (69 c.), OAuth PKCE, `refresh-token`,
+`multi-admin`, Resend, `custom-rate-limits`. Le verdict de la section 2 tient :
+autre catégorie. Une seule ligne effleure notre S3 (rate-limit par userId EN
+PLUS de l'IP) : leur `custom-rate-limits`, 11 commits.
+
+---
+
 ## Le triage, en une page
 
 **Ce qui ne se prend pas, et pourquoi** — refuser est le plus gros gain :
@@ -179,6 +292,10 @@ nous — à instruire, pas à conclure.
 
 **Ce qui mérite une instruction, par ordre d'évidence :**
 
+0. **Défense anti-injection en couches** (gstack, branche non fusionnée). La
+   plus importante, et de loin : notre I2 est une LOI et son application tient
+   en 702 lignes de motifs. Eux ont un classifieur, un canari, des seuils
+   calibrés et une décision humaine. À instruire en premier.
 1. **Surcouches de prompt par modèle** (gstack). On route déjà 5 fournisseurs
    avec un seul jeu d'instructions. Peu de code, effet immédiat.
 2. **Gabarits de prompt versionnés** (pi). Notre propre I3 l'exige et on ne le
