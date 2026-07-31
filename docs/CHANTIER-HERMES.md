@@ -96,23 +96,23 @@ la raison — un écart sans raison se rouvre tous les mois.
       base en mémoire, avec nos réglages actuels (`unicode61
 remove_diacritics 2`) contre `trigram` :
 
-                        requête      unicode61 (le nôtre)   trigram
-                        数据  (2)          0                   0
-                        数据库 (3)          0                   1
-                        東京  (2)          0                   0
-                        chat               1                   1
-                        dort               1                   1
+                          requête      unicode61 (le nôtre)   trigram
+                          数据  (2)          0                   0
+                          数据库 (3)          0                   1
+                          東京  (2)          0                   0
+                          chat               1                   1
+                          dort               1                   1
 
-                    Donc **notre index ne trouve JAMAIS rien en CJK**, pas même sur trois
-                    caractères — ce n'est pas une dégradation, c'est un mur. `trigram` le
-                    lève dès 3 caractères sans toucher au français.
-                    Reste hors de portée : les termes CJK de **1-2 caractères**, et c'est
-                    précisément ce que leur bigramme compilé existe pour couvrir.
-                    **On ne bascule PAS aujourd'hui** : produit français d'abord, un index
-                    trigramme pèse plus lourd (une entrée par fenêtre de 3), et personne
-                    n'attend cette recherche. Mais le jour où un utilisateur CJK arrive, la
-                    décision est un MOT dans la migration 036 — plus un chantier natif.
-                    `native/fts5_cjk/` **(copie C, désormais optionnelle)**
+                      Donc **notre index ne trouve JAMAIS rien en CJK**, pas même sur trois
+                      caractères — ce n'est pas une dégradation, c'est un mur. `trigram` le
+                      lève dès 3 caractères sans toucher au français.
+                      Reste hors de portée : les termes CJK de **1-2 caractères**, et c'est
+                      précisément ce que leur bigramme compilé existe pour couvrir.
+                      **On ne bascule PAS aujourd'hui** : produit français d'abord, un index
+                      trigramme pèse plus lourd (une entrée par fenêtre de 3), et personne
+                      n'attend cette recherche. Mais le jour où un utilisateur CJK arrive, la
+                      décision est un MOT dans la migration 036 — plus un chantier natif.
+                      `native/fts5_cjk/` **(copie C, désormais optionnelle)**
 
 - [ ] **7 · PTC — appel d'outils programmatique** — le modèle écrit un script
       qui appelle nos outils, N tours → 1. Seul le `stdout` revient. Chez nous il
@@ -410,8 +410,29 @@ remove_diacritics 2`) contre `trigram` :
   notre désinstalleur classe « ne se touche JAMAIS » (n°58). Ça se décide,
   ça ne se glisse pas dans un outil de lecture : palier D2.)_
   `tools/skills_hub.py` (4 151)
-- [ ] **51 · Les 182 skills** — `software-development`, `github`, `research`,
-      `autonomous-ai-agents`, `mlops`, `security` en priorité **(copie markdown)**
+- [~] **51 · Les skills d'Hermès** — **TRIÉES le 01/08**, le travail de
+  regarder est fait ; reste la décision de prendre.
+  D'abord un fait : elles sont **69**, pas 182, et il n'y a **pas de
+  famille `security`**. Le chiffre du catalogue venait du dépôt GitHub,
+  pas de ce qu'on a sur disque.
+  `scripts/trier-skills-hermes.ts` leur applique nos deux contrôles déjà
+  écrits — le scanner (n°10) et les normes (n°4) — et rend un tableau.
+  **Deux résultats qui comptent** :
+  · **leurs 69 descriptions pèsent 3 801 caractères. Nos 18 en pèsent
+  ~8 400.** Leurs skills coûtent moins de la moitié des nôtres, à
+  presque quatre fois le nombre. Aucune ne dépasse notre limite de 240 ;
+  la nôtre est dépassée par 15 sur 18. C'est la démonstration du n°4 par
+  l'exemple, et elle vient de chez eux ;
+  · **30 sur 69 sont refusées** en confiance « communauté », et les motifs
+  sont vérifiables un par un : `curl` d'exfiltration, accès SSH,
+  modification de la config git globale, `curl | sh`. Le mode détail du
+  script les nomme (`… <racine> <skill>`).
+  _(reste : la DÉCISION de prendre, et lesquelles. Elle touche ce qui se
+  charge dans chaque session de T3 — donc Enzo. À noter pour ce
+  choix : `exfil-curl` est classé « critique », donc toute skill qui
+  appelle une API HTTP est refusée d'une source communautaire. C'est le
+  bon défaut pour une installation automatique ; c'est peut-être trop
+  strict pour un choix humain éclairé.)_
 - [ ] **52 · Bundles de skills** — un alias `/<nom>` déclenche plusieurs
       skills. `hermes_cli/bundles.py`
       **Instruit le 01/08 : pas constructible à notre niveau.** T3 LIT les
