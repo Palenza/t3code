@@ -1,125 +1,91 @@
 # Décisions en attente — chantier Hermès
 
-> Trois questions — la quatrième s'est répondue toute seule. Elles
-> débloquent **14 des 21 lignes restantes** du catalogue
-> (`CHANTIER-HERMES.md`).
+> **Il ne reste plus de question, il reste deux ACTIVATIONS.**
 >
-> Chacune porte : ce qui est déjà fait, ce que ta réponse déclenche, et **une**
-> reco — jamais un menu (M2). Réponds en marquant la case ; je pars de là.
->
-> Ce fichier existe parce que le compteur « 25 restants » ne dit pas ce qu'ils
-> attendent. Trois sur quatre attendent une phrase de toi, pas du code.
+> Ce fichier posait quatre questions le 01/08 au soir. Trois se sont résolues
+> dans la nuit — deux en allant vérifier, une en construisant. Ce qui reste
+> n'est plus un arbitrage mais deux clés à fournir.
 
 ---
 
-## 1 · La passerelle — T3 doit-il répondre depuis Telegram ?
+## 1 · Un jeton de bot Telegram
 
-**Débloque 8 lignes** (n°38 → 45 : streaming vers les messageries, livraison
-fiable, autorisation par canal, SDK de plateforme, Telegram puis Discord/
-Slack/WhatsApp/Signal, cycle de vie, `/handoff`, `/clarify`).
+**Ce qui est déjà écrit** : les sept décisions de la passerelle, toutes
+testées, toutes posées avant le premier octet réseau.
 
-**Ce qui est déjà vérifié.** Le triage disait « rien ne marche sans le bail de
-tour (n°37) ». C'est faux : leur bail répond à une forme qu'on n'a pas — leurs
-gardes sont indexés par clé de routage, la transcription par session_id, et le
-lien est plusieurs-vers-un. Chez nous c'est `Map<ThreadId, Context>` un pour
-un, le dispatch est sérialisé par file, et le réacteur consomme un élément à
-la fois. **Ces 8 lignes n'attendent aucun maillon technique.**
+|             |                                                              |
+| ----------- | ------------------------------------------------------------ |
+| **n°40**    | qui a le droit de parler — défaut : refuser                  |
+| **n°38**    | comment le flux tient dans le médium — repli adaptatif       |
+| **n°39**    | quoi réessayer, quand renoncer — auto-guérison               |
+| **n°41**    | le contrat d'adaptateur, gardé contre les cas particuliers   |
+| **n°42**    | lire une mise à jour Telegram, ses huit formes               |
+| **n°43**    | tenir la connexion, et voir sa mort silencieuse              |
+| **n°44/45** | les commandes, et le silence quand elles visent un autre bot |
 
-**Ce que ça engage.** Un produit dans le produit : T3 hors de la machine.
-Compte plusieurs sessions, et une surface d'autorisation neuve (qui a le droit
-de parler à ton agent depuis un canal public ?).
+**Ce qui manque** : le jeton, et rien d'autre. Il vient de `@BotFather` sur
+Telegram, et il se range en variable d'environnement (S2 : jamais commité,
+jamais dans une URL).
 
-**Ma reco : pas maintenant.** Le catalogue a des lignes qui servent T3 sur ta
-machine et qui coûtent dix fois moins. La passerelle vaut le jour où tu veux
-piloter une usine depuis ton téléphone — pas avant.
+**À savoir avant de le donner** — vérifié le 01/08, et ça peut changer ta
+réponse : T3 a **déjà** un client mobile natif (`apps/mobile`) qui parle au
+même serveur par un relais. L'accès à distance est donc résolu. Ce que la
+passerelle ajoute, c'est répondre depuis **l'application de quelqu'un
+d'autre** — Telegram plutôt que la tienne. C'est un vrai confort, pas une
+capacité neuve.
 
-- [ ] on y va
-- [ ] plus tard _(reco)_
-- [ ] jamais — j'écarte les 8 lignes
-
----
-
-## 2 · T3 a-t-il le droit d'installer des skills dans ton home Claude ?
-
-**Débloque 2 lignes** (n°52 bundles, n°53 compatibilité agentskills.io) et la
-seconde moitié du n°50.
-
-**Ce qui est déjà fait.** Les 69 skills d'Hermès sont **triées** : passées au
-scanner (n°10) et aux normes (n°4), tableau complet via
-`scripts/trier-skills-hermes.ts`. Résultat : **30 refusées sur pièce** (`curl`
-d'exfiltration, accès SSH, config git globale, `curl | sh`), et leurs 69
-descriptions pèsent 3 801 caractères — **moins de la moitié de nos 18**.
-
-**Ce que ça engage.** Écrire dans ton home Claude : là où vivent tes
-identifiants, tes conversations, tes propres skills. C'est l'endroit que notre
-propre désinstalleur classe « ne se touche JAMAIS » (n°58). T3 y dépose déjà
-une skill d'outillage, donc le précédent existe — mais installer du code tiers
-n'est pas la même chose que déposer le nôtre.
-
-**Ma reco : oui, mais jamais automatiquement.** L'inspection est déjà livrée
-et ne touche rien. L'installation ne se fait que sur ton geste explicite, une
-skill à la fois, avec le rapport du scanner sous les yeux.
-
-- [ ] oui, avec confirmation à chaque skill _(reco)_
-- [ ] oui, automatique si le scan est vert
-- [ ] non — j'écarte les 2 lignes
+- [ ] voici le jeton
+- [ ] plus tard — les sept décisions attendront sans se périmer
 
 ---
 
-## 3 · Les surfaces et l'habillage — lesquelles ont un sens pour T3 ?
+## 2 · Un fournisseur d'images, et son plafond
 
-**Débloque 4 lignes.** J'en ai tranché trois moi-même parce que l'argument
-tenait sans toi et que l'annulation ne coûte rien : **64** computer use
-(`preview` fait déjà les 14 gestes sur un navigateur ; le bureau est la plus
-large surface d'attaque qu'on puisse s'ajouter), **67** kanban (T3 a déjà les
-fils), **80** achievements (les badges fêtent l'usage de l'outil, quand le bon
-tour est celui qu'on n'a pas eu besoin de faire). Un mot de toi les rouvre.
+**Ce qui est déjà écrit** : le garde de dépense (n°69). Pas de budget, pas de
+dépense — un budget absent ne veut pas dire « illimité », il veut dire que
+personne n'a décidé. Il refuse aussi une demande déjà servie, et il alerte à
+80 % plutôt qu'au plafond.
 
-Les quatre qui restent touchent ce que T3 EST, donc c'est ton terrain.
+**Ce qui manque** : quel fournisseur, et combien par période. Les deux
+engagent de l'argent, donc les deux sont à toi (M2).
 
-| ligne                       | ce que c'est                                  | ma reco                                                                                                               |
-| --------------------------- | --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| **65** mot d'éveil          | 3 moteurs ONNX embarqués, aucun audio ne sort | **à toi** — on a déjà la VAD et la transcription dans `voice-core` ; c'est le dernier maillon d'un usage mains libres |
-| **66** TTS en streaming     | l'agent parle                                 | **à toi** — même famille que le 65 : les deux vont ensemble ou pas du tout                                            |
-| **69** images et vidéos     | génération                                    | **à toi** — engage de l'argent (clés d'API)                                                                           |
-| **79** bannière, onboarding | première ouverture                            | **à toi** — ton et marque                                                                                             |
+**Ce que le garde protège** : la panne la plus coûteuse de toutes celles
+traitées cette nuit. Chaque appel réussit, chaque appel est facturé, rien ne
+dépasse jusqu'au relevé.
 
-- [ ] j'écarte tout sauf : **\_\_**
-- [ ] je prends tout
-- [ ] on en reparle une par une
+- [ ] fournisseur : \_\_\_\_ · plafond : \_\_\_\_ par \_\_\_\_
+- [ ] plus tard
 
 ---
 
-## 4 · ~~Le CLI expose-t-il déjà `/goal` ?~~ — RÉPONDU, plus rien à décider
+## Ce qui ne t'attend plus
 
-**Oui.** Trouvé le 01/08 dans le binaire lui-même
-(`~/.local/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe`) :
+**~~Installer des skills dans ton home Claude~~** — question dissoute. Le CLI
+porte un marketplace complet, `agentskills.io` compris, avec sa propre
+politique de sources. T3 n'a aucune permission à demander. Ce que T3 ajoute
+est l'INSPECTION avant de prendre — et c'était bien la moitié qui manquait :
+un marketplace installe, il ne scanne pas contre 121 motifs de menace. Sur les
+69 skills d'Hermès, le nôtre en a refusé 30 sur pièce.
 
-    name:"goal", description:"Set a goal Claude checks before stopping"
-    name:"goal", supportsNonInteractive:!0, thinClientDispatch:"post-text"
-    "/goal clear to stop early"
+**~~Le CLI expose-t-il `/goal` ?~~** — répondu en lisant le binaire. Oui, et
+`/goal clear` l'arrête.
 
-`supportsNonInteractive: true` avec `thinClientDispatch: "post-text"` : la
-commande passe par le chemin stream-json du SDK, **donc les utilisateurs de T3
-en disposent déjà**. Le n°8 est écarté — écrire le nôtre doublerait un
-mécanisme qui tourne, et qui a piloté cette session entière.
-
-Et l'information pratique : **`/goal clear` l'arrête.**
+**~~Les surfaces~~** — construites dans la nuit sur ton « go pour tout » : le
+mot d'éveil, le TTS, le choix d'astuce. Il ne reste que le TEXTE des astuces
+et la place du bouton de lecture — du ton, pas du code.
 
 ---
 
-## Hors catalogue, et ça n'attend rien
+## Et les deux lignes qui n'attendent personne
 
-**`~/.t3/userdata/clerk-tokens.json` est en 0666.** Un jeton
-d'authentification que n'importe quel compte de cette machine peut
-**remplacer** — pas seulement lire. Il est posé ainsi par
-`@clerk/electron/storage`, une dépendance : on ne peut pas corriger son mode
-d'écriture, seulement le resserrer après coup. L'audit de démarrage le dit
-maintenant à chaque lancement (n°20).
+**n°3 · graphe d'apprentissage** et **n°12 · suggestions d'allowlist**
+attendent la même chose : que l'usage s'accumule. La projection couvre 7,3
+jours ; il y a 13 refus d'outil enregistrés.
 
-**Ma reco : `chmod 0600` au démarrage ET garder l'avertissement.** Le chmod
-ferme la fenêtre la plupart du temps ; l'avertissement empêche de croire que
-c'est réglé le jour où la dépendance réécrit le fichier.
+Vérifié le 01/08 : **l'attente est productive dans les deux cas.** Git garde
+40 commits de mutations de skills, la projection garde 8 186 activités
+d'outil, et la clé qui relie un refus à sa commande a été posée cette nuit —
+elle manquait, et sans elle attendre n'aurait rien produit.
 
-- [ ] fais-le
-- [ ] laisse l'avertissement seul
+Il n'y a donc rien à construire, et rien à décider. Seulement à laisser le
+temps passer.

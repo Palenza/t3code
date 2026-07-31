@@ -46,27 +46,26 @@ La leçon, écrite ici pour qu'elle serve : **« ce que le CLI contient » est u
 ÉTAT, pas une déduction** — A1 s'y applique. Deux des cinq lignes tombées
 étaient classées « chantier à part entière » au niveau le plus fort.
 
-Ce que les 16 restants attendent vraiment — c'est la seule question utile :
+Ce qui reste, et c'est court :
 
-|       | quoi                                                               | qui décide                                                                                                                         |
-| ----- | ------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
-| **8** | la passerelle 38→45 (Telegram, Discord, Slack)                     | **Enzo** — décision de produit. Vérifié : elles n'attendent AUCUN maillon technique, le bail de tour est un problème qu'on n'a pas |
-| **3** | surfaces 65, 66, 69 (mot d'éveil, TTS, génération d'images)        | **Enzo** — vision produit, et la dernière engage de l'argent                                                                       |
-| **2** | l'installation de skills 52→53                                     | **Enzo** — écrire dans le home Claude se décide. Le n°51 est TRIÉ : 69 skills scannées, 30 refusées sur pièce                      |
-| **1** | habillage 79 (bannière, onboarding)                                | **Enzo** — goût et ton de marque                                                                                                   |
-| **3** | chantiers à part : 7 (PTC), 28 (LSP), 37 (la passerelle elle-même) | multi-session, et vérifié qu'il n'y a pas de demi-mesure utile                                                                     |
-| **5** | 3, 8, 12, 54 + le reste                                            | bloqués ou instruits, chacun avec son reçu écrit                                                                                   |
+|       | quoi                             | ce qui bloque                                                                                                                                                                                                                                   |
+| ----- | -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **1** | **n°3** graphe d'apprentissage   | le TEMPS. La corrélation exige d'observer une skill avant ET après son changement ; la projection couvre 7,3 jours. Git garde déjà 40 commits de mutations, la projection 8 186 activités : **l'attente est productive**, il n'y a rien à poser |
+| **1** | **n°12** suggestions d'allowlist | le TEMPS aussi. 13 refus d'outil en une semaine intense — trop peu pour suggérer. La clé qui relie un refus à sa commande a été posée le 01/08 ; sans elle, attendre n'aurait rien produit                                                      |
 
-Tranchés sur MA décision et renversables d'un mot : **64** computer use,
-**67** kanban, **80** achievements. Chacun porte son argument dans sa ligne ;
-si l'un te manque, dis-le et il rouvre.
+Et **deux activations**, qui ne sont pas des lignes du catalogue mais qui
+tiennent leur livraison : un **jeton de bot Telegram** (les sept décisions de
+la passerelle sont écrites et testées) et un **fournisseur d'images avec son
+plafond** (le garde de dépense est écrit). Les deux sont dans
+`DECISIONS-EN-ATTENTE.md`.
 
-Autrement dit : **rien ne reste qui soit à la fois solo, débloqué et non
-tranché**. Ce qui reste appartient à Enzo, ou demande sa propre session.
+### Le fil qui traverse la nuit du 01/08
 
-**Les questions sont posées, prêtes à répondre** : `docs/DECISIONS-EN-ATTENTE.md`.
-Quatre questions, une reco chacune, **15 des 25 lignes débloquées** selon les
-réponses. Un compteur ne dit pas ce qu'une ligne attend ; ce fichier-là si.
+**Le garde avant le moteur.** L'anti-zombie avant l'ordonnanceur du cron,
+l'autorisation avant l'adaptateur de passerelle, le budget avant le
+fournisseur d'images. Chaque fois, la règle est écrite et testée pendant qu'il
+est encore facile de la faire respecter — et chaque fois, elle a servi
+immédiatement à écrire la suite.
 
 ---
 
@@ -133,23 +132,23 @@ la raison — un écart sans raison se rouvre tous les mois.
   base en mémoire, avec nos réglages actuels (`unicode61
 remove_diacritics 2`) contre `trigram` :
 
-                                                                                    requête      unicode61 (le nôtre)   trigram
-                                                                                    数据  (2)          0                   0
-                                                                                    数据库 (3)          0                   1
-                                                                                    東京  (2)          0                   0
-                                                                                    chat               1                   1
-                                                                                    dort               1                   1
+                                                                                        requête      unicode61 (le nôtre)   trigram
+                                                                                        数据  (2)          0                   0
+                                                                                        数据库 (3)          0                   1
+                                                                                        東京  (2)          0                   0
+                                                                                        chat               1                   1
+                                                                                        dort               1                   1
 
-                                                                                Donc **notre index ne trouve JAMAIS rien en CJK**, pas même sur trois
-                                                                                caractères — ce n'est pas une dégradation, c'est un mur. `trigram` le
-                                                                                lève dès 3 caractères sans toucher au français.
-                                                                                Reste hors de portée : les termes CJK de **1-2 caractères**, et c'est
-                                                                                précisément ce que leur bigramme compilé existe pour couvrir.
-                                                                                **On ne bascule PAS aujourd'hui** : produit français d'abord, un index
-                                                                                trigramme pèse plus lourd (une entrée par fenêtre de 3), et personne
-                                                                                n'attend cette recherche. Mais le jour où un utilisateur CJK arrive, la
-                                                                                décision est un MOT dans la migration 036 — plus un chantier natif.
-                                                                                `native/fts5_cjk/` **(copie C, désormais optionnelle)**
+                                                                                    Donc **notre index ne trouve JAMAIS rien en CJK**, pas même sur trois
+                                                                                    caractères — ce n'est pas une dégradation, c'est un mur. `trigram` le
+                                                                                    lève dès 3 caractères sans toucher au français.
+                                                                                    Reste hors de portée : les termes CJK de **1-2 caractères**, et c'est
+                                                                                    précisément ce que leur bigramme compilé existe pour couvrir.
+                                                                                    **On ne bascule PAS aujourd'hui** : produit français d'abord, un index
+                                                                                    trigramme pèse plus lourd (une entrée par fenêtre de 3), et personne
+                                                                                    n'attend cette recherche. Mais le jour où un utilisateur CJK arrive, la
+                                                                                    décision est un MOT dans la migration 036 — plus un chantier natif.
+                                                                                    `native/fts5_cjk/` **(copie C, désormais optionnelle)**
 
 - [–] **7 · ~~PTC — appel d'outils programmatique~~** — **Écarté : le CLI le
   porte déjà.** Troisième ligne fermée le 01/08 en fouillant le binaire du CLI
