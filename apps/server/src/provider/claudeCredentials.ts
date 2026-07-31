@@ -1,3 +1,4 @@
+import * as NodeCrypto from "node:crypto";
 import * as NodeOS from "node:os";
 
 import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
@@ -18,8 +19,11 @@ import { collectStreamAsString } from "./providerSnapshot.ts";
  * is chosen from the instance's own config directory rather than looked up
  * globally:
  *
- *   - a custom `CLAUDE_CONFIG_DIR` → that directory's `.credentials.json`,
- *     which belongs to that instance and to nothing else;
+ *   - a custom `CLAUDE_CONFIG_DIR` → that directory's own keychain item
+ *     (`Claude Code-credentials-<sha256(dir)[:8]>` — verified on a real
+ *     machine, 28/07/2026: the CLI does NOT write `.credentials.json` on
+ *     macOS, it creates one hashed keychain item per config directory),
+ *     falling back to the directory's `.credentials.json` (non-mac);
  *   - the default directory → the macOS keychain, falling back to
  *     `~/.claude/.credentials.json`.
  *
@@ -86,37 +90,45 @@ const readCredentialFile = Effect.fn("readClaudeCredentialFile")(function* (
   return raw === undefined ? undefined : parseCredential(raw);
 });
 
-const readKeychainCredential = Effect.fn("readClaudeKeychainCredential")(
-  function* (): Effect.fn.Return<
-    StoredCredential | undefined,
-    never,
-    ChildProcessSpawner.ChildProcessSpawner
-  > {
-    // The keychain item only exists on macOS; anywhere else the credentials
-    // file is the only source, and spawning `security` would just fail slowly.
-    if ((yield* HostProcessPlatform) !== "darwin") {
-      return undefined;
-    }
-    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-    const stdout = yield* Effect.gen(function* () {
-      const child = yield* spawner.spawn(
-        ChildProcess.make("security", ["find-generic-password", "-s", KEYCHAIN_SERVICE, "-w"]),
-      );
-      const [text, exitCode] = yield* Effect.all(
-        [collectStreamAsString(child.stdout), child.exitCode.pipe(Effect.map(Number))],
-        { concurrency: "unbounded" },
-      );
-      return exitCode === 0 ? text : undefined;
-    }).pipe(
-      Effect.scoped,
-      // Not found, locked, or access denied. All three mean the same thing here:
-      // no usage for this account.
-      Effect.orElseSucceed(() => undefined),
-    );
+/**
+ * The keychain service name holding one config directory's credentials.
+ *
+ * Derivation verified against real keychain items (28/07/2026):
+ * `~/.claude-compte-b` → `Claude Code-credentials-e4acc0cc`, where `e4acc0cc`
+ * is the first 8 hex chars of sha256 of the absolute directory path.
+ * Attribution is preserved by construction: the hash binds the item to one
+ * directory, so one instance can never read another's credential.
+ */
+export const keychainServiceForConfigDir = (configDir: string): string =>
+  `${KEYCHAIN_SERVICE}-${NodeCrypto.createHash("sha256").update(configDir).digest("hex").slice(0, 8)}`;
 
-    return stdout === undefined ? undefined : parseCredential(stdout);
-  },
-);
+const readKeychainCredential = Effect.fn("readClaudeKeychainCredential")(function* (
+  service: string,
+): Effect.fn.Return<StoredCredential | undefined, never, ChildProcessSpawner.ChildProcessSpawner> {
+  // The keychain item only exists on macOS; anywhere else the credentials
+  // file is the only source, and spawning `security` would just fail slowly.
+  if ((yield* HostProcessPlatform) !== "darwin") {
+    return undefined;
+  }
+  const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+  const stdout = yield* Effect.gen(function* () {
+    const child = yield* spawner.spawn(
+      ChildProcess.make("security", ["find-generic-password", "-s", service, "-w"]),
+    );
+    const [text, exitCode] = yield* Effect.all(
+      [collectStreamAsString(child.stdout), child.exitCode.pipe(Effect.map(Number))],
+      { concurrency: "unbounded" },
+    );
+    return exitCode === 0 ? text : undefined;
+  }).pipe(
+    Effect.scoped,
+    // Not found, locked, or access denied. All three mean the same thing here:
+    // no usage for this account.
+    Effect.orElseSucceed(() => undefined),
+  );
+
+  return stdout === undefined ? undefined : parseCredential(stdout);
+});
 
 export const readClaudeAccessToken = Effect.fn("readClaudeAccessToken")(function* (input: {
   /** The instance's `CLAUDE_CONFIG_DIR`, when it sets one. */
@@ -131,8 +143,9 @@ export const readClaudeAccessToken = Effect.fn("readClaudeAccessToken")(function
 
   const credential =
     configDir !== undefined && configDir.length > 0
-      ? yield* readCredentialFile(path.join(configDir, ".credentials.json"))
-      : ((yield* readKeychainCredential()) ??
+      ? ((yield* readKeychainCredential(keychainServiceForConfigDir(configDir))) ??
+        (yield* readCredentialFile(path.join(configDir, ".credentials.json"))))
+      : ((yield* readKeychainCredential(KEYCHAIN_SERVICE)) ??
         (yield* readCredentialFile(path.join(NodeOS.homedir(), ".claude", ".credentials.json"))));
 
   if (credential === undefined) {
