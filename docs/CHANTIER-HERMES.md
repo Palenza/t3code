@@ -211,7 +211,14 @@ la raison — un écart sans raison se rouvre tous les mois.
 - [ ] **57 · Mise à jour propre** — verrou, rollback de commit épinglé,
       récupération d'autostash, relance, migration. `update_cmd.py` (5 086)
 - [ ] **58 · Désinstallation propre** `uninstall.py` (964)
-- [ ] **59 · Inventaire, dump, logs, statut, debug, upload de diagnostic**
+- [x] **59 · Inventaire** — le `doctor` DIAGNOSTIQUE, l'inventaire DÉCRIT :
+      versions, comptes, serveurs MCP, poids de l'état. Avec la contrainte
+      qu'ils n'ont pas nommée — un inventaire est fait pour être COLLÉ quelque
+      part d'où on ne peut plus le retirer, donc aucune valeur n'y entre : les
+      variables par NOM, les chemins sans le nom de session.
+      `inventory.py`, `dump.py`, `status.py`
+      _(reste : l'upload de diagnostic vers un serveur — on ne l'enverra
+      nulle part.)_
 - [ ] **60 · Observabilité** — OTLP, santé passerelle, santé cron, contrat de
       métriques partagées
 - [x] **61 · Classification d'erreurs** — fondue dans `classerEchec`, pas
