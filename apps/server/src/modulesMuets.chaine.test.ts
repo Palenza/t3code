@@ -33,6 +33,7 @@ import { assert, describe, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import { racineDesSources } from "./racineDesSources.ts";
 
 /**
  * Les dossiers de la campagne d'absorption : des modules PURS, écrits pour
@@ -148,7 +149,7 @@ it.layer(NodeServices.layer, { excludeTestServices: true })("modules muets", (it
       Effect.gen(function* () {
         const fileSystem = yield* FileSystem.FileSystem;
         const path = yield* Path.Path;
-        const racine = path.join(process.cwd(), "src");
+        const racine = racineDesSources();
 
         const sources = yield* toutesLesSources(racine);
         // Un test qui n'énumère rien passerait au vert en ne testant rien.
@@ -187,7 +188,7 @@ it.layer(NodeServices.layer, { excludeTestServices: true })("modules muets", (it
         // finirait branché, la ligne resterait, et la prochaine lecture de la
         // liste raconterait une situation qui n'existe plus.
         const path = yield* Path.Path;
-        const racine = path.join(process.cwd(), "src");
+        const racine = racineDesSources();
         const sources = yield* toutesLesSources(racine);
 
         const perimees = [...MUETS_ASSUMES.keys()].filter((cle) => {

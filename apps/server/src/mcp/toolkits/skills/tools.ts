@@ -3,6 +3,7 @@ import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import { Tool, Toolkit } from "effect/unstable/ai";
 
+import { ApprentissageStore } from "../../../skills/ApprentissageStore.ts";
 import { UsageStore } from "../../../skills/UsageStore.ts";
 
 /**
@@ -201,8 +202,71 @@ export const InspecterSkillTool = Tool.make("inspecter-skill", {
   .annotate(Tool.Destructive, false)
   .annotate(Tool.Idempotent, true);
 
+/**
+ * L'outil `apprentissage` — est-ce que changer cette skill a servi à quelque chose ?
+ *
+ * Chantier n°3. La question n'est pas « qu'est-ce qui a changé » — git le dit
+ * déjà, gratuitement et mieux. C'est « est-ce que ça a AMÉLIORÉ quelque
+ * chose », et personne ne le dit.
+ *
+ * ── Pourquoi il rend surtout des non-réponses, et pourquoi c'est le produit ─
+ *
+ * Mesuré le 01/08 : 11 invocations de skill sur 6 skills distinctes, en 7,4
+ * jours. Avec un plancher de 5 observations par fenêtre, presque aucune
+ * mutation n'est jugeable aujourd'hui.
+ *
+ * Un outil qui inventerait des corrélations là-dessus serait pire qu'absent :
+ * il donnerait à des écarts d'une observation l'autorité d'une mesure, et
+ * quelqu'un réécrirait une skill sur cette base. Le produit livré, c'est donc
+ * le REFUS chiffré — « 2 observations avant, il en faut 5 » — et sa
+ * distinction d'avec « aucun effet », qui lui est un résultat.
+ */
+export const ApprentissageInput = Schema.Struct({
+  /** Le dépôt où lire les mutations. C'est là que vivent les skills du projet. */
+  cwd: Schema.String,
+});
+
+const LigneRendue = Schema.Struct({
+  skill: Schema.String,
+  quand: Schema.String,
+  libelle: Schema.String,
+  verdict: Schema.Literals([
+    "amélioration",
+    "régression",
+    "sans-effet-mesurable",
+    "jamais-observée",
+    "trop-récent",
+    "pas-assez-de-preuves",
+  ]),
+  detail: Schema.String,
+});
+
+export const ApprentissageResultat = Schema.Struct({
+  /** Le récit, qui commence par ce qu'on ne sait PAS. */
+  recit: Schema.String,
+  lignes: Schema.Array(LigneRendue),
+  /** Combien de mutations ont pu être jugées, sur combien examinées. */
+  jugeables: Schema.Number,
+  examinees: Schema.Number,
+  note: Schema.optional(Schema.String),
+});
+
+export const ApprentissageTool = Tool.make("apprentissage", {
+  description:
+    "Est-ce que modifier cette skill a amélioré quelque chose ? Croise les mutations de skills (git) avec leur usage réel avant/après (projection), et rend un verdict PAR mutation. Refuse de conclure quand les observations manquent, en disant combien il en manque — « pas assez de preuves » et « aucun effet » y sont deux réponses différentes. Ne montre pas l'historique des changements : pour ça, git log.",
+  parameters: ApprentissageInput,
+  success: ApprentissageResultat,
+  failure: UsageSkillsError,
+  dependencies: [ApprentissageStore, FileSystem.FileSystem, Path.Path],
+})
+  .annotate(Tool.Title, "Apprentissage des skills")
+  .annotate(Tool.Readonly, true)
+  .annotate(Tool.Destructive, false)
+  .annotate(Tool.Idempotent, true);
+
 export const UsageSkillsToolkit = Toolkit.make(
   UsageSkillsTool,
   NormesSkillsTool,
   InspecterSkillTool,
+  ApprentissageTool,
 );

@@ -142,7 +142,7 @@ export function isoDe(ms: number | null): string | null {
 }
 
 /** Le jour seul, `AAAA-MM-JJ`, ou `""` si l'horodatage est inexploitable. */
-function jourDe(ms: number): string {
+export function jourDe(ms: number): string {
   return isoDe(ms)?.slice(0, 10) ?? "";
 }
 const enJours = (ms: number): string => (ms / JOUR).toFixed(1);

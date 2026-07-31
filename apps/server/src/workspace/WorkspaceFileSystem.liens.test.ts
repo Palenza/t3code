@@ -24,6 +24,7 @@ import * as VcsProcess from "../vcs/VcsProcess.ts";
 import * as WorkspaceEntries from "./WorkspaceEntries.ts";
 import * as WorkspaceFileSystem from "./WorkspaceFileSystem.ts";
 import * as WorkspacePaths from "./WorkspacePaths.ts";
+import { racineDesSources } from "../racineDesSources.ts";
 
 const ProjectLayer = WorkspaceFileSystem.layer.pipe(
   Layer.provide(WorkspacePaths.layer),
@@ -205,7 +206,7 @@ it.layer(TestLayer, { excludeTestServices: true })("writeFile · liens symboliqu
         // module `workspace` ne contourne les deux gardes.
         const fileSystem = yield* FileSystem.FileSystem;
         const path = yield* Path.Path;
-        const dossier = path.join(process.cwd(), "src", "workspace");
+        const dossier = path.join(racineDesSources(), "workspace");
         const source = yield* fileSystem
           .readFileString(path.join(dossier, "WorkspaceFileSystem.ts"))
           .pipe(Effect.orDie);

@@ -30,6 +30,8 @@ import {
   PreviewStandardToolkit,
 } from "./toolkits/preview/tools.ts";
 import { PaquetToolkitHandlersLive } from "./toolkits/paquet/handlers.ts";
+import { SuggestionsToolkitHandlersLive } from "./toolkits/securite/handlers.ts";
+import { SuggestionsToolkit } from "./toolkits/securite/tools.ts";
 import { PaquetToolkit } from "./toolkits/paquet/tools.ts";
 import { PreuveToolkitHandlersLive } from "./toolkits/preuve/handlers.ts";
 import { PreuveToolkit } from "./toolkits/preuve/tools.ts";
@@ -41,6 +43,8 @@ import { DetteToolkit } from "./toolkits/persistance/tools.ts";
 import { DetteStoreLive } from "../persistance/DetteStore.ts";
 import { UsageSkillsToolkitHandlersLive } from "./toolkits/skills/handlers.ts";
 import { UsageSkillsToolkit } from "./toolkits/skills/tools.ts";
+import { ApprentissageStoreLive } from "../skills/ApprentissageStore.ts";
+import { RefusStoreLive } from "../securite/RefusStore.ts";
 import { UsageStoreLive } from "../skills/UsageStore.ts";
 import { RappelToolkitHandlersLive } from "./toolkits/rappel/handlers.ts";
 import { RappelToolkit } from "./toolkits/rappel/tools.ts";
@@ -283,6 +287,7 @@ const PreuveToolkitRegistrationLive = McpServer.toolkit(PreuveToolkit).pipe(
 const UsageSkillsToolkitRegistrationLive = McpServer.toolkit(UsageSkillsToolkit).pipe(
   Layer.provide(UsageSkillsToolkitHandlersLive),
   Layer.provide(UsageStoreLive),
+  Layer.provide(ApprentissageStoreLive),
 );
 
 /**
@@ -315,6 +320,18 @@ const PaquetToolkitRegistrationLive = McpServer.toolkit(PaquetToolkit).pipe(
   Layer.provide(FetchHttpClient.layer),
 );
 
+/**
+ * Les autorisations suggérées (chantier n°12) — le seul outil de la maison
+ * qui propose d'OUVRIR une frontière de sécurité. D'où l'inversion : il
+ * exige un motif établi sur plusieurs jours, refuse les commandes
+ * destructrices quel que soit leur compteur, et quand il ne propose rien,
+ * ses raisons SONT le résultat.
+ */
+const SuggestionsToolkitRegistrationLive = McpServer.toolkit(SuggestionsToolkit).pipe(
+  Layer.provide(SuggestionsToolkitHandlersLive),
+  Layer.provide(RefusStoreLive),
+);
+
 const McpTransportLive = McpServer.layerHttp({
   name: "T3 Code",
   version: packageJson.version,
@@ -330,4 +347,5 @@ export const layer = Layer.mergeAll(
   DetteToolkitRegistrationLive,
   SanteToolkitRegistrationLive,
   PaquetToolkitRegistrationLive,
+  SuggestionsToolkitRegistrationLive,
 ).pipe(Layer.provideMerge(McpTransportLive));

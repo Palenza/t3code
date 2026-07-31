@@ -6,6 +6,7 @@ import * as Path from "effect/Path";
 
 import { TELEGRAM } from "./DebiterVersUneMessagerie.ts";
 import { plateformeDe, registre, type Plateforme } from "./Plateforme.ts";
+import { racineDesSources } from "../racineDesSources.ts";
 
 const fausse = (nom: string): Plateforme => ({
   nom,
@@ -56,7 +57,7 @@ it.layer(NodeServices.layer, { excludeTestServices: true })("le cœur reste neut
       // en SILENCE, parce que ça marcherait quand même.
       const fileSystem = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
-      const dossier = path.join(process.cwd(), "src", "passerelle");
+      const dossier = path.join(racineDesSources(), "passerelle");
       const entrees = yield* fileSystem.readDirectory(dossier).pipe(Effect.orDie);
       assert.isAbove(entrees.length, 3, "dossier introuvable : le chemin a bougé");
 

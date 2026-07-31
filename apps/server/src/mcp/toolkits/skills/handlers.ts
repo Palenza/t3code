@@ -6,8 +6,10 @@ import { controlerSkill, resumeDeControle } from "../../../skills/NormesDeSkill.
 import { porteDeSortie } from "../../DebordementSurDisque.ts";
 import { inspecterDossier } from "./inspection.ts";
 import { skillsSurDisque } from "../../../skills/SurDisque.ts";
+import { ApprentissageStore } from "../../../skills/ApprentissageStore.ts";
+import { grapheDApprentissage, raconterLeGraphe } from "../../../skills/GrapheDApprentissage.ts";
 import { UsageStore } from "../../../skills/UsageStore.ts";
-import { classerLesSkills, isoDe, resumeDUsage } from "../../../skills/UsageDesSkills.ts";
+import { classerLesSkills, isoDe, jourDe, resumeDUsage } from "../../../skills/UsageDesSkills.ts";
 import { UsageSkillsError, UsageSkillsToolkit } from "./tools.ts";
 
 /**
@@ -173,6 +175,65 @@ const handlers = {
         };
       }),
       porteDeSortie,
+    ),
+  apprentissage: (input) =>
+    Effect.gen(function* () {
+      const store = yield* ApprentissageStore;
+      const matiere = yield* store.matiere(input.cwd);
+
+      // Pas de fin de données = projection vide. On ne borne alors RIEN, et
+      // toute fenêtre « après » serait ouverte à l'infini : mieux vaut le dire
+      // que de rendre des verdicts calculés sur du vide.
+      if (matiere.finDesDonnees === null) {
+        return {
+          recit:
+            "La projection ne contient aucune activité : il n'y a pas de fenêtre d'observation, donc rien à corréler. Ce n'est pas « les skills ne servent pas », c'est « on n'a rien observé » (H4).",
+          lignes: [],
+          jugeables: 0,
+          examinees: 0,
+        };
+      }
+
+      const lignes = grapheDApprentissage(
+        matiere.mutations,
+        matiere.observations,
+        matiere.finDesDonnees,
+      );
+      const jugeables = lignes.filter(
+        (ligne) =>
+          ligne.verdict.quoi === "amélioration" ||
+          ligne.verdict.quoi === "régression" ||
+          ligne.verdict.quoi === "sans-effet-mesurable",
+      ).length;
+
+      return {
+        recit: raconterLeGraphe(lignes),
+        lignes: lignes.map((ligne) => ({
+          skill: ligne.mutation.skill,
+          quand: jourDe(ligne.mutation.quand),
+          libelle: ligne.mutation.libelle,
+          verdict: ligne.verdict.quoi,
+          detail:
+            "pourquoi" in ligne.verdict
+              ? ligne.verdict.pourquoi
+              : `${String(ligne.verdict.avant.reussites)}/${String(ligne.verdict.avant.total)} puis ${String(ligne.verdict.apres.reussites)}/${String(ligne.verdict.apres.total)}`,
+        })),
+        jugeables,
+        examinees: lignes.length,
+        ...(matiere.mutations.length === 0
+          ? {
+              note: "Aucune mutation de skill trouvée dans git pour ce dépôt. Soit les skills n'y ont jamais changé, soit elles vivent ailleurs — le graphe ne peut pas distinguer les deux.",
+            }
+          : {}),
+      };
+    }).pipe(
+      Effect.mapError(
+        (cause) =>
+          new UsageSkillsError({
+            message: `Lecture de l'apprentissage impossible : ${String(cause)}`,
+          }),
+      ),
+      Effect.flatMap(porteDeSortie),
     ),
 } satisfies Parameters<typeof UsageSkillsToolkit.toLayer>[0];
 

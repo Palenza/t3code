@@ -16,7 +16,7 @@ plan.
 
 ## Où en est le catalogue — au 01/08/2026
 
-**34 livrés · 17 partiels · 32 écartés sur pièce · 2 restants.**
+**36 livrés · 17 partiels · 32 écartés sur pièce · 0 restant.**
 
 Chaque ligne a été INSTRUITE : aucune n'est restée sans qu'on aille voir. Un
 écart porte toujours sa raison, et une raison porte un reçu quand elle repose
@@ -46,17 +46,50 @@ La leçon, écrite ici pour qu'elle serve : **« ce que le CLI contient » est u
 ÉTAT, pas une déduction** — A1 s'y applique. Deux des cinq lignes tombées
 étaient classées « chantier à part entière » au niveau le plus fort.
 
-Ce qui reste, et c'est court :
+Les 85 lignes sont instruites. Il ne reste aucune ligne ouverte.
 
-|       | quoi                             | ce qui bloque                                                                                                                                                                                                                                   |
-| ----- | -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **1** | **n°3** graphe d'apprentissage   | le TEMPS. La corrélation exige d'observer une skill avant ET après son changement ; la projection couvre 7,3 jours. Git garde déjà 40 commits de mutations, la projection 8 186 activités : **l'attente est productive**, il n'y a rien à poser |
-| **1** | **n°12** suggestions d'allowlist | le TEMPS aussi. 13 refus d'outil en une semaine intense — trop peu pour suggérer. La clé qui relie un refus à sa commande a été posée le 01/08 ; sans elle, attendre n'aurait rien produit                                                      |
+### Les deux dernières, et l'erreur qu'elles ont corrigée
 
-Et **deux activations**, qui ne sont pas des lignes du catalogue mais qui
-tiennent leur livraison : un **jeton de bot Telegram** (les sept décisions de
-la passerelle sont écrites et testées) et un **fournisseur d'images avec son
-plafond** (le garde de dépense est écrit). Les deux sont dans
+J'ai tenu n°3 et n°12 pour « bloqués par le TEMPS » pendant toute la
+campagne. C'était une confusion entre deux choses différentes : l'intérêt de
+la SORTIE et la constructibilité du MODULE. Un module qui répond « pas assez
+de preuves, il en manque 5 » est la bonne implémentation, pas une
+implémentation absente — H4 le dit depuis le début.
+
+**Ce que la vraie donnée a renversé, en allant la lire :**
+
+| ce que je croyais                                             | ce que la base dit                                                                                      |
+| ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| la commande d'un refus est irrécupérable sans une clé à poser | `tool.completed` porte `data.result.tool_use_id` À CÔTÉ de `data.input` — **13 refus sur 13 rattachés** |
+| la clé que j'ai posée le 01/08 a rendu l'attente productive   | elle n'a jamais tourné : l'app installée date du 31/07 15h54, le commit de 02h27 le lendemain           |
+| l'issue d'un appel de skill n'est pas enregistrée             | `data.result.is_error` : 6 081 succès, 203 échecs                                                       |
+
+La clé ajoutée n'était donc **pas nécessaire**. Elle ne gêne pas, mais elle
+n'a rien débloqué — cinquième fois de la campagne qu'aller LIRE renverse un
+verdict tiré du raisonnement. A1 s'applique aux états, et « ce que la base
+contient » est un état.
+
+**Ce que les modules rendent sur les vraies données**, mesuré le 01/08 :
+
+| n°12 | 13 refus lus, 12 rattachés à leur commande, **0 suggestion** — 10 sont des chaînes shell dont le début ment sur la suite, 1 vise un autre outil que Bash, et `pwd` (2 fois) est tombé le même jour |
+| ---- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| n°3  | 64 mutations lues dans git, 11 observations d'usage, **0 jugeable** — 59 skills jamais observées, 4 trop récentes, 1 sans assez de preuves                                                         |
+
+Deux listes vides, et c'est le produit : dans les deux cas la VALEUR est dans
+les raisons chiffrées, pas dans la liste. Un suggéreur naïf aurait proposé
+`Bash` sur 12 refus ; le nôtre dit pourquoi il ne propose rien.
+
+**Le garde propre à n°12**, qui n'existe pas chez Hermès : leur
+`approvals_suggest.py` compte et propose les plus fréquents. C'est le seul
+module de la maison qui propose d'OUVRIR une frontière de sécurité, donc la
+charge de la preuve s'inverse — motif établi sur DEUX JOURS distincts (12 des
+13 vrais refus sont tombés le même après-midi), jamais un outil nu, jamais une
+chaîne shell, et **jamais une commande destructrice quel que soit son
+compteur : la fréquence n'est pas un consentement.**
+
+Restent **deux activations**, qui ne sont pas des lignes du catalogue mais qui
+tiennent leur mise en service : un **jeton de bot Telegram** et un
+**fournisseur d'images avec son plafond**. Les deux sont dans
 `DECISIONS-EN-ATTENTE.md`.
 
 ### Le fil qui traverse la nuit du 01/08
@@ -94,22 +127,31 @@ la raison — un écart sans raison se rouvre tous les mois.
       instrumentation** (T3 persiste déjà chaque appel). Le verdict porte sa
       FENÊTRE : sur les 7,1 j observés, 0 archivable sur 17.
       `tools/skill_usage.py` (1 145)
-- [ ] **3 · Graphe d'apprentissage** — mutations tracées, rendu visuel, frise
-      `/journey`. `agent/learning_graph.py`, `learning_graph_render.py`,
+- [x] **3 · Graphe d'apprentissage** — `agent/learning_graph.py`,
       `learning_mutations.py`, `hermes_cli/journey.py`
-      **Verdict CORRIGÉ le 01/08.** J'avais écrit « bloqué en chaîne : personne
-      ne mute encore, le curateur décide et n'applique rien ». Faux sur le
-      premier point : les mutations sont DÉJÀ tracées, gratuitement, par git —
-      **45 commits touchent `.claude/skills/` dans Palenza**, avec leur date et
-      leur message. Qui a changé quoi et quand est un `git log`.
-      Le vrai blocage est ailleurs, et il est plus profond : ce chantier
-      s'appelle graphe d'APPRENTISSAGE, pas graphe de modifications. Sa valeur
-      est la CORRÉLATION — est-ce que ce changement a amélioré quelque chose ?
-      Répondre demande d'observer l'usage de la skill avant et après, donc une
-      fenêtre qui couvre sa vie. La projection en couvre 7,3 jours (mesuré,
-      élaguée). Sans ça, on rendrait une frise de commits — que `git log` donne
-      déjà — en l'appelant apprentissage.
-      Le rendu visuel et la frise `/journey` sont, eux, de l'interface : Enzo.
+      **LIVRÉ le 01/08.** Ce qu'on ne refait pas : la traçabilité des
+      mutations, que git donne déjà (64 mutations lues sur 24 skills). Ce
+      qu'on ajoute, et que git ne peut pas faire : la CORRÉLATION — est-ce que
+      ce changement a amélioré quelque chose ?
+      **Trois pièges désamorcés**, et aucun n'est décoratif :
+      · **le voisin** — la fenêtre d'après s'arrête à la mutation SUIVANTE.
+      Sans ça, l'effet d'une mutation est attribué à celle d'avant ;
+      · **le petit nombre** — _si retirer UNE observation favorable efface
+      l'écart, il n'y a pas d'écart._ Aucune constante, s'adapte tout seul à
+      la taille ;
+      · **la fenêtre encore ouverte** — « trop récent » et « pas assez de
+      preuves » sont deux verdicts distincts : l'un demande d'attendre,
+      l'autre dit que le verdict ne viendra pas tout seul.
+      Le plancher de 5 observations ne fait PAS double emploi avec la règle de
+      robustesse : 0/2 puis 5/5 survit à une observation retournée (+50 pts) et
+      ne décrit pourtant rien. Le test le prouve.
+      Reçu sur données réelles : 64 mutations, 11 observations, **0 jugeable**
+      — 59 jamais observées, 4 trop récentes, 1 sans assez de preuves. C'est la
+      bonne réponse, et c'est le produit : inventer une corrélation là-dessus
+      donnerait à un écart d'une observation l'autorité d'une mesure.
+      Branché : outil MCP `apprentissage` (+ `ApprentissageStore`, qui lit git
+      ET la projection). Le rendu visuel et la frise `/journey` restent de
+      l'interface : Enzo.
 - [x] **4 · Les NORMES d'une skill** — leur `_AUTHORING_STANDARDS` porté non
       pas en prompt mais en CONTRÔLE : un prompt est un espoir, un contrôle est
       un fait, et il s'applique aussi aux skills déjà écrites. Seuil de
@@ -132,23 +174,23 @@ la raison — un écart sans raison se rouvre tous les mois.
   base en mémoire, avec nos réglages actuels (`unicode61
 remove_diacritics 2`) contre `trigram` :
 
-                                                                                        requête      unicode61 (le nôtre)   trigram
-                                                                                        数据  (2)          0                   0
-                                                                                        数据库 (3)          0                   1
-                                                                                        東京  (2)          0                   0
-                                                                                        chat               1                   1
-                                                                                        dort               1                   1
+                                                                                            requête      unicode61 (le nôtre)   trigram
+                                                                                            数据  (2)          0                   0
+                                                                                            数据库 (3)          0                   1
+                                                                                            東京  (2)          0                   0
+                                                                                            chat               1                   1
+                                                                                            dort               1                   1
 
-                                                                                    Donc **notre index ne trouve JAMAIS rien en CJK**, pas même sur trois
-                                                                                    caractères — ce n'est pas une dégradation, c'est un mur. `trigram` le
-                                                                                    lève dès 3 caractères sans toucher au français.
-                                                                                    Reste hors de portée : les termes CJK de **1-2 caractères**, et c'est
-                                                                                    précisément ce que leur bigramme compilé existe pour couvrir.
-                                                                                    **On ne bascule PAS aujourd'hui** : produit français d'abord, un index
-                                                                                    trigramme pèse plus lourd (une entrée par fenêtre de 3), et personne
-                                                                                    n'attend cette recherche. Mais le jour où un utilisateur CJK arrive, la
-                                                                                    décision est un MOT dans la migration 036 — plus un chantier natif.
-                                                                                    `native/fts5_cjk/` **(copie C, désormais optionnelle)**
+                                                                                        Donc **notre index ne trouve JAMAIS rien en CJK**, pas même sur trois
+                                                                                        caractères — ce n'est pas une dégradation, c'est un mur. `trigram` le
+                                                                                        lève dès 3 caractères sans toucher au français.
+                                                                                        Reste hors de portée : les termes CJK de **1-2 caractères**, et c'est
+                                                                                        précisément ce que leur bigramme compilé existe pour couvrir.
+                                                                                        **On ne bascule PAS aujourd'hui** : produit français d'abord, un index
+                                                                                        trigramme pèse plus lourd (une entrée par fenêtre de 3), et personne
+                                                                                        n'attend cette recherche. Mais le jour où un utilisateur CJK arrive, la
+                                                                                        décision est un MOT dans la migration 036 — plus un chantier natif.
+                                                                                        `native/fts5_cjk/` **(copie C, désormais optionnelle)**
 
 - [–] **7 · ~~PTC — appel d'outils programmatique~~** — **Écarté : le CLI le
   porte déjà.** Troisième ligne fermée le 01/08 en fouillant le binaire du CLI
@@ -215,39 +257,35 @@ remove_diacritics 2`) contre `trigram` :
       _(reste : l'approbation interactive elle-même — un LLM auxiliaire qui
       auto-approuve le faible risque, et la mise en attente d'écriture de
       `write_approval.py`. Palier D2.)_
-- [ ] **12 · Suggestions d'allowlist** — l'agent propose ce qu'il faudrait
-      autoriser. `hermes_cli/approvals_suggest.py`
-      **Bloqué DEUX fois, mesuré le 01/08** — et ma première lecture était
-      imprécise. J'avais dit « 0 ligne » : c'était vrai de
-      `projection_pending_approvals`, qui est une table de choses EN ATTENTE,
-      donc transitoire. Les décisions, elles, sont ailleurs et existent :
-      **13 activités `tool.denied`** (12 `Bash`, 1 `Write`), plus 367
-      activités dont le payload mentionne une permission.
-      Deux murs, et ils sont indépendants :
-      · **la commande refusée n'est enregistrée nulle part.** Le message
-      `permission_denied` du SDK ne porte que `tool_name`, `tool_use_id`,
-      `agent_id` et le motif — jamais l'entrée de l'outil. La commande vit
-      dans l'activité `tool.updated` correspondante, mais
-      `ItemLifecyclePayload` n'a AUCUN identifiant : la jointure serait
-      heuristique (« le dernier `tool.updated` du même tour »). Le
-      correctif serait un champ `toolUseId` sur ce payload, propagé aux
-      deux sites d'émission de l'adaptateur et à l'ingestion ;
-      · **13 refus en une semaine d'usage intense.** Même avec une jointure
-      parfaite, un suggéreur n'aurait presque rien à proposer. Le VOLUME
-      bloque autant que la donnée, et lui ne se lève pas par du code.
-      **Le premier mur est tombé le 01/08**, et ma raison de ne pas y toucher
-      était mauvaise. J'avais écrit « on n'instrumente pas : ça lèverait un mur
-      sur deux ». Sauf que le second mur est le TEMPS — et sans la clé, attendre
-      que le volume vienne ne sert à rien, puisque les refus accumulés
-      resteraient tout aussi muets. Ne pas poser la clé, c'était rendre
-      l'attente stérile.
-      Elle n'a rien coûté : `ToolInFlight.itemId` vaut déjà `block.id`,
-      c'est-à-dire le `tool_use_id` du bloc `tool_use`, et l'événement le
-      portait — seule l'ingestion le jetait. Une ligne reportée, avec son test
-      (prouvé par mutation : retirer la ligne fait tomber l'assertion).
-      Reste donc le VOLUME, et lui ne se lève que par l'usage : 13 refus en une
-      semaine intense. À rouvrir quand ils deviendront fréquents — mais ils
-      seront alors rattachables à leur commande.
+- [x] **12 · Suggestions d'allowlist** — `hermes_cli/approvals_suggest.py`
+      **LIVRÉ le 01/08**, et ma lecture du 01/08 au matin était fausse sur le
+      point qui bloquait tout.
+      J'avais écrit : « la commande refusée n'est enregistrée nulle part », et
+      j'en avais déduit qu'il fallait poser une clé. Faux. `tool.completed`
+      porte `data.result.tool_use_id` — le même identifiant que le refus — À
+      CÔTÉ de `data.input` qui contient la commande. La jointure retrouve
+      **13 refus sur 13**. La clé que j'avais ajoutée n'était pas nécessaire,
+      et elle n'a de toute façon jamais tourné : l'application installée date
+      du 31/07 15h54, le commit du 01/08 02h27.
+      **L'inversion de la charge de la preuve**, qui est notre écart avec eux :
+      c'est le seul module de la maison qui propose d'OUVRIR une frontière de
+      sécurité. Une suggestion acceptée élargit, définitivement et
+      silencieusement ; un refus de suggérer coûte un aller-retour. Donc :
+      · motif établi sur **deux jours distincts** au moins — reçu : 12 des 13
+      vrais refus sont tombés le même après-midi, et un compteur brut y aurait
+      lu « Bash : 12 refus, motif écrasant » ;
+      · **jamais un outil nu** — on ne donne pas tout le shell pour douze
+      commandes ;
+      · **jamais une chaîne shell** — `git status && rm -rf /` commence par
+      `git status` ;
+      · **jamais une commande destructrice**, quel que soit le compteur. Douze
+      refus de `rm -rf` ne sont pas douze arguments pour l'autoriser : ce sont
+      douze fois où le garde a fait son travail. LA FRÉQUENCE N'EST PAS UN
+      CONSENTEMENT.
+      Reçu sur données réelles : 13 refus, **0 suggestion** — 10 chaînes shell,
+      1 autre outil que Bash, `pwd` deux fois le même jour. La valeur est dans
+      les raisons, pas dans la liste.
+      Branché : outil MCP `autorisations-suggerees` (+ `RefusStore`).
 - [x] **13 · Patterns de menace** — les 36 motifs d'Hermès portés en DONNÉE,
       par classe d'attaque, avec leurs trois PORTÉES (partout / contexte /
       strict) : détecter large partout, ne bloquer que là où l'humain peut

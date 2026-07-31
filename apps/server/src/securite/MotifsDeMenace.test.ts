@@ -4,6 +4,7 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 
+import { racineDesSources } from "../racineDesSources.ts";
 import {
   avertissementDeMenace,
   MOTIFS,
@@ -119,8 +120,8 @@ it.layer(NodeServices.layer, { excludeTestServices: true })("nos propres fichier
       const notres = [
         "/Users/enzo/Documents/Palenza/CLAUDE.md",
         "/Users/enzo/Documents/Palenza/.claude/skills/chaines/SKILL.md",
-        path.join(process.cwd(), "src", "mcp", "SortieDOutil.ts"),
-        path.join(process.cwd(), "src", "persistance", "DetteDePersistance.ts"),
+        path.join(racineDesSources(), "mcp", "SortieDOutil.ts"),
+        path.join(racineDesSources(), "persistance", "DetteDePersistance.ts"),
       ];
 
       for (const chemin of notres) {
@@ -153,7 +154,7 @@ it.layer(NodeServices.layer, { excludeTestServices: true })("nos propres fichier
       const fileSystem = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
       const source = yield* fileSystem
-        .readFileString(path.join(process.cwd(), "src", "securite", "MotifsDeMenace.ts"))
+        .readFileString(path.join(racineDesSources(), "securite", "MotifsDeMenace.ts"))
         .pipe(Effect.orDie);
       const vues = scannerMenaces(source, "contexte");
       assert.isNotEmpty(vues, "le fichier des motifs devrait se reconnaître");

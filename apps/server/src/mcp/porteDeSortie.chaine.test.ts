@@ -30,6 +30,7 @@ import { assert, describe, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import { racineDesSources } from "../racineDesSources.ts";
 
 /**
  * Les toolkits qui n'ont légitimement pas de porte, avec la RAISON.
@@ -45,7 +46,7 @@ it.layer(NodeServices.layer, { excludeTestServices: true })("porte de sortie", (
       Effect.gen(function* () {
         const fileSystem = yield* FileSystem.FileSystem;
         const path = yield* Path.Path;
-        const racine = path.join(process.cwd(), "src", "mcp");
+        const racine = path.join(racineDesSources(), "mcp");
         const dossier = path.join(racine, "toolkits");
 
         const noms = yield* fileSystem.readDirectory(dossier).pipe(Effect.orDie);
@@ -80,7 +81,7 @@ it.layer(NodeServices.layer, { excludeTestServices: true })("porte de sortie", (
         const fileSystem = yield* FileSystem.FileSystem;
         const path = yield* Path.Path;
         const source = yield* fileSystem
-          .readFileString(path.join(process.cwd(), "src", "mcp", "SortieDOutil.ts"))
+          .readFileString(path.join(racineDesSources(), "mcp", "SortieDOutil.ts"))
           .pipe(Effect.orDie);
         assert.include(source, "caviarder", "la porte ne caviarde plus");
         assert.include(source, "alleger", "la porte ne fait plus déborder sur disque");

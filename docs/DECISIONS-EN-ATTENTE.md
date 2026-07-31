@@ -76,16 +76,29 @@ et la place du bouton de lecture — du ton, pas du code.
 
 ---
 
-## Et les deux lignes qui n'attendent personne
+## Les deux dernières lignes sont livrées
 
-**n°3 · graphe d'apprentissage** et **n°12 · suggestions d'allowlist**
-attendent la même chose : que l'usage s'accumule. La projection couvre 7,3
-jours ; il y a 13 refus d'outil enregistrés.
+**n°3 · graphe d'apprentissage** et **n°12 · suggestions d'allowlist** ne
+sont plus en attente. Je les tenais pour « bloquées par le temps » ; c'était
+une confusion entre l'intérêt de la SORTIE et la constructibilité du MODULE.
+Un module qui répond « pas assez de preuves, il en manque 5 » est la bonne
+implémentation, pas une implémentation absente.
 
-Vérifié le 01/08 : **l'attente est productive dans les deux cas.** Git garde
-40 commits de mutations de skills, la projection garde 8 186 activités
-d'outil, et la clé qui relie un refus à sa commande a été posée cette nuit —
-elle manquait, et sans elle attendre n'aurait rien produit.
+Les deux rendent aujourd'hui une **liste vide avec ses raisons chiffrées**,
+et c'est le produit : n°12 a lu 13 refus et n'en propose aucun (10 sont des
+chaînes shell dont le début ment sur la suite) ; n°3 a lu 64 mutations et n'en
+juge aucune (59 skills jamais observées). Un suggéreur naïf aurait proposé
+`Bash` sur 12 refus.
 
-Il n'y a donc rien à construire, et rien à décider. Seulement à laisser le
-temps passer.
+Au passage, deux choses que j'affirmais ici et qui étaient fausses — vérifiées
+en allant lire la base plutôt qu'en raisonnant :
+
+- la commande d'un refus était réputée irrécupérable. Elle ne l'est pas :
+  **13 refus sur 13** se rattachent à leur commande, par un identifiant qui
+  existait déjà.
+- la clé que j'avais posée le 01/08 était réputée avoir rendu l'attente
+  productive. Elle n'a jamais tourné : l'application installée date du 31/07
+  à 15h54, le commit du lendemain 02h27.
+
+Il n'y a donc plus rien à construire, et plus rien à décider. Seulement les
+deux clés du haut de cette page.
