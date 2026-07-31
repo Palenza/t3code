@@ -23,6 +23,7 @@ function makeUiState(overrides: Partial<UiState> = {}): UiState {
     projectOrder: [],
     threadLastVisitedAtById: {},
     threadChangedFilesExpandedById: {},
+    lastOpenedThreadKey: null,
     defaultAdvertisedEndpointKey: null,
     ...overrides,
   };
@@ -176,6 +177,12 @@ describe("parsePersistedState", () => {
       threadLastVisitedAtById: {
         "environment:thread-1": "2026-02-25T12:35:00.000Z",
       },
+      // Golden élargi SCIEMMENT le 31/07 : `lastOpenedThreadKey` entre dans
+      // l'état persisté pour rouvrir le fil quitté (« ça doit toujours se
+      // redémarrer là où tu as quitté »). Ces deux assertions figent la FORME
+      // complète — un champ qui s'ajoute doit s'y voir, sinon la forme n'est
+      // plus figée par personne.
+      lastOpenedThreadKey: null,
       defaultAdvertisedEndpointKey: "desktop-core:lan:http",
       threadChangedFilesExpandedById: {
         "environment:thread-1": {
@@ -295,6 +302,12 @@ describe("uiStateStore persistence", () => {
       threadLastVisitedAtById: {
         "environment:thread-1": "2026-02-25T12:35:00.000Z",
       },
+      // Golden élargi SCIEMMENT le 31/07 : `lastOpenedThreadKey` entre dans
+      // l'état persisté pour rouvrir le fil quitté (« ça doit toujours se
+      // redémarrer là où tu as quitté »). Ces deux assertions figent la FORME
+      // complète — un champ qui s'ajoute doit s'y voir, sinon la forme n'est
+      // plus figée par personne.
+      lastOpenedThreadKey: null,
       defaultAdvertisedEndpointKey: "desktop-core:lan:http",
       threadChangedFilesExpansionVersion: 1,
       threadChangedFilesExpandedById: {
