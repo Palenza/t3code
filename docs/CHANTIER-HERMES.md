@@ -16,13 +16,13 @@ plan.
 
 ## Où en est le catalogue — au 01/08/2026
 
-**34 livrés · 5 partiels · 21 écartés sur pièce · 25 restants.**
+**34 livrés · 5 partiels · 22 écartés sur pièce · 24 restants.**
 
 Chaque ligne a été INSTRUITE : aucune n'est restée sans qu'on aille voir. Un
 écart porte toujours sa raison, et une raison porte un reçu quand elle repose
 sur une mesure.
 
-Ce que les 25 restants attendent vraiment — c'est la seule question utile :
+Ce que les 24 restants attendent vraiment — c'est la seule question utile :
 
 |       | quoi                                                                     | qui décide                                                                                                                         |
 | ----- | ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
@@ -94,29 +94,29 @@ la raison — un écart sans raison se rouvre tous les mois.
       des arguments, coût LLM zéro, fenêtre ±5, bornes de fil, un résultat par
       fil. `tools/session_search_tool.py` (1 142)
       → `5dcdc8647`, plafonds mesurés dans `71c1d7b38`
-- [ ] **6 · Tokenizer CJK** — **MESURÉ le 01/08, et le chantier a changé de
-      taille.** Il n'y a pas de C à écrire pour l'essentiel : le SQLite
-      embarqué de Node porte déjà le tokenizer `trigram`. Relevé sur la vraie
-      base en mémoire, avec nos réglages actuels (`unicode61
+- [–] **6 · Tokenizer CJK** — **ÉCARTÉ sur mesure, 01/08, et le chantier a changé de
+  taille.** Il n'y a pas de C à écrire pour l'essentiel : le SQLite
+  embarqué de Node porte déjà le tokenizer `trigram`. Relevé sur la vraie
+  base en mémoire, avec nos réglages actuels (`unicode61
 remove_diacritics 2`) contre `trigram` :
 
-                                requête      unicode61 (le nôtre)   trigram
-                                数据  (2)          0                   0
-                                数据库 (3)          0                   1
-                                東京  (2)          0                   0
-                                chat               1                   1
-                                dort               1                   1
+                                  requête      unicode61 (le nôtre)   trigram
+                                  数据  (2)          0                   0
+                                  数据库 (3)          0                   1
+                                  東京  (2)          0                   0
+                                  chat               1                   1
+                                  dort               1                   1
 
-                            Donc **notre index ne trouve JAMAIS rien en CJK**, pas même sur trois
-                            caractères — ce n'est pas une dégradation, c'est un mur. `trigram` le
-                            lève dès 3 caractères sans toucher au français.
-                            Reste hors de portée : les termes CJK de **1-2 caractères**, et c'est
-                            précisément ce que leur bigramme compilé existe pour couvrir.
-                            **On ne bascule PAS aujourd'hui** : produit français d'abord, un index
-                            trigramme pèse plus lourd (une entrée par fenêtre de 3), et personne
-                            n'attend cette recherche. Mais le jour où un utilisateur CJK arrive, la
-                            décision est un MOT dans la migration 036 — plus un chantier natif.
-                            `native/fts5_cjk/` **(copie C, désormais optionnelle)**
+                              Donc **notre index ne trouve JAMAIS rien en CJK**, pas même sur trois
+                              caractères — ce n'est pas une dégradation, c'est un mur. `trigram` le
+                              lève dès 3 caractères sans toucher au français.
+                              Reste hors de portée : les termes CJK de **1-2 caractères**, et c'est
+                              précisément ce que leur bigramme compilé existe pour couvrir.
+                              **On ne bascule PAS aujourd'hui** : produit français d'abord, un index
+                              trigramme pèse plus lourd (une entrée par fenêtre de 3), et personne
+                              n'attend cette recherche. Mais le jour où un utilisateur CJK arrive, la
+                              décision est un MOT dans la migration 036 — plus un chantier natif.
+                              `native/fts5_cjk/` **(copie C, désormais optionnelle)**
 
 - [ ] **7 · PTC — appel d'outils programmatique** — le modèle écrit un script
       qui appelle nos outils, N tours → 1. Seul le `stdout` revient. Chez nous il
