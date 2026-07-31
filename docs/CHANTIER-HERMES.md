@@ -133,23 +133,23 @@ la raison — un écart sans raison se rouvre tous les mois.
   base en mémoire, avec nos réglages actuels (`unicode61
 remove_diacritics 2`) contre `trigram` :
 
-                                                      requête      unicode61 (le nôtre)   trigram
-                                                      数据  (2)          0                   0
-                                                      数据库 (3)          0                   1
-                                                      東京  (2)          0                   0
-                                                      chat               1                   1
-                                                      dort               1                   1
+                                                        requête      unicode61 (le nôtre)   trigram
+                                                        数据  (2)          0                   0
+                                                        数据库 (3)          0                   1
+                                                        東京  (2)          0                   0
+                                                        chat               1                   1
+                                                        dort               1                   1
 
-                                                  Donc **notre index ne trouve JAMAIS rien en CJK**, pas même sur trois
-                                                  caractères — ce n'est pas une dégradation, c'est un mur. `trigram` le
-                                                  lève dès 3 caractères sans toucher au français.
-                                                  Reste hors de portée : les termes CJK de **1-2 caractères**, et c'est
-                                                  précisément ce que leur bigramme compilé existe pour couvrir.
-                                                  **On ne bascule PAS aujourd'hui** : produit français d'abord, un index
-                                                  trigramme pèse plus lourd (une entrée par fenêtre de 3), et personne
-                                                  n'attend cette recherche. Mais le jour où un utilisateur CJK arrive, la
-                                                  décision est un MOT dans la migration 036 — plus un chantier natif.
-                                                  `native/fts5_cjk/` **(copie C, désormais optionnelle)**
+                                                    Donc **notre index ne trouve JAMAIS rien en CJK**, pas même sur trois
+                                                    caractères — ce n'est pas une dégradation, c'est un mur. `trigram` le
+                                                    lève dès 3 caractères sans toucher au français.
+                                                    Reste hors de portée : les termes CJK de **1-2 caractères**, et c'est
+                                                    précisément ce que leur bigramme compilé existe pour couvrir.
+                                                    **On ne bascule PAS aujourd'hui** : produit français d'abord, un index
+                                                    trigramme pèse plus lourd (une entrée par fenêtre de 3), et personne
+                                                    n'attend cette recherche. Mais le jour où un utilisateur CJK arrive, la
+                                                    décision est un MOT dans la migration 036 — plus un chantier natif.
+                                                    `native/fts5_cjk/` **(copie C, désormais optionnelle)**
 
 - [–] **7 · ~~PTC — appel d'outils programmatique~~** — **Écarté : le CLI le
   porte déjà.** Troisième ligne fermée le 01/08 en fouillant le binaire du CLI
@@ -236,10 +236,19 @@ remove_diacritics 2`) contre `trigram` :
       · **13 refus en une semaine d'usage intense.** Même avec une jointure
       parfaite, un suggéreur n'aurait presque rien à proposer. Le VOLUME
       bloque autant que la donnée, et lui ne se lève pas par du code.
-      Donc on n'ajoute pas l'instrumentation aujourd'hui : elle lèverait un
-      mur sur deux, pour une fonctionnalité que le second garde fermée. À
-      rouvrir si les refus deviennent fréquents — c'est alors qu'ils vaudront
-      la peine d'être suggérés.
+      **Le premier mur est tombé le 01/08**, et ma raison de ne pas y toucher
+      était mauvaise. J'avais écrit « on n'instrumente pas : ça lèverait un mur
+      sur deux ». Sauf que le second mur est le TEMPS — et sans la clé, attendre
+      que le volume vienne ne sert à rien, puisque les refus accumulés
+      resteraient tout aussi muets. Ne pas poser la clé, c'était rendre
+      l'attente stérile.
+      Elle n'a rien coûté : `ToolInFlight.itemId` vaut déjà `block.id`,
+      c'est-à-dire le `tool_use_id` du bloc `tool_use`, et l'événement le
+      portait — seule l'ingestion le jetait. Une ligne reportée, avec son test
+      (prouvé par mutation : retirer la ligne fait tomber l'assertion).
+      Reste donc le VOLUME, et lui ne se lève que par l'usage : 13 refus en une
+      semaine intense. À rouvrir quand ils deviendront fréquents — mais ils
+      seront alors rattachables à leur commande.
 - [x] **13 · Patterns de menace** — les 36 motifs d'Hermès portés en DONNÉE,
       par classe d'attaque, avec leurs trois PORTÉES (partout / contexte /
       strict) : détecter large partout, ne bloquer que là où l'humain peut

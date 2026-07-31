@@ -652,6 +652,20 @@ export function runtimeEventToActivities(
           summary: event.payload.title ?? "Tool updated",
           payload: {
             itemType: event.payload.itemType,
+            // L'identifiant de l'appel d'outil, reporté depuis l'événement.
+            //
+            // Il vaut le `tool_use_id` du bloc `tool_use` (`itemId = block.id`
+            // côté adaptateur), et c'est LUI que porte un `tool.denied`. Sans
+            // lui ici, un refus se lit « Bash a été refusé » sans qu'aucune
+            // requête ne puisse retrouver QUELLE commande : la jointure devrait
+            // se deviner sur l'ordre des activités du tour.
+            //
+            // Mesuré le 01/08 : 13 refus enregistrés, aucun rattachable à sa
+            // commande. Le volume est trop faible aujourd'hui pour en tirer des
+            // suggestions d'autorisation (n°12) — mais sans cette clé, attendre
+            // que le volume vienne ne servirait à rien, puisque les refus
+            // accumulés resteraient tout aussi muets.
+            ...(event.itemId ? { itemId: event.itemId } : {}),
             ...(event.payload.status ? { status: event.payload.status } : {}),
             ...(event.payload.detail ? { detail: truncateDetail(event.payload.detail) } : {}),
             ...(event.payload.data !== undefined ? { data: event.payload.data } : {}),

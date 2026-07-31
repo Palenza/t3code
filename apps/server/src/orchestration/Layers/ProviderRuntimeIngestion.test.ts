@@ -2878,6 +2878,11 @@ describe("ProviderRuntimeIngestion", () => {
     expect(toolUpdate?.kind).toBe("tool.updated");
     expect(toolUpdatePayload?.itemType).toBe("command_execution");
     expect(toolUpdatePayload?.status).toBe("in_progress");
+    // L'identifiant de l'appel d'outil doit ARRIVER dans le payload : c'est le
+    // `tool_use_id`, et c'est la seule clé qui rattache un `tool.denied` à la
+    // commande qui a été refusée. Sans lui, un refus se lit « Bash a été
+    // refusé » sans qu'aucune requête ne puisse dire laquelle.
+    expect(toolUpdatePayload?.itemId).toBe("item-p1-tool");
 
     const warning = thread.activities.find(
       (activity: ProviderRuntimeTestActivity) => activity.id === "evt-runtime-warning",
