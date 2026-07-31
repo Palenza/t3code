@@ -16,13 +16,13 @@ plan.
 
 ## Où en est le catalogue — au 01/08/2026
 
-**34 livrés · 5 partiels · 27 écartés sur pièce · 19 restants.**
+**34 livrés · 5 partiels · 28 écartés sur pièce · 18 restants.**
 
 Chaque ligne a été INSTRUITE : aucune n'est restée sans qu'on aille voir. Un
 écart porte toujours sa raison, et une raison porte un reçu quand elle repose
 sur une mesure.
 
-Ce que les 19 restants attendent vraiment — c'est la seule question utile :
+Ce que les 18 restants attendent vraiment — c'est la seule question utile :
 
 |       | quoi                                                               | qui décide                                                                                                                         |
 | ----- | ------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
@@ -104,23 +104,23 @@ la raison — un écart sans raison se rouvre tous les mois.
   base en mémoire, avec nos réglages actuels (`unicode61
 remove_diacritics 2`) contre `trigram` :
 
-                                                requête      unicode61 (le nôtre)   trigram
-                                                数据  (2)          0                   0
-                                                数据库 (3)          0                   1
-                                                東京  (2)          0                   0
-                                                chat               1                   1
-                                                dort               1                   1
+                                                  requête      unicode61 (le nôtre)   trigram
+                                                  数据  (2)          0                   0
+                                                  数据库 (3)          0                   1
+                                                  東京  (2)          0                   0
+                                                  chat               1                   1
+                                                  dort               1                   1
 
-                                            Donc **notre index ne trouve JAMAIS rien en CJK**, pas même sur trois
-                                            caractères — ce n'est pas une dégradation, c'est un mur. `trigram` le
-                                            lève dès 3 caractères sans toucher au français.
-                                            Reste hors de portée : les termes CJK de **1-2 caractères**, et c'est
-                                            précisément ce que leur bigramme compilé existe pour couvrir.
-                                            **On ne bascule PAS aujourd'hui** : produit français d'abord, un index
-                                            trigramme pèse plus lourd (une entrée par fenêtre de 3), et personne
-                                            n'attend cette recherche. Mais le jour où un utilisateur CJK arrive, la
-                                            décision est un MOT dans la migration 036 — plus un chantier natif.
-                                            `native/fts5_cjk/` **(copie C, désormais optionnelle)**
+                                              Donc **notre index ne trouve JAMAIS rien en CJK**, pas même sur trois
+                                              caractères — ce n'est pas une dégradation, c'est un mur. `trigram` le
+                                              lève dès 3 caractères sans toucher au français.
+                                              Reste hors de portée : les termes CJK de **1-2 caractères**, et c'est
+                                              précisément ce que leur bigramme compilé existe pour couvrir.
+                                              **On ne bascule PAS aujourd'hui** : produit français d'abord, un index
+                                              trigramme pèse plus lourd (une entrée par fenêtre de 3), et personne
+                                              n'attend cette recherche. Mais le jour où un utilisateur CJK arrive, la
+                                              décision est un MOT dans la migration 036 — plus un chantier natif.
+                                              `native/fts5_cjk/` **(copie C, désormais optionnelle)**
 
 - [–] **7 · ~~PTC — appel d'outils programmatique~~** — **Écarté : le CLI le
   porte déjà.** Troisième ligne fermée le 01/08 en fouillant le binaire du CLI
@@ -326,27 +326,23 @@ remove_diacritics 2`) contre `trigram` :
 - [x] **27 · Lecture du contexte** — « il te reste 3 tours » au lieu de
       « 83 % ». `agent/iteration_budget.py` → `b0a4cf0d0`
       _(reste : répartition par catégorie, références)_
-- [ ] **28 · Client LSP** — l'agent voit le code comme un IDE. Chez nous :
-      exposé en outil MCP. `agent/lsp/`
-      **Instruit le 01/08 — et la tranche facile est un LEURRE.** J'ai voulu
-      livrer un morceau bon marché : un outil « où ce symbole est-il défini ? »
-      bâti sur les définitions que `repoMapCore` extrait déjà. Mesuré d'abord :
+- [–] **28 · ~~Client LSP~~** — **Écarté : le CLI le porte déjà.** Quatrième
+  ligne fermée le 01/08 en fouillant le binaire, après les n°8, 54 et 7 — et
+  celle-ci renverse un verdict que j'avais rendu deux heures plus tôt sur du
+  raisonnement.
+  J'avais conclu, à raison, qu'il n'y a pas de demi-mesure utile : ce qu'un
+  LSP ajoute à `Grep` (trancher entre homonymes, suivre les ré-exports,
+  renommer sans casser) est exactement la partie chère. J'en avais tiré « donc
+  ça attend un créneau ». Faux : ça n'attend rien, c'est là.
 
-          scannerSkill        28 mentions →  1 définition
-          transformerSortie   23 mentions →  1 définition
-          caviarder           33 mentions →  1 définition
+      operation: "goToDefinition"   ·  findReferences   ·  workspaceSymbol
+      documentSymbol  ·  hover  ·  diagnostics  ·  rename
+      textDocument/definition  ·  textDocument/references
+      « The symbol name or partial name to search for. Most language servers
+        return no results for an empty query. »
 
-      Le bruit est réel (≈ 28 pour 1). Sauf qu'un motif précis —
-      `export (function|const|class|interface|type) X` — la trouve du PREMIER
-      coup, et l'agent a `Grep`. Un outil n'encoderait donc qu'un raccourci
-      pour quelque chose de déjà possible : un problème qu'on n'a pas.
-      Ce qu'un vrai LSP ajoute et que `Grep` ne peut PAS faire : trancher
-      entre plusieurs symboles homonymes depuis un site d'appel, suivre les
-      références à travers les ré-exports et les alias, renommer sans casser.
-      C'est réel — et c'est exactement la partie qui coûte 4 400 lignes et un
-      cycle de vie de serveur de langage. Il n'y a pas de demi-mesure utile.
-      Chantier à part entière, non bloqué : il attend un créneau, pas une
-      décision.
+  La dernière ligne est une description d'ARGUMENT montrée au modèle : c'est
+  un outil, pas une dépendance interne. `agent/lsp/`
 
 - [–] **29 · ~~Environnements d'exécution~~** — **Écarté sur inventaire,
   01/08.** Leur dossier porte huit environnements : local, ssh, docker,
