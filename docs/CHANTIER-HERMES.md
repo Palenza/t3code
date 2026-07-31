@@ -42,6 +42,14 @@ la raison — un écart sans raison se rouvre tous les mois.
 - [ ] **3 · Graphe d'apprentissage** — mutations tracées, rendu visuel, frise
       `/journey`. `agent/learning_graph.py`, `learning_graph_render.py`,
       `learning_mutations.py`, `hermes_cli/journey.py`
+      **Bloqué en CHAÎNE, et la racine est mesurée (01/08).** Ce chantier
+      enregistre les MUTATIONS de skills — qui a changé quoi, quand, pourquoi.
+      Or personne ne mute encore : le curateur (n°1) décide et n'applique
+      rien, parce qu'il attend une fenêtre d'observation (la projection ne
+      couvre que 7,3 jours). Le graphe d'un ensemble vide est une page
+      blanche.
+      La racine n'est donc pas du code manquant, c'est du TEMPS : il faut que
+      la projection couvre la vie des skills. Rien à construire d'ici là.
 - [x] **4 · Les NORMES d'une skill** — leur `_AUTHORING_STANDARDS` porté non
       pas en prompt mais en CONTRÔLE : un prompt est un espoir, un contrôle est
       un fait, et il s'applique aussi aux skills déjà écrites. Seuil de
@@ -64,23 +72,23 @@ la raison — un écart sans raison se rouvre tous les mois.
       base en mémoire, avec nos réglages actuels (`unicode61
 remove_diacritics 2`) contre `trigram` :
 
-              requête      unicode61 (le nôtre)   trigram
-              数据  (2)          0                   0
-              数据库 (3)          0                   1
-              東京  (2)          0                   0
-              chat               1                   1
-              dort               1                   1
+                requête      unicode61 (le nôtre)   trigram
+                数据  (2)          0                   0
+                数据库 (3)          0                   1
+                東京  (2)          0                   0
+                chat               1                   1
+                dort               1                   1
 
-          Donc **notre index ne trouve JAMAIS rien en CJK**, pas même sur trois
-          caractères — ce n'est pas une dégradation, c'est un mur. `trigram` le
-          lève dès 3 caractères sans toucher au français.
-          Reste hors de portée : les termes CJK de **1-2 caractères**, et c'est
-          précisément ce que leur bigramme compilé existe pour couvrir.
-          **On ne bascule PAS aujourd'hui** : produit français d'abord, un index
-          trigramme pèse plus lourd (une entrée par fenêtre de 3), et personne
-          n'attend cette recherche. Mais le jour où un utilisateur CJK arrive, la
-          décision est un MOT dans la migration 036 — plus un chantier natif.
-          `native/fts5_cjk/` **(copie C, désormais optionnelle)**
+            Donc **notre index ne trouve JAMAIS rien en CJK**, pas même sur trois
+            caractères — ce n'est pas une dégradation, c'est un mur. `trigram` le
+            lève dès 3 caractères sans toucher au français.
+            Reste hors de portée : les termes CJK de **1-2 caractères**, et c'est
+            précisément ce que leur bigramme compilé existe pour couvrir.
+            **On ne bascule PAS aujourd'hui** : produit français d'abord, un index
+            trigramme pèse plus lourd (une entrée par fenêtre de 3), et personne
+            n'attend cette recherche. Mais le jour où un utilisateur CJK arrive, la
+            décision est un MOT dans la migration 036 — plus un chantier natif.
+            `native/fts5_cjk/` **(copie C, désormais optionnelle)**
 
 - [ ] **7 · PTC — appel d'outils programmatique** — le modèle écrit un script
       qui appelle nos outils, N tours → 1. Seul le `stdout` revient. Chez nous il
@@ -249,8 +257,18 @@ remove_diacritics 2`) contre `trigram` :
       _(reste : répartition par catégorie, références)_
 - [ ] **28 · Client LSP** — l'agent voit le code comme un IDE. Chez nous :
       exposé en outil MCP. `agent/lsp/`
-- [ ] **29 · Environnements d'exécution** — Docker, Modal, Daytona, Vercel
-      Sandbox + synchro de fichiers. `tools/environments/`
+- [–] **29 · ~~Environnements d'exécution~~** — **Écarté sur inventaire,
+  01/08.** Leur dossier porte huit environnements : local, ssh, docker,
+  modal, managed_modal, daytona, + la synchro de fichiers.
+  On en a déjà QUATRE, et ce sont ceux qui comptent pour notre posture :
+  **local**, **SSH** (`packages/ssh`), **WSL** (`apps/desktop/src/wsl`), les
+  **worktrees**, et un point d'entrée **cloud managé**
+  (`cloud/ManagedEndpointRuntime`). Tailscale relie le tout.
+  Ce qui manque est exactement la famille « LOUER un bac à sable à un SaaS » —
+  Docker distant, Modal, Daytona, Vercel Sandbox. Ce n'est pas un manque
+  technique, c'est une autre posture de produit : T3 tourne sur TA machine ou
+  sur TA machine distante. Y ajouter de la compute louée engage de l'argent,
+  donc ça remonte à Enzo avant d'être un chantier (M2).
 - [–] **30 · Registre de processus + pool de démons + interruption** —
   **Écarté sur enquête, 01/08.** Leurs 2 422 lignes lancent, suivent,
   tamponnent, surveillent et tuent des processus d'arrière-plan. Chez nous
