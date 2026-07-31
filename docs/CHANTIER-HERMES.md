@@ -16,7 +16,7 @@ plan.
 
 ## Où en est le catalogue — au 01/08/2026
 
-**34 livrés · 8 partiels · 31 écartés sur pièce · 12 restants.**
+**34 livrés · 9 partiels · 31 écartés sur pièce · 11 restants.**
 
 Chaque ligne a été INSTRUITE : aucune n'est restée sans qu'on aille voir. Un
 écart porte toujours sa raison, et une raison porte un reçu quand elle repose
@@ -133,23 +133,23 @@ la raison — un écart sans raison se rouvre tous les mois.
   base en mémoire, avec nos réglages actuels (`unicode61
 remove_diacritics 2`) contre `trigram` :
 
-                                                                    requête      unicode61 (le nôtre)   trigram
-                                                                    数据  (2)          0                   0
-                                                                    数据库 (3)          0                   1
-                                                                    東京  (2)          0                   0
-                                                                    chat               1                   1
-                                                                    dort               1                   1
+                                                                      requête      unicode61 (le nôtre)   trigram
+                                                                      数据  (2)          0                   0
+                                                                      数据库 (3)          0                   1
+                                                                      東京  (2)          0                   0
+                                                                      chat               1                   1
+                                                                      dort               1                   1
 
-                                                                Donc **notre index ne trouve JAMAIS rien en CJK**, pas même sur trois
-                                                                caractères — ce n'est pas une dégradation, c'est un mur. `trigram` le
-                                                                lève dès 3 caractères sans toucher au français.
-                                                                Reste hors de portée : les termes CJK de **1-2 caractères**, et c'est
-                                                                précisément ce que leur bigramme compilé existe pour couvrir.
-                                                                **On ne bascule PAS aujourd'hui** : produit français d'abord, un index
-                                                                trigramme pèse plus lourd (une entrée par fenêtre de 3), et personne
-                                                                n'attend cette recherche. Mais le jour où un utilisateur CJK arrive, la
-                                                                décision est un MOT dans la migration 036 — plus un chantier natif.
-                                                                `native/fts5_cjk/` **(copie C, désormais optionnelle)**
+                                                                  Donc **notre index ne trouve JAMAIS rien en CJK**, pas même sur trois
+                                                                  caractères — ce n'est pas une dégradation, c'est un mur. `trigram` le
+                                                                  lève dès 3 caractères sans toucher au français.
+                                                                  Reste hors de portée : les termes CJK de **1-2 caractères**, et c'est
+                                                                  précisément ce que leur bigramme compilé existe pour couvrir.
+                                                                  **On ne bascule PAS aujourd'hui** : produit français d'abord, un index
+                                                                  trigramme pèse plus lourd (une entrée par fenêtre de 3), et personne
+                                                                  n'attend cette recherche. Mais le jour où un utilisateur CJK arrive, la
+                                                                  décision est un MOT dans la migration 036 — plus un chantier natif.
+                                                                  `native/fts5_cjk/` **(copie C, désormais optionnelle)**
 
 - [–] **7 · ~~PTC — appel d'outils programmatique~~** — **Écarté : le CLI le
   porte déjà.** Troisième ligne fermée le 01/08 en fouillant le binaire du CLI
@@ -466,8 +466,8 @@ remove_diacritics 2`) contre `trigram` :
   réponse ; un flux abandonné est un silence.
   Et le détail qui casse un rendu sans qu'on comprenne pourquoi : on ne
   coupe jamais au milieu d'un bloc de code. Une clôture ```orpheline
-  casse l'affichage de la messagerie pour TOUT le reste du message, pas
-  seulement pour le bloc.`stream*consumer.py` (2 250)
+casse l'affichage de la messagerie pour TOUT le reste du message, pas
+seulement pour le bloc.`stream*consumer.py` (2 250)
   *(reste : l'envoi lui-même, qui vient avec le premier adaptateur.)\_
 - [~] **39 · Livraison fiable** — **la décision livrée le 01/08.** Ce qui
   compte n'est pas de réessayer, c'est de savoir QUOI réessayer.
@@ -514,8 +514,27 @@ remove_diacritics 2`) contre `trigram` :
   invitation. `authz_mixin.py` (838)
   _(reste : l'appairage lui-même — le geste par lequel un canal devient
   autorisé — et son stockage. Ils viendront avec le premier adaptateur.)_
-- [ ] **41 · SDK d'ajout de plateforme sans toucher au cœur**
-      `platform_registry.py` + `ADDING_A_PLATFORM.md`
+- [~] **41 · SDK d'ajout de plateforme** — **le contrat livré le 01/08.** Il
+  relie les trois fondations (n°40 qui parle, n°38 comment le flux tient,
+  n°39 quoi réessayer) à une plateforme réelle, et il est écrit pour que
+  la QUATRIÈME plateforme coûte autant que la deuxième.
+  Ce que « sans toucher au cœur » veut dire concrètement : ajouter Discord
+  après Telegram doit être un fichier de plus, une entrée au registre,
+  zéro ligne modifiée ailleurs. **Un test structurel le garde** — il
+  refuse toute comparaison de nom de plateforme en dur dans le cœur, parce
+  qu'un `if (plateforme === "discord")` ferait échouer le contrat EN
+  SILENCE : ça marcherait quand même. Prouvé par mutation.
+  Deux décisions dans le contrat lui-même : l'adaptateur rapporte
+  l'erreur BRUTE sans la classer (`CibleMorte.ts` la classe pour toutes
+  les plateformes d'un seul endroit — un adaptateur qui jugerait ferait
+  diverger les verdicts, et une correction se ferait à un endroit sur
+  trois) ; et un doublon de nom LÈVE au lieu de se laisser arbitrer par
+  l'ordre du tableau.
+  Le contrat est volontairement PETIT. Leur `platforms/` porte des
+  adaptateurs de milliers de lignes ; l'essentiel n'y est pas. Un contrat
+  qui grossit à chaque plateforme n'est plus un contrat, c'est la somme
+  des cas particuliers.
+  _(reste : le premier adaptateur qui l'implémente — c'est le n°42.)_
 - [ ] **42 · Telegram d'abord**, puis Discord, Slack, WhatsApp, Signal
 - [ ] **43 · Cycle de vie robuste** — vidange, forensique d'arrêt, watchdog,
       anti-boucle de redémarrage, scale-to-zero, moniteur mémoire, skew de code

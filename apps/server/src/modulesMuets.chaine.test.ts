@@ -61,16 +61,12 @@ const DOSSIERS = [
  */
 const MUETS_ASSUMES = new Map<string, string>([
   [
+    "passerelle/Plateforme.ts",
+    "Contrat d'adaptateur de plateforme (n°41). Il n'a pas d'appelant tant qu'aucun adaptateur n'existe — c'est sa nature : il décrit ce qu'un adaptateur doit fournir, et le premier qui arrivera l'implémentera.",
+  ],
+  [
     "passerelle/CibleMorte.ts",
     "Décision de livraison fiable (n°39), écrite avant le premier adaptateur — comme l'autorisation et le débit. Aucune livraison ne part encore vers une plateforme tierce.",
-  ],
-  [
-    "passerelle/DebiterVersUneMessagerie.ts",
-    "Décision de débit vers une messagerie (n°38), écrite avant le premier adaptateur — comme l'autorisation. Sans adaptateur, aucun message ne part encore ; le jour où il existe, il ne peut pas ne pas la traverser.",
-  ],
-  [
-    "passerelle/QuiPeutParler.ts",
-    "Fondation de sûreté de la passerelle (n°40), écrite AVANT le premier adaptateur — même ordre que le garde anti-zombie avant l'ordonnanceur. Elle n'a pas d'appelant parce qu'aucun message n'arrive encore d'une plateforme tierce ; le jour où le premier adaptateur existe, il ne peut pas ne pas la traverser, puisqu'il n'y a pas d'autre chemin pour décider.",
   ],
   [
     "skills/Curateur.ts",
