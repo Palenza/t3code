@@ -155,3 +155,43 @@ describe("décision de relais", () => {
     assert.strictEqual(decision.type, "epuise");
   });
 });
+
+describe("les échecs qu'une bascule ne répare PAS", () => {
+  const socle = { ...base, candidats: [candidat("A", 10), candidat("B", 10)] };
+
+  it("un CONTEXTE PLEIN ne bascule pas — un autre compte a la même fenêtre", () => {
+    // Aspiré d'Hermès : leur taxonomie sépare `context_overflow` du reste
+    // précisément parce que le remède est de COMPRESSER, pas de basculer.
+    const d = deciderRelais({
+      ...socle,
+      code: 400,
+      message: "prompt is too long: 1050000 tokens > 1000000 maximum",
+    });
+    assert.equal(d.type, "laisser");
+    assert.equal(d.verdict.nature, "contexte-trop-grand");
+    assert.include(d.raison, "COMPRESSER");
+  });
+
+  it("une SURCHARGE du fournisseur ne bascule pas — elle les touche tous", () => {
+    // Sans cette règle, un 529 d'Anthropic partait en « transitoire » et
+    // brûlait le tour d'un second compte Max pour le même échec.
+    const d = deciderRelais({
+      ...socle,
+      code: 529,
+      message: "Overloaded: the service is temporarily overloaded",
+    });
+    assert.equal(d.type, "laisser");
+    assert.equal(d.verdict.nature, "surcharge-fournisseur");
+    assert.include(d.raison, "débordé");
+  });
+
+  it("un vrai QUOTA bascule toujours — la correction n'a rien élargi", () => {
+    const d = deciderRelais({ ...socle, code: 429, message: "rate limit exceeded" });
+    assert.equal(d.type, "basculer");
+  });
+
+  it("un 5xx ordinaire bascule toujours", () => {
+    const d = deciderRelais({ ...socle, code: 502, message: "bad gateway" });
+    assert.equal(d.type, "basculer");
+  });
+});

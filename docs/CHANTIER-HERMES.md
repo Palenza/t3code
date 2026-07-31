@@ -210,8 +210,13 @@ la raison — un écart sans raison se rouvre tous les mois.
 - [ ] **59 · Inventaire, dump, logs, statut, debug, upload de diagnostic**
 - [ ] **60 · Observabilité** — OTLP, santé passerelle, santé cron, contrat de
       métriques partagées
-- [ ] **61 · Classification d'erreurs** — à fondre avec notre carnet des
-      pannes non reconnues. `agent/error_classifier.py` (1 790)
+- [x] **61 · Classification d'erreurs** — fondue dans `classerEchec`, pas
+      posée à côté : deux natures de plus, choisies parce que leur REMÈDE
+      diffère (`contexte-trop-grand` → compresser ; `surcharge-fournisseur`
+      → attendre). Les deux étaient basculées à tort, donc brûlaient le tour
+      d'un second compte Max pour rien. `agent/error_classifier.py` (1 717)
+      _(reste : les natures propres aux 33 fournisseurs d'API — sans objet
+      chez nous.)_
 - [ ] **62 · Isolation d'egress + proxy**
 - [ ] **63 · Navigateur** — superviseur avec redémarrage, CDP direct sur ton
       Chromium, dialogues, furtif. `tools/browser_supervisor.py` (1 518)
