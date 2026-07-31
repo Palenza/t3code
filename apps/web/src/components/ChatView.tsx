@@ -15,6 +15,7 @@ import {
   type ThreadId,
   type TurnId,
   type KeybindingCommand,
+  type ServerProviderAuthStatus,
   OrchestrationThreadActivity,
   ProviderInteractionMode,
   ProviderDriverKind,
@@ -278,6 +279,7 @@ import {
   resolveSendEnvMode,
   revokeBlobPreviewUrl,
   revokeUserMessagePreviewUrls,
+  shouldAnnounceProviderSignedOut,
   shouldWriteThreadErrorToCurrentServerThread,
   startNewThreadForProject,
   waitForStartedServerThread,
@@ -2031,16 +2033,25 @@ function ChatViewContent(props: ChatViewProps) {
   const providerStatuses = serverConfig?.providers ?? EMPTY_PROVIDERS;
   // A Claude account silently losing its login is how the auto-relay dies
   // without anyone knowing (vécu 29/07 : A et B déconnectés, le mur du matin
-  // n'avait plus aucune cible). Say it the moment it happens — once per
-  // authenticated→unauthenticated transition, never on startup noise.
-  const lastAuthStatusByInstanceRef = useRef<Map<string, string>>(new Map());
+  // n'avait plus aucune cible).
+  //
+  // 31/07 — cette garde-là n'a RIEN dit pendant deux jours, et sa raison est
+  // instructive : elle ne parlait que sur la TRANSITION authenticated→
+  // unauthenticated qu'elle voyait de ses yeux. Or les comptes sont morts
+  // pendant que l'app était fermée (rebuild), donc au démarrage suivant la
+  // première observation valait déjà « unauthenticated » — aucune transition,
+  // silence à vie. Un garde qui ne juge que les CANDIDATS ne voit jamais le
+  // STOCK. On parle donc aussi quand la PREMIÈRE lecture est « unauthenticated »
+  // (une fois par lancement, jamais en boucle). « unknown » reste le seul état
+  // muet : c'est celui de la sonde qui n'a pas encore répondu.
+  const lastAuthStatusByInstanceRef = useRef<Map<string, ServerProviderAuthStatus>>(new Map());
   useEffect(() => {
     const previous = lastAuthStatusByInstanceRef.current;
     for (const provider of providerStatuses) {
       if (String(provider.driver) !== "claudeAgent" || !provider.enabled) continue;
       const authStatus = provider.auth.status;
       const before = previous.get(provider.instanceId);
-      if (before === "authenticated" && authStatus === "unauthenticated") {
+      if (shouldAnnounceProviderSignedOut({ previousStatus: before, currentStatus: authStatus })) {
         const name = provider.displayName?.trim() || provider.instanceId;
         toastManager.add({
           type: "error",

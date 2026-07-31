@@ -5,6 +5,7 @@ import {
   type ModelSelection,
   type ProviderDriverKind,
   type ServerProvider,
+  type ServerProviderAuthStatus,
   type ScopedProjectRef,
   type ScopedThreadRef,
   type ThreadId,
@@ -563,4 +564,25 @@ export function hasServerAcknowledgedLocalDispatch(input: {
     input.localDispatch.sessionStatus !== (session?.status ?? null) ||
     input.localDispatch.sessionUpdatedAt !== (session?.updatedAt ?? null)
   );
+}
+
+/**
+ * Faut-il CRIER qu'un compte Claude a perdu sa session ?
+ *
+ * Décision pure, sortie du composant pour qu'un test la fige : la version
+ * précédente ne parlait que sur la transition `authenticated` →
+ * `unauthenticated` observée en direct, et les comptes sont morts pendant que
+ * l'app était fermée (rebuild du 30/07). Au démarrage suivant, la PREMIÈRE
+ * lecture valait déjà `unauthenticated` : aucune transition, donc aucun mot,
+ * pendant deux jours — le relais automatique tournait sans cible.
+ *
+ * Un garde qui ne juge que les CANDIDATS ne voit jamais le STOCK.
+ * `unknown` reste muet : c'est l'état de la sonde qui n'a pas encore répondu,
+ * et confondre « je ne sais pas » avec « c'est mort » ferait un cri par boot.
+ */
+export function shouldAnnounceProviderSignedOut(input: {
+  readonly previousStatus: ServerProviderAuthStatus | undefined;
+  readonly currentStatus: ServerProviderAuthStatus;
+}): boolean {
+  return input.currentStatus === "unauthenticated" && input.previousStatus !== "unauthenticated";
 }

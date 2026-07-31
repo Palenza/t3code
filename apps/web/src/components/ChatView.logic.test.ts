@@ -27,6 +27,7 @@ import {
   resolveThreadMetadataUpdateForNextTurn,
   resolveSendEnvMode,
   startNewThreadForProject,
+  shouldAnnounceProviderSignedOut,
   shouldShowBranchMismatchBanner,
   shouldWriteThreadErrorToCurrentServerThread,
 } from "./ChatView.logic";
@@ -676,5 +677,51 @@ describe("hasServerAcknowledgedLocalDispatch", () => {
     expect(hasServerAcknowledgedLocalDispatch({ ...common, hasPendingApproval: true })).toBe(true);
     expect(hasServerAcknowledgedLocalDispatch({ ...common, hasPendingUserInput: true })).toBe(true);
     expect(hasServerAcknowledgedLocalDispatch({ ...common, threadError: "failed" })).toBe(true);
+  });
+});
+
+describe("shouldAnnounceProviderSignedOut", () => {
+  it("parle quand la PREMIÈRE lecture est déjà déconnectée — le trou de deux jours", () => {
+    // Régression du 31/07 : les comptes B et C sont morts pendant que l'app
+    // était fermée. Au démarrage suivant il n'y avait aucune transition à
+    // observer, seulement un état déjà mort — et l'ancienne garde, qui
+    // n'écoutait que les transitions, s'est tue pendant deux jours pendant que
+    // le relais automatique tournait sans cible.
+    expect(
+      shouldAnnounceProviderSignedOut({
+        previousStatus: undefined,
+        currentStatus: "unauthenticated",
+      }),
+    ).toBe(true);
+  });
+
+  it("parle sur la transition vue en direct", () => {
+    expect(
+      shouldAnnounceProviderSignedOut({
+        previousStatus: "authenticated",
+        currentStatus: "unauthenticated",
+      }),
+    ).toBe(true);
+  });
+
+  it("ne répète pas tant que le compte reste déconnecté", () => {
+    expect(
+      shouldAnnounceProviderSignedOut({
+        previousStatus: "unauthenticated",
+        currentStatus: "unauthenticated",
+      }),
+    ).toBe(false);
+  });
+
+  it("reste muet sur « unknown » : la sonde qui n'a pas répondu n'est pas une mort", () => {
+    expect(
+      shouldAnnounceProviderSignedOut({ previousStatus: undefined, currentStatus: "unknown" }),
+    ).toBe(false);
+    expect(
+      shouldAnnounceProviderSignedOut({
+        previousStatus: "unknown",
+        currentStatus: "authenticated",
+      }),
+    ).toBe(false);
   });
 });
