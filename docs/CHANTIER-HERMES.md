@@ -110,8 +110,12 @@ la raison — un écart sans raison se rouvre tous les mois.
 - [ ] **19 · Hooks shell à consentement première utilisation** — allowlist
       `(événement, commande)`, `shell=False` + `shlex.split`.
       `agent/shell_hooks.py`
-- [ ] **20 · Audit de sécurité au démarrage + avis poussés**
-      `security_audit_startup.py`, `mcp_security.py`, `input_sanitize.py`
+- [x] **20 · Audit de sécurité au démarrage** — consultatif, jamais bloquant,
+      comme le leur. Deux de leurs quatre contrôles ne sont pas notre monde
+      (sshd, conteneur) ; on garde root et on ajoute les PERMISSIONS des
+      fichiers d'état — qui ont trouvé un vrai défaut dès le premier passage.
+      `security_audit_startup.py` (282)
+      _(reste : les avis poussés de `security_advisories.py`.)_
 - [x] **21 · Sûreté de chemin** — une écriture ne suit plus un lien hors de
       l'espace. `tools/path_security.py`, `agent/file_safety.py`
       → `20212d888` (le chemin de LECTURE était déjà meilleur que le leur)
