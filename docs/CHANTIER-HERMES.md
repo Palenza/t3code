@@ -21,11 +21,12 @@ la raison — un écart sans raison se rouvre tous les mois.
 
 ## Niveau 1 — extrêmement fort
 
-- [ ] **1 · Le curateur** — révision autonome des skills à l'inactivité, sur
-      modèle auxiliaire, hors du cache principal. Archive, n'efface jamais. Les
-      épinglées échappent à tout. Ne touche que ce que l'agent a créé.
-      `agent/curator.py` (2 018), `curator_backup.py`, `hermes_cli/curator.py`
-      — _dépend du n°2 : sans télémétrie, le curateur juge à l'aveugle._
+- [x] **1 · Le curateur** — la DÉCISION, avec les quatre invariants stricts
+      portés tels quels + un cinquième qui est le nôtre : un usage
+      `indécidable` (n°2) interdit tout geste. Archive, n'efface jamais.
+      `agent/curator.py` (2 019)
+      _(reste : la REVUE elle-même sur modèle auxiliaire — routage
+      `modules/ai` — et l'instantané avant mutation de `curator_backup.py`.)_
 - [x] **2 · Télémétrie de skills** — 3 états + `pinned` orthogonal. Deux
       écarts assumés avec Hermès : **aucun sidecar** (il déclencherait un
       `reloadSkills()` par tour via `signatureDesSkills`) et **aucune
