@@ -62,7 +62,7 @@ la raison — un écart sans raison se rouvre tous les mois.
       taille.** Il n'y a pas de C à écrire pour l'essentiel : le SQLite
       embarqué de Node porte déjà le tokenizer `trigram`. Relevé sur la vraie
       base en mémoire, avec nos réglages actuels (`unicode61
-  remove_diacritics 2`) contre `trigram` :
+remove_diacritics 2`) contre `trigram` :
 
           requête      unicode61 (le nôtre)   trigram
           数据  (2)          0                   0
@@ -497,11 +497,34 @@ la raison — un écart sans raison se rouvre tous les mois.
   `remark-gfm` (donc les tableaux GFM), et `index.css` porte un
   `chat-markdown-table-container` REPLIABLE (`data-expanded`). On n'a pas le
   problème qu'ils résolvent, et on a une réponse qu'ils n'ont pas.
-- [ ] **82 · Migration depuis un autre agent** `hermes_cli/claw.py`
-- [ ] **83 · Trajectoires + batch runner**
+- [–] **82 · ~~Migration depuis un autre agent~~** — **Écarté sur lecture,
+  01/08.** Le fichier n'est pas une migration générique : c'est
+  `hermes claw`, l'import d'**OpenClaw** — un produit précis, leur
+  concurrent direct. On n'a aucun utilisateur à en faire venir.
+  Et la question générale ne se pose pas de la même façon chez nous : les
+  agents dont on aurait pu vouloir « migrer » (Claude Code, Codex, Cursor,
+  OpenCode) sont des FOURNISSEURS que T3 pilote déjà. On ne migre pas depuis
+  eux, on s'y branche. `hermes_cli/claw.py`
+- [~] **83 · Trajectoires + batch runner** — les **trajectoires sont déjà
+  là**, et complètes : `projection_thread_activities` porte **61 963
+  activités** sur cette machine (chaque appel d'outil, son entrée, son
+  verdict). C'est ce que les n°2, n°9 et n°22 lisent déjà pour répondre
+  « qu'est-ce qui a vraiment tourné ? ». Rien à enregistrer de plus.
+  _(reste : le lanceur en LOT — rejouer N consignes et collecter les
+  sorties. Il dépense du quota sans surveillance, donc palier D2 ; et il
+  n'a de sens qu'avec des évals, qui vivent dans le n°I4 de la LOI plutôt
+  que dans ce catalogue.)_
 - [x] **84 · Recherche web multi-fournisseurs** — firecrawl, exa, brightdata branchés en MCP — un fournisseur de plus est une ligne de config, pas un plugin.
 
-- [ ] **85 · Backends de mémoire enfichables** — honcho, mem0, supermemory
+- [–] **85 · ~~Backends de mémoire enfichables~~** — **Écarté, 01/08.** Les
+  trois nommés (honcho, mem0, supermemory) sont des services SaaS de mémoire.
+  On a UN backend — SQLite + FTS5, livré au n°5 — et personne n'en demande un
+  second. Une couche d'enfichage pour un seul enfichable est l'abstraction
+  écrite avant la troisième occurrence réelle, c'est-à-dire exactement ce que
+  la RÈGLE SUPRÊME refuse.
+  S'y ajoute une raison de fond : envoyer les conversations à un service tiers
+  est une décision de produit et de vie privée, pas un choix technique. Elle
+  remonterait à Enzo avant d'être un chantier.
 
 ---
 
