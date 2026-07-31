@@ -12,9 +12,15 @@
  *     L'outil doit borner sa charge en amont.
  *
  * …puis laissait passer les N caractères. Un voyant, pas un garde. Or la
- * mesure du 31/07 place les résultats d'outils au deuxième poste de dépense de
- * la fenêtre — 700 k jetons sur une session, 25 % du total — juste derrière
- * les images.
+ * mesure du 31/07 place les résultats d'outils au PREMIER poste de dépense de
+ * la fenêtre : 700 k jetons sur une session, 54 % du total.
+ *
+ * (Première mesure fausse, corrigée le soir même : j'avais compté les images
+ * en OCTETS de transcript alors qu'une image se tokenise à la SURFACE
+ * — ≈ surface/750. Surestimation d'un facteur 46 ; les 17 captures de la
+ * session pèsent 32 810 jetons, pas 1,5 million. Les résultats d'outils ne
+ * sont donc pas deuxièmes derrière les images : ils sont premiers, et de
+ * loin.)
  *
  * ── Ce qu'on ne pouvait PAS faire ─────────────────────────────────────────
  *

@@ -117,8 +117,9 @@ au-dessus (A5b).
 
 La chaîne la plus chère aujourd'hui, et c'est mesuré : 9 compactages en 7
 jours, chacun jetant 97,5 à 98,6 % de la fenêtre, 22 minutes d'attente morte
-sur la semaine. 79 % de ce qui remplit la fenêtre est de l'image et de la
-lecture de fichier.
+sur la semaine. Et ce qui la remplit, mesuré correctement : **54 % de
+résultats d'outils**, 22 % d'appels d'outils, 17 % de ce que l'humain écrit,
+5 % de ce que l'agent répond — et **2,5 % d'images**.
 
 ```
 n°5 rappel ✅ ──┬── n°6 tokenizer CJK        (étend le même index FTS)
