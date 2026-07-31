@@ -36,9 +36,13 @@ la raison — un écart sans raison se rouvre tous les mois.
 - [ ] **3 · Graphe d'apprentissage** — mutations tracées, rendu visuel, frise
       `/journey`. `agent/learning_graph.py`, `learning_graph_render.py`,
       `learning_mutations.py`, `hermes_cli/journey.py`
-- [ ] **4 · `/learn`** — fabriquer une skill depuis un dossier, une URL, la
-      conversation en cours, des notes. `agent/learn_prompt.py`,
-      `skill_bundles.py`, `skill_commands.py`
+- [x] **4 · Les NORMES d'une skill** — leur `_AUTHORING_STANDARDS` porté non
+      pas en prompt mais en CONTRÔLE : un prompt est un espoir, un contrôle est
+      un fait, et il s'applique aussi aux skills déjà écrites. Seuil de
+      description à 240 (le leur, 60, vient de LEUR troncature ; le nôtre vient
+      de notre mesure). `agent/learn_prompt.py` (150)
+      _(reste : la fabrication elle-même — depuis un dossier, une URL, la
+      conversation. Elle a besoin d'un tour de modèle, pas d'un module pur.)_
 - [x] **5 · Recherche FTS dans toutes les conversations** — 3 modes déduits
       des arguments, coût LLM zéro, fenêtre ±5, bornes de fil, un résultat par
       fil. `tools/session_search_tool.py` (1 142)
