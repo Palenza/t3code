@@ -88,4 +88,65 @@ export const UsageSkillsTool = Tool.make("usage-skills", {
   .annotate(Tool.Destructive, false)
   .annotate(Tool.Idempotent, true);
 
-export const UsageSkillsToolkit = Toolkit.make(UsageSkillsTool);
+/**
+ * L'outil `normes-skills` — la bouche du chantier n°4.
+ *
+ * Le module de contrôle (`skills/NormesDeSkill.ts`) était complet et testé,
+ * sans appelant. Or c'est tout son intérêt qui se perdait là : chez eux ces
+ * normes vivent dans un PROMPT — on demande au modèle de les suivre. Chez nous
+ * elles vivent dans un CONTRÔLE — on vérifie qu'elles le sont. Un contrôle
+ * qu'on ne lance jamais n'est qu'un prompt de plus, en moins visible.
+ *
+ * Il lit, il ne corrige rien. Une skill n'est jamais déclarée « invalide » :
+ * elle est perfectible, et on dit quoi faire. Un contrôle qui refuse tout est
+ * un contrôle qu'on débranche.
+ */
+export const NormesSkillsInput = Schema.Struct({
+  cwd: Schema.optional(
+    Schema.String.annotate({
+      description:
+        "Racine de l'espace de travail, pour contrôler aussi les skills de projet (<cwd>/.claude/skills).",
+    }),
+  ),
+  homePath: Schema.optional(
+    Schema.String.annotate({
+      description: "Dossier de configuration Claude. Omis : CLAUDE_CONFIG_DIR, sinon ~/.claude.",
+    }),
+  ),
+});
+
+const ManquementRendu = Schema.Struct({
+  regle: Schema.String,
+  gravite: Schema.Literals(["erreur", "avertissement"]),
+  /** Nommé pour un AGENT (A7) : ce qui ne va pas ET quoi faire. */
+  quoiFaire: Schema.String,
+});
+
+const SkillControlee = Schema.Struct({
+  nom: Schema.String,
+  chemin: Schema.String,
+  manquements: Schema.Array(ManquementRendu),
+});
+
+export const NormesSkillsResultat = Schema.Struct({
+  resume: Schema.String,
+  /** Seules les skills qui ont quelque chose à corriger. Les saines se taisent. */
+  skills: Schema.Array(SkillControlee),
+  /** Ce que ce contrôle ne regarde pas — jamais tu (H4). */
+  note: Schema.String,
+});
+
+export const NormesSkillsTool = Tool.make("normes-skills", {
+  description:
+    "Contrôle la FORME des skills installées : nom mal formé, description absente ou trop longue, mots de vitrine, auteur pris à la machine, fichier trop gros. Ne corrige rien. À appeler après avoir écrit ou modifié une skill, et avant de s'étonner qu'une skill ne soit jamais choisie — une description floue est la première cause.",
+  parameters: NormesSkillsInput,
+  success: NormesSkillsResultat,
+  failure: UsageSkillsError,
+  dependencies: [FileSystem.FileSystem, Path.Path],
+})
+  .annotate(Tool.Title, "Normes des skills")
+  .annotate(Tool.Readonly, true)
+  .annotate(Tool.Destructive, false)
+  .annotate(Tool.Idempotent, true);
+
+export const UsageSkillsToolkit = Toolkit.make(UsageSkillsTool, NormesSkillsTool);

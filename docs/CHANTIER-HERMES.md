@@ -25,6 +25,12 @@ la raison — un écart sans raison se rouvre tous les mois.
       portés tels quels + un cinquième qui est le nôtre : un usage
       `indécidable` (n°2) interdit tout geste. Archive, n'efface jamais.
       `agent/curator.py` (2 019)
+      **Volontairement NON branché**, et ce n'est pas un oubli : mesuré le
+      01/08, la projection ne couvre que **7,3 jours** (60 831 activités,
+      élaguée). Le curateur répondrait `indécidable` sur toute skill plus
+      vieille — c'est-à-dire presque toutes. Lui donner une bouche
+      maintenant, ce serait livrer un outil qui ne sait rien dire. Il attend
+      une fenêtre d'observation, pas du code.
       _(reste : la REVUE elle-même sur modèle auxiliaire — routage
       `modules/ai` — et l'instantané avant mutation de `curator_backup.py`.)_
 - [x] **2 · Télémétrie de skills** — 3 états + `pinned` orthogonal. Deux
@@ -41,6 +47,11 @@ la raison — un écart sans raison se rouvre tous les mois.
       un fait, et il s'applique aussi aux skills déjà écrites. Seuil de
       description à 240 (le leur, 60, vient de LEUR troncature ; le nôtre vient
       de notre mesure). `agent/learn_prompt.py` (150)
+      **Branché le 01/08** : outil MCP `normes-skills`. C'était tout l'intérêt
+      du chantier qui se perdait — un contrôle qu'on ne lance jamais n'est
+      qu'un prompt de plus, en moins visible. Reçu au branchement, sur les 18
+      skills réelles de Palenza : **15 dépassent les 240 caractères** (jusqu'à
+      895), ~8 400 caractères chargés à chaque session.
       _(reste : la fabrication elle-même — depuis un dossier, une URL, la
       conversation. Elle a besoin d'un tour de modèle, pas d'un module pur.)_
 - [x] **5 · Recherche FTS dans toutes les conversations** — 3 modes déduits
