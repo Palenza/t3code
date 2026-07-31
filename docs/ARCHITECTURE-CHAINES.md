@@ -11,6 +11,36 @@
 `agent/` 165 fichiers · `tools/` 119 · `hermes_cli/` 224 · `gateway/` 80 ·
 `cron/` 11 · `plugins/` 188 · `skills/` 68.
 
+### La règle de confiance (décision fondateur, 31/07)
+
+> « Ça fait un an qu'ils existent et ce sont les plus connus au monde dans leur
+> domaine. On peut leur faire confiance à la base. Après, il faut juste
+> l'adapter si besoin pour Raptor. »
+
+Opérationnalisée en deux lignes, parce que la journée a produit les quatre cas
+qui disent où la frontière passe :
+
+**Leur DONNÉE — confiance totale, on copie.** Motifs, listes d'adresses,
+seuils, catégories, et surtout **les pièges écrits dans leurs commentaires**.
+C'est un an d'attaques et d'incidents réels ; les re-dériver, c'est payer deux
+fois. Sur les IP mappées `::ffff:`, leur donnée était juste et c'est MON
+portage qui était faux — la confiance aurait mieux marché que ma prudence.
+
+**Leur CONCEPTION — une seule question : « qu'est-ce que ça suppose de leur
+architecture ? »** On diverge sur trois points connus, et toute l'adaptation
+tient là :
+
+| leur socle            | le nôtre                           |
+| --------------------- | ---------------------------------- |
+| boucle d'agent propre | SDK `claude-agent-sdk`             |
+| API facturée au token | comptes Max personnels en rotation |
+| état en fichiers      | projection SQLite                  |
+
+Trois fois le 31/07 cette question a changé la réponse : leur sidecar
+`.usage.json` (bonne réponse chez eux, défaut ACTIF chez nous), le blocage du
+CGNAT (juste chez eux, à ne pas faire chez nous — Tailscale y vit),
+`credential_files.py` (sans objet — on n'a pas de terminal en conteneur).
+
 **Avant d'écrire un maillon, on ouvre le fichier d'Hermès qui le porte.** Pas
 pour le porter ligne à ligne — leur moteur n'est pas le nôtre — mais parce que
 leurs 2 000 lignes contiennent les cas limites qu'ils ont payés et qu'on
@@ -114,9 +144,10 @@ qu'un fichier porte l'intégralité (H6 : rien ne se jette).
 ## Chaîne B · LES SKILLS — le savoir de l'agent
 
 ```
-n°2 télémétrie ✅ ── n°1 curateur ── n°3 graphe ── n°4 /learn
-                          ▲                            │
-                          └────── révise ce que ───────┘
+n°4 /learn ── n°10 scanner ✅ ── n°1 curateur ✅ ── n°3 graphe
+   fabrique      valide          cure           enregistre
+                                   ▲
+                   n°2 télémétrie ✅┘  (sans elle, il juge à l'aveugle)
 
 n°10 scanner ── n°50 hub ── n°51 les 182 skills ── n°52 bundles ── n°53 index
 ```
