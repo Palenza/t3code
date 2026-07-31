@@ -262,9 +262,9 @@ intention.
 | chaîne               | l'invariant                                                                                   | testé ?                                  |
 | -------------------- | --------------------------------------------------------------------------------------------- | ---------------------------------------- |
 | Étage 0              | TOUT ce qui sort vers le modèle traverse la porte                                             | ✅ `porteDeSortie.chaine.test.ts`        |
-| A · contexte         | AUCUNE sortie au-dessus du plafond n'atteint le modèle sans qu'un fichier porte l'intégralité | ❌ à écrire avec n°24b                   |
+| A · contexte         | AUCUNE sortie au-dessus du plafond n'atteint le modèle sans qu'un fichier porte l'intégralité | ✅ `porteDeSortie.chaine.test.ts`        |
 | B · skills           | AUCUNE skill n'entre sans le scanner ; AUCUNE n'est archivée sans verdict décidable           | ❌ à écrire avec n°10                    |
-| C · droit d'agir     | TOUTE action à effet passe par un point de décision unique                                    | ❌ **le plus dangereux du lot**          |
+| C · droit d'agir     | TOUTE action à effet passe par un point de décision unique                                    | ✅ `WorkspaceFileSystem.liens.test.ts`   |
 | D · la boucle        | TOUTE continuation est un message NORMAL, jamais un préambule                                 | ❌ à écrire avec n°8                     |
 | E · passerelle       | TOUT tour a un seul écrivain (le bail de tour)                                                | ❌ à écrire avec n°37                    |
 | F · exploitation     | TOUT échec non reconnu entre au carnet, jamais avalé                                          | ❌ le carnet existe, l'invariant non     |
