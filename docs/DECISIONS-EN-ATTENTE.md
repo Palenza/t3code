@@ -74,16 +74,14 @@ large surface d'attaque qu'on puisse s'ajouter), **67** kanban (T3 a déjà les
 fils), **80** achievements (les badges fêtent l'usage de l'outil, quand le bon
 tour est celui qu'on n'a pas eu besoin de faire). Un mot de toi les rouvre.
 
-Les quatre qui restent Elles touchent ce que T3 EST, donc c'est ton terrain.
+Les quatre qui restent touchent ce que T3 EST, donc c'est ton terrain.
 
-| ligne | ce que c'est | ma reco |
-| ----- | ------------ | ------- |
-
-| **65** mot d'éveil | 3 moteurs ONNX embarqués, aucun audio ne sort | **à toi** — on a déjà la VAD et la transcription dans `voice-core` ; c'est le dernier maillon d'un usage mains libres |
-| **66** TTS en streaming | l'agent parle | **à toi** — même famille que le 65, les deux vont ensemble ou pas du tout |
-
-| **69** images et vidéos | génération | **à toi** — engage de l'argent (clés d'API) |
-| **79** bannière, onboarding | première ouverture | **à toi** — ton et marque |
+| ligne                       | ce que c'est                                  | ma reco                                                                                                               |
+| --------------------------- | --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| **65** mot d'éveil          | 3 moteurs ONNX embarqués, aucun audio ne sort | **à toi** — on a déjà la VAD et la transcription dans `voice-core` ; c'est le dernier maillon d'un usage mains libres |
+| **66** TTS en streaming     | l'agent parle                                 | **à toi** — même famille que le 65 : les deux vont ensemble ou pas du tout                                            |
+| **69** images et vidéos     | génération                                    | **à toi** — engage de l'argent (clés d'API)                                                                           |
+| **79** bannière, onboarding | première ouverture                            | **à toi** — ton et marque                                                                                             |
 
 - [ ] j'écarte tout sauf : **\_\_**
 - [ ] je prends tout
