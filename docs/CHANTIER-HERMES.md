@@ -133,23 +133,23 @@ la raison — un écart sans raison se rouvre tous les mois.
   base en mémoire, avec nos réglages actuels (`unicode61
 remove_diacritics 2`) contre `trigram` :
 
-                                                                requête      unicode61 (le nôtre)   trigram
-                                                                数据  (2)          0                   0
-                                                                数据库 (3)          0                   1
-                                                                東京  (2)          0                   0
-                                                                chat               1                   1
-                                                                dort               1                   1
+                                                                  requête      unicode61 (le nôtre)   trigram
+                                                                  数据  (2)          0                   0
+                                                                  数据库 (3)          0                   1
+                                                                  東京  (2)          0                   0
+                                                                  chat               1                   1
+                                                                  dort               1                   1
 
-                                                            Donc **notre index ne trouve JAMAIS rien en CJK**, pas même sur trois
-                                                            caractères — ce n'est pas une dégradation, c'est un mur. `trigram` le
-                                                            lève dès 3 caractères sans toucher au français.
-                                                            Reste hors de portée : les termes CJK de **1-2 caractères**, et c'est
-                                                            précisément ce que leur bigramme compilé existe pour couvrir.
-                                                            **On ne bascule PAS aujourd'hui** : produit français d'abord, un index
-                                                            trigramme pèse plus lourd (une entrée par fenêtre de 3), et personne
-                                                            n'attend cette recherche. Mais le jour où un utilisateur CJK arrive, la
-                                                            décision est un MOT dans la migration 036 — plus un chantier natif.
-                                                            `native/fts5_cjk/` **(copie C, désormais optionnelle)**
+                                                              Donc **notre index ne trouve JAMAIS rien en CJK**, pas même sur trois
+                                                              caractères — ce n'est pas une dégradation, c'est un mur. `trigram` le
+                                                              lève dès 3 caractères sans toucher au français.
+                                                              Reste hors de portée : les termes CJK de **1-2 caractères**, et c'est
+                                                              précisément ce que leur bigramme compilé existe pour couvrir.
+                                                              **On ne bascule PAS aujourd'hui** : produit français d'abord, un index
+                                                              trigramme pèse plus lourd (une entrée par fenêtre de 3), et personne
+                                                              n'attend cette recherche. Mais le jour où un utilisateur CJK arrive, la
+                                                              décision est un MOT dans la migration 036 — plus un chantier natif.
+                                                              `native/fts5_cjk/` **(copie C, désormais optionnelle)**
 
 - [–] **7 · ~~PTC — appel d'outils programmatique~~** — **Écarté : le CLI le
   porte déjà.** Troisième ligne fermée le 01/08 en fouillant le binaire du CLI
@@ -450,7 +450,25 @@ remove_diacritics 2`) contre `trigram` :
       *(À arbitrer par Enzo en connaissance de ça : 9 lignes pour dupliquer
       une infrastructure qu'on a, au profit d'une interface qu'on ne possède
       pas.)\_
-- [ ] **38 · Streaming vers les messageries** `stream_consumer.py` (2 250)
+- [~] **38 · Streaming vers les messageries** — **la décision livrée le
+  01/08.** L'agent écrit en flux, une messagerie reçoit des MESSAGES, et
+  entre les deux trois contraintes qui n'existent nulle part ailleurs dans
+  T3 : une taille max par message (Telegram 4096, Discord 2000), un rythme
+  d'édition limité, et un refus d'inondation qui n'est PAS une panne mais
+  une demande de ralentir.
+  **Ce qu'on reprend d'eux, et c'est la trouvaille** : le repli adaptatif.
+  Sur un refus on DOUBLE l'intervalle, on plafonne à 10 s, on compte les
+  refus consécutifs, et au troisième on renonce aux éditions. C'est
+  l'inverse du réflexe — réessayer au même rythme garantit le refus
+  suivant. Une limite qu'on touche est un signal, pas un obstacle à forcer.
+  **L'invariant qui prime sur tout** : la réponse finale part TOUJOURS,
+  même après avoir renoncé aux éditions. Un flux dégradé reste une
+  réponse ; un flux abandonné est un silence.
+  Et le détail qui casse un rendu sans qu'on comprenne pourquoi : on ne
+  coupe jamais au milieu d'un bloc de code. Une clôture ```orpheline
+    casse l'affichage de la messagerie pour TOUT le reste du message, pas
+    seulement pour le bloc.`stream*consumer.py` (2 250)
+  *(reste : l'envoi lui-même, qui vient avec le premier adaptateur.)\_
 - [ ] **39 · Livraison fiable** — ledger, cibles mortes, miroir, caches média
 - [~] **40 · Autorisation par utilisateur et par canal** — **la décision
   livrée le 01/08, AVANT le premier adaptateur.** Même ordre que le garde
