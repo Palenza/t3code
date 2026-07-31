@@ -62,7 +62,7 @@ la raison — un écart sans raison se rouvre tous les mois.
       taille.** Il n'y a pas de C à écrire pour l'essentiel : le SQLite
       embarqué de Node porte déjà le tokenizer `trigram`. Relevé sur la vraie
       base en mémoire, avec nos réglages actuels (`unicode61
-    remove_diacritics 2`) contre `trigram` :
+  remove_diacritics 2`) contre `trigram` :
 
           requête      unicode61 (le nôtre)   trigram
           数据  (2)          0                   0
@@ -125,6 +125,12 @@ la raison — un écart sans raison se rouvre tous les mois.
       `write_approval.py`. Palier D2.)_
 - [ ] **12 · Suggestions d'allowlist** — l'agent propose ce qu'il faudrait
       autoriser. `hermes_cli/approvals_suggest.py`
+      **Bloqué, avec son reçu (01/08).** Ce chantier MINE un historique
+      d'approbations. La table existe — `projection_pending_approvals`
+      (request_id, status, decision, resolved_at) — et elle contient
+      **0 ligne** sur cette machine. Il n'y a rien à miner : les suggestions
+      sortiraient d'un ensemble vide, ce qui n'est pas une suggestion, c'est
+      une invention. Rouvrir quand la table se remplit.
 - [x] **13 · Patterns de menace** — les 36 motifs d'Hermès portés en DONNÉE,
       par classe d'attaque, avec leurs trois PORTÉES (partout / contexte /
       strict) : détecter large partout, ne bloquer que là où l'humain peut
@@ -485,7 +491,12 @@ la raison — un écart sans raison se rouvre tous les mois.
 
 - [ ] **79 · Bannière, onboarding, tips**
 - [ ] **80 · Achievements + Petdex** — gamification de la progression
-- [ ] **81 · Tableaux markdown propres**
+- [–] **81 · ~~Tableaux markdown propres~~** — **Déjà couvert, et au-delà.**
+  Leur chantier vise un rendu de tableau dans un TERMINAL, qui est leur
+  surface. La nôtre est un moteur de rendu réel : `ChatMarkdown.tsx` monte
+  `remark-gfm` (donc les tableaux GFM), et `index.css` porte un
+  `chat-markdown-table-container` REPLIABLE (`data-expanded`). On n'a pas le
+  problème qu'ils résolvent, et on a une réponse qu'ils n'ont pas.
 - [ ] **82 · Migration depuis un autre agent** `hermes_cli/claw.py`
 - [ ] **83 · Trajectoires + batch runner**
 - [x] **84 · Recherche web multi-fournisseurs** — firecrawl, exa, brightdata branchés en MCP — un fournisseur de plus est une ligne de config, pas un plugin.
