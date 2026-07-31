@@ -47,6 +47,14 @@ const RangerRequest = Schema.Struct({
 /** Au-delà, le prompt devient trop long pour rester net et rapide. */
 const MAX_THREADS = 60;
 
+/**
+ * Compilé UNE fois, au chargement du module.
+ *
+ * `Schema.decodeUnknownEffect(...)` reconstruit son décodeur à chaque appel :
+ * placé dans le corps de la route, il le refabriquait à chaque requête.
+ */
+const decoderLaDemande = Schema.decodeUnknownEffect(RangerRequest);
+
 export const rangerFilsRouteLayer = HttpRouter.add(
   "POST",
   "/api/ranger-fils",
@@ -60,9 +68,7 @@ export const rangerFilsRouteLayer = HttpRouter.add(
     }
 
     const body = yield* request.json.pipe(Effect.orElseSucceed(() => null));
-    const decoded = yield* Schema.decodeUnknownEffect(RangerRequest)(body).pipe(
-      Effect.orElseSucceed(() => null),
-    );
+    const decoded = yield* decoderLaDemande(body).pipe(Effect.orElseSucceed(() => null));
     if (decoded === null || decoded.threads.length < 4) {
       // Moins de 4 fils : il n'y a rien à ranger, et le dire vaut mieux que
       // de rendre un groupe artificiel.
