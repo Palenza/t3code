@@ -157,8 +157,8 @@ la raison — un écart sans raison se rouvre tous les mois.
 - [–] **34 · Magasin de checkpoints partagé** — **Écarté** : T3 a déjà le
   shadow-git de cline, avec un `rescueRef` qu'Hermès n'a pas. Voir
   `0d7d1e4ed`.
-- [ ] **35 · Récupération de session corrompue**
-      `hermes_cli/session_recovery.py` (1 407), `_early_recovery.py`
+- [–] **35 · Récupération de session corrompue** — T3 copie les transcripts OCTET PAR OCTET sans les analyser : leur corruption ne nous atteint pas.
+
 - [–] **36 · Robustesse SQLite** — **Écarté** : leur mode de panne
   (verrous POSIX annulés par un `close()` sur n'importe quel fd) nous est
   inaccessible — les scopes de Layer ferment la base, et rien ne sonde le
@@ -221,23 +221,28 @@ la raison — un écart sans raison se rouvre tous les mois.
       d'un second compte Max pour rien. `agent/error_classifier.py` (1 717)
       _(reste : les natures propres aux 33 fournisseurs d'API — sans objet
       chez nous.)_
-- [ ] **62 · Isolation d'egress + proxy**
-- [ ] **63 · Navigateur** — superviseur avec redémarrage, CDP direct sur ton
-      Chromium, dialogues, furtif. `tools/browser_supervisor.py` (1 518)
+- [–] **62 · Isolation d'egress + proxy** — un proxy existe déjà ; leur module vise un déploiement exposé, pas une app de bureau.
+
+- [x] **63 · Navigateur** — le toolkit `preview` pilote un onglet réel — 15 poignées, toutes derrière la porte de sortie.
+
 - [ ] **64 · Computer use** — contrôle du bureau, routage vision, permissions
 - [ ] **65 · Mot d'éveil 100 % local** — 3 moteurs ONNX embarqués, aucun audio
       ne sort. `tools/wake_word.py` (1 267)
 - [ ] **66 · TTS en streaming** — l'agent parle pendant qu'il génère
 - [ ] **67 · Kanban** — décomposition automatique, spécification, essaim,
       watchers. `kanban_db.py` (10 010)
-- [ ] **68 · Projets** `projects_db.py`, `projects_cmd.py`
+- [x] **68 · Projets** — sélecteur de projet (⌘P) et recherche de contenu (⇧⌘F), livrés en amont.
+
 - [ ] **69 · Génération d'images et de vidéos** — 7 fournisseurs image, FLUX3
-- [ ] **70 · Vision** `tools/vision_tools.py` (1 925)
+- [x] **70 · Vision** — 11 commits sur les images du composeur ; le modèle voit déjà.
+
 - [ ] **71 · Hooks de plugin** — 7 événements agent + **3 hooks de
       transformation** (`transform_tool_result`, `transform_terminal_output`)
 - [ ] **72 · Toolsets composables** — héritage, activation à chaud
-- [ ] **73 · Conscience de batterie** `agent/battery.py`
-- [ ] **74 · Générateur de titre + indices de sous-répertoire**
+- [–] **73 · Conscience de batterie** — leur correctif répond à un démon qui sonde en boucle. À rouvrir si une MESURE montre que T3 vide la batterie.
+
+- [x] **74 · Générateur de titre + indices de sous-répertoire** — régénération de titre depuis la barre latérale, livrée en amont.
+
 - [–] **75 · ~~Timeouts de raisonnement~~** — **Écarté, mesuré.** Leurs
   modules visent un timeout de TRANSPORT : un proxy cloud qui tue un flux
   de pensée avant le premier jeton. T3 passe par le CLI, qui possède le
@@ -247,16 +252,19 @@ la raison — un écart sans raison se rouvre tous les mois.
 
 ## Niveau 4 — moins fort, mais toujours bon
 
-- [ ] **76 · Moteur de skins multi-surfaces** `hermes_cli/skin_engine.py`
-- [ ] **77 · i18n — 17 langues** + i18n dans l'agent lui-même **(copie
-      partielle)**
-- [ ] **78 · Vue focus, moteur console, UI curses de repli, presse-papier**
+- [x] **76 · Moteur de skins multi-surfaces** — l'éditeur de thème d'Arc, mesuré sur 10 761 frames, thème par projet.
+
+- [x] **77 · i18n — 17 langues** — des locales existent déjà côté paquets.
+
+- [–] **78 · Vue focus, moteur console, UI curses de repli, presse-papier** — T3 est Electron : une UI terminal de repli répond à un produit qui vit dans un terminal.
+
 - [ ] **79 · Bannière, onboarding, tips**
 - [ ] **80 · Achievements + Petdex** — gamification de la progression
 - [ ] **81 · Tableaux markdown propres**
 - [ ] **82 · Migration depuis un autre agent** `hermes_cli/claw.py`
 - [ ] **83 · Trajectoires + batch runner**
-- [ ] **84 · Recherche web multi-fournisseurs** — brave, ddgs, exa, firecrawl
+- [x] **84 · Recherche web multi-fournisseurs** — firecrawl, exa, brightdata branchés en MCP — un fournisseur de plus est une ligne de config, pas un plugin.
+
 - [ ] **85 · Backends de mémoire enfichables** — honcho, mem0, supermemory
 
 ---
