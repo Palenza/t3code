@@ -104,23 +104,23 @@ la raison — un écart sans raison se rouvre tous les mois.
   base en mémoire, avec nos réglages actuels (`unicode61
 remove_diacritics 2`) contre `trigram` :
 
-                                          requête      unicode61 (le nôtre)   trigram
-                                          数据  (2)          0                   0
-                                          数据库 (3)          0                   1
-                                          東京  (2)          0                   0
-                                          chat               1                   1
-                                          dort               1                   1
+                                            requête      unicode61 (le nôtre)   trigram
+                                            数据  (2)          0                   0
+                                            数据库 (3)          0                   1
+                                            東京  (2)          0                   0
+                                            chat               1                   1
+                                            dort               1                   1
 
-                                      Donc **notre index ne trouve JAMAIS rien en CJK**, pas même sur trois
-                                      caractères — ce n'est pas une dégradation, c'est un mur. `trigram` le
-                                      lève dès 3 caractères sans toucher au français.
-                                      Reste hors de portée : les termes CJK de **1-2 caractères**, et c'est
-                                      précisément ce que leur bigramme compilé existe pour couvrir.
-                                      **On ne bascule PAS aujourd'hui** : produit français d'abord, un index
-                                      trigramme pèse plus lourd (une entrée par fenêtre de 3), et personne
-                                      n'attend cette recherche. Mais le jour où un utilisateur CJK arrive, la
-                                      décision est un MOT dans la migration 036 — plus un chantier natif.
-                                      `native/fts5_cjk/` **(copie C, désormais optionnelle)**
+                                        Donc **notre index ne trouve JAMAIS rien en CJK**, pas même sur trois
+                                        caractères — ce n'est pas une dégradation, c'est un mur. `trigram` le
+                                        lève dès 3 caractères sans toucher au français.
+                                        Reste hors de portée : les termes CJK de **1-2 caractères**, et c'est
+                                        précisément ce que leur bigramme compilé existe pour couvrir.
+                                        **On ne bascule PAS aujourd'hui** : produit français d'abord, un index
+                                        trigramme pèse plus lourd (une entrée par fenêtre de 3), et personne
+                                        n'attend cette recherche. Mais le jour où un utilisateur CJK arrive, la
+                                        décision est un MOT dans la migration 036 — plus un chantier natif.
+                                        `native/fts5_cjk/` **(copie C, désormais optionnelle)**
 
 - [ ] **7 · PTC — appel d'outils programmatique** — le modèle écrit un script
       qui appelle nos outils, N tours → 1. Seul le `stdout` revient. Chez nous il
@@ -170,12 +170,28 @@ remove_diacritics 2`) contre `trigram` :
       `write_approval.py`. Palier D2.)_
 - [ ] **12 · Suggestions d'allowlist** — l'agent propose ce qu'il faudrait
       autoriser. `hermes_cli/approvals_suggest.py`
-      **Bloqué, avec son reçu (01/08).** Ce chantier MINE un historique
-      d'approbations. La table existe — `projection_pending_approvals`
-      (request_id, status, decision, resolved_at) — et elle contient
-      **0 ligne** sur cette machine. Il n'y a rien à miner : les suggestions
-      sortiraient d'un ensemble vide, ce qui n'est pas une suggestion, c'est
-      une invention. Rouvrir quand la table se remplit.
+      **Bloqué DEUX fois, mesuré le 01/08** — et ma première lecture était
+      imprécise. J'avais dit « 0 ligne » : c'était vrai de
+      `projection_pending_approvals`, qui est une table de choses EN ATTENTE,
+      donc transitoire. Les décisions, elles, sont ailleurs et existent :
+      **13 activités `tool.denied`** (12 `Bash`, 1 `Write`), plus 367
+      activités dont le payload mentionne une permission.
+      Deux murs, et ils sont indépendants :
+      · **la commande refusée n'est enregistrée nulle part.** Le message
+      `permission_denied` du SDK ne porte que `tool_name`, `tool_use_id`,
+      `agent_id` et le motif — jamais l'entrée de l'outil. La commande vit
+      dans l'activité `tool.updated` correspondante, mais
+      `ItemLifecyclePayload` n'a AUCUN identifiant : la jointure serait
+      heuristique (« le dernier `tool.updated` du même tour »). Le
+      correctif serait un champ `toolUseId` sur ce payload, propagé aux
+      deux sites d'émission de l'adaptateur et à l'ingestion ;
+      · **13 refus en une semaine d'usage intense.** Même avec une jointure
+      parfaite, un suggéreur n'aurait presque rien à proposer. Le VOLUME
+      bloque autant que la donnée, et lui ne se lève pas par du code.
+      Donc on n'ajoute pas l'instrumentation aujourd'hui : elle lèverait un
+      mur sur deux, pour une fonctionnalité que le second garde fermée. À
+      rouvrir si les refus deviennent fréquents — c'est alors qu'ils vaudront
+      la peine d'être suggérés.
 - [x] **13 · Patterns de menace** — les 36 motifs d'Hermès portés en DONNÉE,
       par classe d'attaque, avec leurs trois PORTÉES (partout / contexte /
       strict) : détecter large partout, ne bloquer que là où l'humain peut
