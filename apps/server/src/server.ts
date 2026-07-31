@@ -456,7 +456,14 @@ export const makeRoutesLayer = Layer.mergeAll(
     staticAndDevRouteLayer,
     websocketRpcRouteLayer,
   ),
-  McpHttpServer.layer.pipe(Layer.provide(McpSessionRegistry.layer)),
+  // `PersistenceLayerLive` est fournie ICI parce que l'outil `rappel` lit
+  // l'index des conversations. Effect mémoïse les layers par référence : c'est
+  // la MÊME instance que partout ailleurs dans la construction, pas une
+  // seconde connexion.
+  McpHttpServer.layer.pipe(
+    Layer.provide(McpSessionRegistry.layer),
+    Layer.provide(PersistenceLayerLive),
+  ),
 ).pipe(
   Layer.provide(PreviewAutomationBroker.layer),
   Layer.provide(ServerSelfUpdate.layer),

@@ -22,6 +22,9 @@ import {
   PreviewSnapshotToolkit,
   PreviewStandardToolkit,
 } from "./toolkits/preview/tools.ts";
+import { RappelToolkitHandlersLive } from "./toolkits/rappel/handlers.ts";
+import { RappelToolkit } from "./toolkits/rappel/tools.ts";
+import { RappelStoreLive } from "../rappel/RappelStore.ts";
 import { RepoToolkitHandlersLive } from "./toolkits/repo/handlers.ts";
 import { RepoToolkit } from "./toolkits/repo/tools.ts";
 
@@ -226,6 +229,15 @@ const RepoToolkitRegistrationLive = McpServer.toolkit(RepoToolkit).pipe(
   Layer.provide(RepoToolkitHandlersLive),
 );
 
+/**
+ * Le rappel de conversations (chantier n°5, absorption Hermès) : lecture
+ * seule, aucune capacité MCP à exiger — il ne lit que notre propre base.
+ */
+const RappelToolkitRegistrationLive = McpServer.toolkit(RappelToolkit).pipe(
+  Layer.provide(RappelToolkitHandlersLive),
+  Layer.provide(RappelStoreLive),
+);
+
 const McpTransportLive = McpServer.layerHttp({
   name: "T3 Code",
   version: packageJson.version,
@@ -235,4 +247,5 @@ const McpTransportLive = McpServer.layerHttp({
 export const layer = Layer.mergeAll(
   PreviewToolkitRegistrationLive,
   RepoToolkitRegistrationLive,
+  RappelToolkitRegistrationLive,
 ).pipe(Layer.provideMerge(McpTransportLive));
