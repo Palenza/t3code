@@ -109,6 +109,20 @@ function handleBeforeQuit(
       const state = yield* DesktopState.DesktopState;
       yield* Ref.set(state.quitting, true);
       yield* logLifecycleInfo("before-quit received");
+      // ON PRÉVIENT LE RENDU AVANT DE COULER LE SERVEUR.
+      //
+      // Cette branche fait `event.preventDefault()` puis ATTEND la fin de
+      // l'extinction, fenêtre toujours à l'écran. Pendant cette attente, le
+      // rendu continuait de sonder `/.well-known/t3/environment` sur un
+      // serveur qu'on est en train d'éteindre, et affichait « Failed to
+      // connect. Reconnecting… » — une extinction VOULUE rapportée comme une
+      // panne, au pire moment (reproche fondateur 31/07 : « c'est horrible »).
+      //
+      // L'ordre compte : le signal part AVANT `requestDesktopShutdownAndWait`,
+      // sinon il arriverait après la première sonde ratée, c'est-à-dire après
+      // le bandeau qu'il est censé empêcher.
+      const desktopWindow = yield* DesktopWindow.DesktopWindow;
+      yield* desktopWindow.notifyQuitting;
       yield* requestDesktopShutdownAndWait();
     }).pipe(Effect.withSpan("desktop.lifecycle.beforeQuit")),
   ).finally(() => {

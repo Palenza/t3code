@@ -18,6 +18,55 @@ describe("extraction des consignes durables", () => {
     }
   });
 
+  it("REJETTE les constats en « ne … pas » — les 4 fausses du 31/07", () => {
+    // Lues telles quelles sur le disque : elles étaient parties dans le
+    // CLAUDE.md des trois comptes, et réinjectées comme interdits éternels
+    // dans chaque session de chaque projet. Trois rapports de bug sur une
+    // carte de couleurs, plus une plainte de lecture.
+    const constats = [
+      "on a un problème dans la carte de couleurs tu peux voir que les points ne sont pas à distance égale alors qu'ils doivent toujours le rester.",
+      "Également je peux je ne peux pas rajouter trois points.",
+      "Ça ne rajoute pas un peu de la granularité.",
+      "Je ne peux pas lire proprement.",
+    ];
+    for (const message of constats) {
+      const retenues = extraireConsignes(message);
+      const interdits = retenues.filter((consigne) => consigne.nature === "interdit");
+      assert.strictEqual(
+        interdits.length,
+        0,
+        `constat pris pour un interdit : « ${message} » → ${JSON.stringify(interdits)}`,
+      );
+    }
+  });
+
+  it("garde les interdictions ADRESSÉES, elles", () => {
+    // La contrepartie : le correctif ne doit pas désarmer les vraies.
+    const vraies = [
+      "Ne me demande pas de copier la console.",
+      "Tu ne touches pas à la prod.",
+      "Ne me vouvoie plus jamais.",
+      "On ne passe jamais par d'autres serveurs.",
+      "Il ne faut pas déployer sans mon accord.",
+      "Je ne veux pas de commit automatique.",
+      "Arrête de créer des DMG à tout bout de champ.",
+    ];
+    for (const message of vraies) {
+      const interdits = extraireConsignes(message).filter((c) => c.nature === "interdit");
+      assert.ok(interdits.length > 0, `interdiction perdue : « ${message} »`);
+    }
+  });
+
+  it("« tu » ailleurs dans la phrase ne suffit pas à en faire une règle", () => {
+    // Le piège exact de la phrase du 31/07 : elle contient « tu peux voir »,
+    // donc elle a l'air adressée — mais la négation, elle, porte sur « les
+    // points ». L'adresse doit être LOCALE à la négation.
+    const interdits = extraireConsignes(
+      "tu peux voir que les points ne sont pas à distance égale.",
+    ).filter((c) => c.nature === "interdit");
+    assert.strictEqual(interdits.length, 0);
+  });
+
   it("classe les interdictions à part des obligations", () => {
     const [interdit] = extraireConsignes("Ne me vouvoie plus jamais.");
     assert.strictEqual(interdit?.nature, "interdit");
@@ -135,5 +184,46 @@ describe("mémoire réinjectée", () => {
   it("dit que ces règles priment sur les habitudes", () => {
     const texte = memoireAReinjecter([{ phrase: "Ne fais jamais ça.", nature: "interdit" }]);
     assert.match(texte, /priment/u);
+  });
+});
+
+describe("ce qui est COLLÉ n'est pas ce qui est demandé", () => {
+  // Fixtures RÉELLES : ces cinq phrases sont entrées dans les consignes
+  // permanentes de TOUS les projets le 31/07, parce que l'humain avait collé
+  // une conversation entière dans son message. Le mineur tourne sur le
+  // message envoyé — il ne distinguait pas ce qu'on DIT de ce qu'on COLLE.
+  const collees = [
+    "Les règles critiques (« ne jamais pousser sur main », « toujours lancer make lint ») vont dans le CLAUDE.md racine ; les guides détaillés vont en skills.",
+    "Donc au lieu de lutter contre la compaction, exploitez-la : ce qui compte ne doit jamais vivre uniquement dans la conversation.",
+    "L'état ne dépend plus du résumé.",
+    "« ne jamais remettre une arène à zéro trop tôt » = ne pas libérer la région mémoire avant la fin du cycle de rendu.",
+    "À utiliser systématiquement pour : exploration de codebase, lecture de logs, recherche documentaire, revue large.",
+  ];
+
+  for (const phrase of collees) {
+    it(`ne retient pas : ${phrase.slice(0, 46)}…`, () => {
+      assert.deepEqual(extraireConsignes(phrase), []);
+    });
+  }
+
+  it("laisse passer les VRAIES consignes de l'humain", () => {
+    // Les deux seules des vingt qui méritaient d'être permanentes.
+    assert.equal(
+      extraireConsignes("fait tout , tu ne dois jamais tarreter sauf si tu as un doute").length,
+      1,
+    );
+    assert.equal(extraireConsignes("Ça doit toujours se redémarrer là où tu as quitté.").length, 1);
+  });
+
+  it("garde la règle impersonnelle en « on », qui est bien sa voix", () => {
+    assert.equal(extraireConsignes("On ne passe jamais par d'autres serveurs.").length, 1);
+  });
+
+  it("ne confond pas « assez » et « chez » avec du vouvoiement", () => {
+    assert.equal(extraireConsignes("Tu ne dois jamais en mettre assez peu.").length, 1);
+    assert.equal(
+      extraireConsignes("Ne va jamais chez un autre fournisseur, tu perds tout.").length,
+      1,
+    );
   });
 });

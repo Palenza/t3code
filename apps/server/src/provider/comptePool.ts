@@ -107,6 +107,33 @@ const CAUSES_MORTELLES: ReadonlyArray<RegExp> = [
   /could not be refreshed/i,
 ];
 
+/**
+ * L'ÉTAT DE SESSION CASSÉ — et la bascule est le pire remède.
+ *
+ * Deux pannes vues en vrai le 31/07, signalées par le drapeau `reconnu` :
+ *
+ *   [ede_diagnostic] result_type=user last_content_type=n/a stop_reason=tool_use
+ *   No conversation found with session ID: d9b0e2ac-…
+ *
+ * Aucune ne vient du compte. La première dit que le tour s'est arrêté sur un
+ * appel d'outil dont le contenu manque — un état de conversation incohérent.
+ * La seconde dit que la CLI ne retrouve pas la session sur disque.
+ *
+ * Les deux tombaient dans « transitoire », donc le pool BASCULAIT de compte.
+ * Or chaque compte a son propre dossier de sessions : le suivant ne retrouvera
+ * pas davantage cette conversation, et le suivant non plus. On brûlait donc
+ * les comptes un par un pour une faute qui n'est celle d'aucun d'eux — les
+ * quotas à 95 % et 100 % du 31/07 se sont vidés en partie comme ça.
+ *
+ * `notre-faute` : on NE bascule PAS, on s'arrête et on le dit.
+ */
+const CAUSES_SESSION_CASSEE: ReadonlyArray<RegExp> = [
+  /no conversation found with session id/i,
+  /\[ede_diagnostic\]/i,
+  /adapter thread is closed/i,
+  /session (?:is )?closed/i,
+];
+
 /** Un quota atteint — le compte reviendra, mais pas tout de suite. */
 const CAUSES_QUOTA: ReadonlyArray<RegExp> = [
   /usage limit reached/i,
@@ -200,6 +227,13 @@ export function classerEchec(entree: {
 
   if (CAUSES_MORTELLES.some((motif) => motif.test(message))) {
     return { nature: "authentification-morte", reconnu: true };
+  }
+
+  // AVANT tout le reste : une session cassée n'appartient à aucun compte.
+  // Placé ici parce qu'un de ces messages peut arriver avec un code 5xx, qui
+  // le classerait « transitoire » plus bas — et relancerait la bascule.
+  if (CAUSES_SESSION_CASSEE.some((motif) => motif.test(message))) {
+    return { nature: "notre-faute", reconnu: true };
   }
 
   // 4xx hors 401/408/429 : c'est NOTRE requête qui est mauvaise. Basculer

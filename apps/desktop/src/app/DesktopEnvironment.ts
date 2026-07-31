@@ -158,12 +158,44 @@ const make = Effect.fn("desktop.environment.make")(function* (
     appVersion: input.appVersion,
   });
   const displayName = branding.displayName;
+
+  /**
+   * NIGHTLY A SON PROPRE DOSSIER — sinon les deux applications se marchent
+   * dessus, en silence.
+   *
+   * Constaté le 31/07 sur la machine du fondateur : Raptor et Nightly
+   * portent le MÊME identifiant de bundle (`com.t3tools.t3code`) et, jusqu'à
+   * cette ligne, le même dossier de données. Il n'existe pas non plus de
+   * verrou d'instance unique. Les deux tournaient en même temps (ports 3773
+   * et 3774) et écrivaient dans le même `localStorage` : la dernière qui
+   * écrit gagne. Symptôme vécu — « j'étais dans Tous, je quitte, je relance,
+   * je suis dans Design ». Ce n'était pas la reprise qui échouait, c'était
+   * l'autre application qui avait réécrit l'espace actif par-dessus.
+   *
+   * C'est exactement le rôle d'une nightly : s'essayer sans rien risquer des
+   * vraies données. Stable garde `t3code` — donc TOUT l'existant reste en
+   * place, rien à migrer, rien à perdre.
+   */
+  const estNightly = !isDevelopment && isNightlyDesktopVersion(input.appVersion);
   const stateDir = path.join(
     baseDir,
-    isDevelopment && Option.isNone(configuredBaseDir) ? "dev" : "userdata",
+    Option.isSome(configuredBaseDir)
+      ? "userdata"
+      : isDevelopment
+        ? "dev"
+        : estNightly
+          ? "nightly"
+          : "userdata",
   );
-  const userDataDirName = isDevelopment ? "t3code-dev" : "t3code";
-  const legacyUserDataDirName = isDevelopment ? "T3 Code (Dev)" : "T3 Code (Alpha)";
+  const userDataDirName = isDevelopment ? "t3code-dev" : estNightly ? "t3code-nightly" : "t3code";
+  // Le dossier hérité GAGNE sur le nouveau quand il existe (cf.
+  // `resolveUserDataPath`). Donner à nightly l'héritage de stable la ferait
+  // donc retomber dans les données qu'on vient de séparer — elle a le sien.
+  const legacyUserDataDirName = isDevelopment
+    ? "T3 Code (Dev)"
+    : estNightly
+      ? "T3 Code (Nightly)"
+      : "T3 Code (Alpha)";
   const resourcesPath = input.resourcesPath;
 
   return DesktopEnvironment.of({

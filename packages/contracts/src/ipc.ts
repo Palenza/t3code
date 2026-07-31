@@ -1001,6 +1001,19 @@ export interface DesktopBridge {
   setWslDistro: (distro: string | null) => Promise<DesktopWslState>;
   setWslOnly: (enabled: boolean) => Promise<DesktopWslState>;
   pickFolder: (options?: PickFolderOptions) => Promise<string | null>;
+  /**
+   * Le chemin absolu d'un `File` déposé ou choisi dans le renderer.
+   *
+   * Electron a retiré `File.path` en v32 : sans ce pont, un fichier venu du
+   * système n'existe dans la fenêtre que sous forme d'octets, et rien ne peut
+   * dire à l'agent OÙ il est. C'est `webUtils.getPathForFile` — synchrone,
+   * pas d'IPC : Electron résout le chemin dans le preload.
+   *
+   * Rend "" quand le `File` ne vient pas du disque (un blob fabriqué en JS,
+   * une image collée depuis le presse-papiers) — c'est le contrat d'Electron,
+   * et l'appelant DOIT traiter ce cas.
+   */
+  getPathForFile: (file: File) => string;
   confirm: (message: string) => Promise<boolean>;
   setTheme: (theme: DesktopTheme) => Promise<void>;
   showContextMenu: <T extends string>(
@@ -1009,6 +1022,15 @@ export interface DesktopBridge {
   ) => Promise<T | null>;
   openExternal: (url: string) => Promise<boolean>;
   onMenuAction: (listener: (action: string) => void) => () => void;
+  /**
+   * « L'application s'en va » — émis au tout début de la fermeture, AVANT que
+   * le serveur local commence à s'éteindre.
+   *
+   * À écouter pour cesser de rapporter des pannes de connexion pendant la
+   * fermeture : une extinction VOULUE ne doit pas s'afficher comme un échec.
+   * Rend la fonction de désabonnement.
+   */
+  onAppQuitting: (listener: () => void) => () => void;
   getWindowFullscreenState: () => boolean;
   onWindowFullscreenStateChange: (listener: (fullscreen: boolean) => void) => () => void;
   getUpdateState: () => Promise<DesktopUpdateState>;

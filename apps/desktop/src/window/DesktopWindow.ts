@@ -15,7 +15,11 @@ import { getDesktopUrl } from "../electron/ElectronProtocol.ts";
 import * as ElectronShell from "../electron/ElectronShell.ts";
 import * as ElectronTheme from "../electron/ElectronTheme.ts";
 import * as ElectronWindow from "../electron/ElectronWindow.ts";
-import { MENU_ACTION_CHANNEL, WINDOW_FULLSCREEN_STATE_CHANNEL } from "../ipc/channels.ts";
+import {
+  APP_QUITTING_CHANNEL,
+  MENU_ACTION_CHANNEL,
+  WINDOW_FULLSCREEN_STATE_CHANNEL,
+} from "../ipc/channels.ts";
 import * as PreviewManager from "../preview/Manager.ts";
 import * as DesktopAppSettings from "../settings/DesktopAppSettings.ts";
 
@@ -80,6 +84,8 @@ export class DesktopWindow extends Context.Service<
     readonly handleBackendNotReady: Effect.Effect<void>;
     readonly flushMainWindowBounds: Effect.Effect<void>;
     readonly dispatchMenuAction: (action: string) => Effect.Effect<void, DesktopWindowError>;
+    /** Prévenir le rendu qu'on s'en va, sans jamais réveiller la fenêtre. */
+    readonly notifyQuitting: Effect.Effect<void>;
     readonly syncAppearance: Effect.Effect<void>;
   }
 >()("@t3tools/desktop/window/DesktopWindow") {}
@@ -864,6 +870,17 @@ export const make = Effect.gen(function* () {
     flushMainWindowBounds: Effect.suspend(() => flushMainWindowBounds).pipe(
       Effect.withSpan("desktop.window.flushMainWindowBounds"),
     ),
+    notifyQuitting: Effect.gen(function* () {
+      // On NE crée pas de fenêtre et on NE révèle rien : au contraire de
+      // `dispatchMenuAction`, qui existe pour amener l'humain quelque part.
+      // Ici l'humain part — le seul geste utile est de se taire.
+      const fenetre = yield* electronWindow.currentMainOrFirst;
+      if (Option.isNone(fenetre)) return;
+      const cible = fenetre.value;
+      if (cible.isDestroyed()) return;
+      cible.webContents.send(APP_QUITTING_CHANNEL);
+    }),
+
     dispatchMenuAction: Effect.fn("desktop.window.dispatchMenuAction")(function* (action) {
       yield* Effect.annotateCurrentSpan({ action });
       const existingWindow = yield* focusedMainWindow;

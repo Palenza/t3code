@@ -144,4 +144,25 @@ describe("DesktopEnvironment", () => {
       );
     }),
   );
+  it.effect("donne à nightly ses PROPRES dossiers, et ne touche pas à ceux de stable", () =>
+    Effect.gen(function* () {
+      // Le défaut vécu le 31/07 : même identifiant de bundle, même dossier de
+      // données, aucun verrou d'instance. Les deux applications ouvertes en
+      // même temps s'écrasaient l'état — « je quitte dans Tous, je relance
+      // dans Design ».
+      const nightly = yield* makeEnvironment({ appVersion: "0.0.53-nightly.20260731.1" });
+      assert.equal(nightly.userDataDirName, "t3code-nightly");
+      assert.equal(nightly.stateDir, "/Users/alice/.t3/nightly");
+      // Le dossier hérité gagne sur le nouveau quand il existe : celui de
+      // nightly ne doit donc PAS être celui de stable, sinon la séparation
+      // qu'on vient de faire se défait toute seule au premier lancement.
+      assert.notEqual(nightly.legacyUserDataDirName, "T3 Code (Alpha)");
+
+      // Stable ne bouge pas d'un pouce — tout l'existant reste en place.
+      const stable = yield* makeEnvironment({ appVersion: "0.0.53" });
+      assert.equal(stable.userDataDirName, "t3code");
+      assert.equal(stable.stateDir, "/Users/alice/.t3/userdata");
+      assert.equal(stable.legacyUserDataDirName, "T3 Code (Alpha)");
+    }),
+  );
 });
