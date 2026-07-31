@@ -26,6 +26,8 @@ import {
 } from "./toolkits/preview/tools.ts";
 import { PreuveToolkitHandlersLive } from "./toolkits/preuve/handlers.ts";
 import { PreuveToolkit } from "./toolkits/preuve/tools.ts";
+import { SanteToolkitHandlersLive } from "./toolkits/sante/handlers.ts";
+import { SanteToolkit } from "./toolkits/sante/tools.ts";
 import { PreuveStoreLive } from "../preuve/PreuveStore.ts";
 import { DetteToolkitHandlersLive } from "./toolkits/persistance/handlers.ts";
 import { DetteToolkit } from "./toolkits/persistance/tools.ts";
@@ -286,6 +288,16 @@ const DetteToolkitRegistrationLive = McpServer.toolkit(DetteToolkit).pipe(
   Layer.provide(DetteStoreLive),
 );
 
+/**
+ * Le doctor (chantier n°13) et sa bouche. Le module de diagnostic existait,
+ * complet et testé, sans AUCUN appelant — donc muet. Le jour du branchement,
+ * il avait déjà quelque chose de vrai à dire : `thread_messages_fts` manquait
+ * aux deux bases de la machine.
+ */
+const SanteToolkitRegistrationLive = McpServer.toolkit(SanteToolkit).pipe(
+  Layer.provide(SanteToolkitHandlersLive),
+);
+
 const McpTransportLive = McpServer.layerHttp({
   name: "T3 Code",
   version: packageJson.version,
@@ -299,4 +311,5 @@ export const layer = Layer.mergeAll(
   PreuveToolkitRegistrationLive,
   UsageSkillsToolkitRegistrationLive,
   DetteToolkitRegistrationLive,
+  SanteToolkitRegistrationLive,
 ).pipe(Layer.provideMerge(McpTransportLive));

@@ -187,6 +187,10 @@ la raison — un écart sans raison se rouvre tous les mois.
 
 - [x] **46 · `doctor`** — auto-diagnostic complet. Un constat sans geste est
       un voyant qu'on apprend à ignorer. `hermes_cli/doctor.py` (2 770)
+      **Branché le 01/08** : le module était complet, testé — et sans aucun
+      appelant, donc muet. Outil MCP `sante`. Le jour du branchement il avait
+      déjà quelque chose de vrai à dire : `thread_messages_fts` (migration 036)
+      manquait aux DEUX bases de la machine.
       → `973b47aac`
 - [ ] **47 · Cron intégré** — scheduler, jobs, exécutions, garde anti-zombie.
       `cron/scheduler.py` (4 364), `jobs.py` (2 609), `lifecycle_guard.py`
