@@ -92,3 +92,97 @@ Allowlist `(événement, commande)` avec consentement à la première utilisatio
 `script_mtime_iso` + `script_is_executable` : **l'autorisation porte sur le
 contenu du script au moment où on l'a lue**, pas sur son nom. Un script
 autorisé puis modifié redemande le consentement.
+
+---
+
+## Ce que l'INTERFACE d'Hermès Desktop 0.19.0 apprend (captures du 31/07)
+
+Le code Python ne montre pas les **valeurs par défaut**. Les réglages, si — et
+ce sont de la donnée, donc on leur fait confiance (règle de confiance).
+
+Poids du projet, pour situer : **223 000 étoiles, 42 900 forks,
+2 200 contributeurs, 19 651 commits, 1 400 branches, 23 releases**, des
+commits qui tombent à la minute. Python 76,5 % / TypeScript 20,6 %, MIT.
+
+### 🔴 LA TROUVAILLE — leur compression n'a rien à voir avec la nôtre
+
+`Memory & Context` :
+
+|                         | Hermès                       | Claude Code (mesuré le 31/07)           |
+| ----------------------- | ---------------------------- | --------------------------------------- |
+| seuil de déclenchement  | **0,6** (60 % de la fenêtre) | ~100 %                                  |
+| cible après compression | **0,2** (20 %)               | **1,7 %** (17 k sur 1 M)                |
+| messages protégés       | **30**                       | **3**                                   |
+| moteur                  | `Compressor`, réglable       | imposé                                  |
+| coût                    | continu, invisible           | **2 à 3 min de gel**, 9 fois en 7 jours |
+
+Ils compressent TÔT et SOUVENT ; on subit TARD et BRUTALEMENT. Dix fois plus
+de messages gardés, et pas de falaise.
+
+**Et c'est atteignable chez nous** — les trois pièces existent :
+
+- le SDK expose `isAutoCompactEnabled` (`ClaudeAdapter.ts:510`) ;
+- T3 connaît le remplissage EN DIRECT (`thread.token-usage.updated`) ;
+- le texte du prompt part verbatim au CLI, donc `/compact` est envoyable.
+
+Déclencher à 60 % au lieu d'attendre 100 % supprimerait la falaise et les
+22 minutes d'attente hebdomadaires. **Changement de comportement de la boucle
+→ palier D2, à montrer avant de déployer.**
+
+### Autres réglages, en donnée brute
+
+`Advanced` — Terminal Output Limit **150 000** (notre `PLAFOND_SORTIE` est à
+120 000 : même ordre, mesuré indépendamment). File Page Limit 2 000, Line
+Length Limit 2 000, Checkpoint Limit 20, **Max Agent Steps 120**, API Retries
+5, **Subagent Turn Limit 80**, **Parallel Subagents 5**, Subagent Reasoning
+Effort `Ultra`, Command Timeout 250. Et `In-App Update Local Changes: Stash` —
+une mise à jour depuis l'app remise les édits locaux plutôt que de les jeter.
+
+`Safety` — Approval Mode, Approval Timeout 60, **Redact Secrets**, **Allow
+Private URLs** + **Browser Private URLs** + **Local Browser For Private URLs**
+(trois bascules distinctes : ça confirme le découpage du n°14 — le privé est
+permis SOUS BASCULE, le lien-local jamais), **File Checkpoints** (« rollback
+snapshots before file edits »).
+
+`Notifications` — 6 catégories séparées : approbation, saisie, réponse prête,
+tour échoué, **tâche de fond terminée**, alertes de crédit. Plus un **son de
+fin** avec préréglages et prévisualisation. Et la phrase qui compte :
+_« Completion alerts only fire while Hermes is in the background. »_ C'est mot
+pour mot la demande du fondateur (consigne globale : « un toast dans une
+fenêtre que tu ne regardes pas ne sert à rien »).
+
+`Voice` — TTS parmi 10 fournisseurs dont **Piper local** (`fr_FR-siwis-medium`
+chez lui), STT `Local` par défaut avec Whisper Tiny→Large-V3, langue `fr`,
+raccourci `ctrl+b`, écho des transcriptions.
+
+`Gateway` — quatre modes : Local / Cloud / Distant / **par SSH** (« Hermes est
+lancé sur la machine distante et tunnelé jusqu'à l'app »).
+
+`Advanced` — **Quick Entry** : un compositeur global invoqué au raccourci
+clavier, sans ouvrir l'app. T3 n'a pas d'équivalent.
+
+`Archived Chats` — auto-archivage des fils dormants, avec exactement la
+doctrine du curateur : _« Pinned chats are never archived, and nothing is
+deleted — archived chats just move here. »_
+
+`About` — désinstallation à **trois granularités** (GUI seule / GUI+agent en
+gardant les données / tout), et la bannière de mise à jour affiche la branche
+et le commit.
+
+### Ce que T3 n'a PAS, vérifié
+
+|                                      | T3                          |
+| ------------------------------------ | --------------------------- |
+| seuil de compression réglable        | ❌                          |
+| auto-archivage des fils dormants     | ❌                          |
+| Quick Entry (raccourci global)       | ❌                          |
+| modes de connexion de passerelle     | ❌                          |
+| notification quand l'app est en fond | ✅ (`VeilleFinDeTache.tsx`) |
+
+### Deux détails de leur dépôt qui parlent
+
+- `native/fts5_cjk` est bien là, avec son commit « CJK-bigram index » — c'est
+  le n°6, et il se copie.
+- `optional-skills` porte un correctif : _« stop shredding an existing
+  MEMORY.md »_. Leur CLI a détruit des MEMORY.md d'utilisateurs. À se rappeler
+  au moment de toucher à la mémoire.
