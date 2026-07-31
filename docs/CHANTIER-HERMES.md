@@ -16,13 +16,13 @@ plan.
 
 ## Où en est le catalogue — au 01/08/2026
 
-**34 livrés · 5 partiels · 25 écartés sur pièce · 21 restants.**
+**34 livrés · 5 partiels · 26 écartés sur pièce · 20 restants.**
 
 Chaque ligne a été INSTRUITE : aucune n'est restée sans qu'on aille voir. Un
 écart porte toujours sa raison, et une raison porte un reçu quand elle repose
 sur une mesure.
 
-Ce que les 21 restants attendent vraiment — c'est la seule question utile :
+Ce que les 20 restants attendent vraiment — c'est la seule question utile :
 
 |       | quoi                                                               | qui décide                                                                                                                         |
 | ----- | ------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
@@ -104,23 +104,23 @@ la raison — un écart sans raison se rouvre tous les mois.
   base en mémoire, avec nos réglages actuels (`unicode61
 remove_diacritics 2`) contre `trigram` :
 
-                                            requête      unicode61 (le nôtre)   trigram
-                                            数据  (2)          0                   0
-                                            数据库 (3)          0                   1
-                                            東京  (2)          0                   0
-                                            chat               1                   1
-                                            dort               1                   1
+                                              requête      unicode61 (le nôtre)   trigram
+                                              数据  (2)          0                   0
+                                              数据库 (3)          0                   1
+                                              東京  (2)          0                   0
+                                              chat               1                   1
+                                              dort               1                   1
 
-                                        Donc **notre index ne trouve JAMAIS rien en CJK**, pas même sur trois
-                                        caractères — ce n'est pas une dégradation, c'est un mur. `trigram` le
-                                        lève dès 3 caractères sans toucher au français.
-                                        Reste hors de portée : les termes CJK de **1-2 caractères**, et c'est
-                                        précisément ce que leur bigramme compilé existe pour couvrir.
-                                        **On ne bascule PAS aujourd'hui** : produit français d'abord, un index
-                                        trigramme pèse plus lourd (une entrée par fenêtre de 3), et personne
-                                        n'attend cette recherche. Mais le jour où un utilisateur CJK arrive, la
-                                        décision est un MOT dans la migration 036 — plus un chantier natif.
-                                        `native/fts5_cjk/` **(copie C, désormais optionnelle)**
+                                          Donc **notre index ne trouve JAMAIS rien en CJK**, pas même sur trois
+                                          caractères — ce n'est pas une dégradation, c'est un mur. `trigram` le
+                                          lève dès 3 caractères sans toucher au français.
+                                          Reste hors de portée : les termes CJK de **1-2 caractères**, et c'est
+                                          précisément ce que leur bigramme compilé existe pour couvrir.
+                                          **On ne bascule PAS aujourd'hui** : produit français d'abord, un index
+                                          trigramme pèse plus lourd (une entrée par fenêtre de 3), et personne
+                                          n'attend cette recherche. Mais le jour où un utilisateur CJK arrive, la
+                                          décision est un MOT dans la migration 036 — plus un chantier natif.
+                                          `native/fts5_cjk/` **(copie C, désormais optionnelle)**
 
 - [ ] **7 · PTC — appel d'outils programmatique** — le modèle écrit un script
       qui appelle nos outils, N tours → 1. Seul le `stdout` revient. Chez nous il
@@ -492,8 +492,22 @@ remove_diacritics 2`) contre `trigram` :
       Claude de l'humain — la même famille de décision que l'installation de
       skills (n°51-53). Elle remonte à Enzo, pas au code.
 - [ ] **53 · Compatibilité agentskills.io + index Anthropic/OpenAI/LobeHub**
-- [ ] **54 · Conduite fine de session** — `/steer` (injecter après le prochain
-      outil, sans interrompre), `/queue`, `/busy` avec politique par commande
+- [–] **54 · ~~Conduite fine de session~~** — **Écarté : les trois
+  comportements existent DÉJÀ sous nous.** Vérifié le 01/08 dans le binaire du
+  CLI que T3 lance, la même fouille qui a fermé le n°8 :
+  · **file d'attente** — `queuedCommands`, `pendingUserMessages`,
+  `messageQueue`, `getQueuedCommandAttachments`, et la phrase montrée à
+  l'humain : **« Message queued for the main conversation's next turn. »**
+  Un log confirme que le chemin est exercé (« dropping images for one queued
+  command, keeping its text ») ;
+  · **infléchissement** — c'est ce que T3 fait déjà : « a sendTurn while a
+  real turn is running is a steer », dans les quatre adaptateurs ;
+  · **interruption** — le SDK porte un sous-type de commande `interrupt`, et
+  T3 s'en sert (un tour coupé passe à `interrupted`).
+  Ce qu'ajoute leur chantier est donc un RÉGLAGE — quel comportement Entrée
+  déclenche — pas un mécanisme. Ce réglage appartient à la surface qui reçoit
+  la frappe, pas à T3, et le réimplémenter doublerait trois chemins qui
+  marchent.
 - [–] **55 · ~~Compression dirigée~~** — **Bloqué en amont, vérifié le
   01/08.** Le compactage n'est pas à nous : c'est Claude Code qui le déclenche
   et le conduit. J'ai énuméré TOUS les sous-types de commande du SDK
