@@ -210,7 +210,15 @@ la raison — un écart sans raison se rouvre tous les mois.
       _(reste : l'export HTML, les filtres, le listing)_
 - [ ] **57 · Mise à jour propre** — verrou, rollback de commit épinglé,
       récupération d'autostash, relance, migration. `update_cmd.py` (5 086)
-- [ ] **58 · Désinstallation propre** `uninstall.py` (964)
+- [x] **58 · Désinstallation propre** — leurs trois granularités (l'app seule,
+      l'app + l'agent en gardant les données, tout), mais la décision ne se
+      prend PAS sur la granularité : elle se prend sur l'APPARTENANCE du
+      chemin. Le home Claude et les dépôts de l'utilisateur valent « jamais »
+      sur les trois colonnes — ils existaient avant T3. Module pur : il décide,
+      un autre effacera, et cet autre ne saura rien décider (un désinstalleur
+      est le seul code dont un bug n'a pas d'annulation). `uninstall.py` (964)
+      _(reste : l'exécution — retrait du PATH, wrappers, service ; à écrire le
+      jour où T3 s'installe hors du `.app`)_
 - [x] **59 · Inventaire** — le `doctor` DIAGNOSTIQUE, l'inventaire DÉCRIT :
       versions, comptes, serveurs MCP, poids de l'état. Avec la contrainte
       qu'ils n'ont pas nommée — un inventaire est fait pour être COLLÉ quelque
