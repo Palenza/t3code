@@ -121,8 +121,28 @@ la raison — un écart sans raison se rouvre tous les mois.
       un moteur qu'on ne possède pas — cf. n°25 et n°30. Le jour où T3 tient
       un point de passage sur l'exécution, la moitié pure s'y branche sans
       changer une ligne : c'est pour ça qu'elle est séparée.)_
-- [ ] **16 · Sources de secrets externes** — 1Password, Bitwarden, commande.
-      `agent/secret_sources/`
+- [–] **16 · ~~Sources de secrets externes~~** — **Écarté sur enquête,
+  01/08.** Leurs 3 231 lignes (1Password, Bitwarden, commande) répondent à
+  « où ranger un secret pour qu'il ne traîne pas sur le disque ». On a la
+  réponse, et elle est bonne : `ServerSecretStore` sort déjà toute valeur
+  `sensitive` de `settings.json` et l'écrit dans un fichier à part. Vérifié
+  sur la machine, pas dans le code :
+
+      ~/.t3/userdata/secrets            drwx------  (0700)
+      ~/.t3/userdata/secrets/*.bin      -rw-------  (0600)
+
+  Écriture atomique, `chmod` posé sur le fichier TEMPORAIRE avant le rename —
+  donc aucune fenêtre où le secret existe en clair lisible. Un coffre externe
+  ajouterait « le secret n'est même pas chez nous », ce qui est réel mais
+  répond à un vol de disque : pas notre menace sur un poste mono-utilisateur.
+  _(À rouvrir si T3 tourne un jour sur une machine partagée.)_
+  **Ce que l'enquête laisse quand même sur la table** : leur parseur de sortie
+  de commande porte deux gardes non évidents — la clé demandée passe par une
+  variable d'environnement et n'est JAMAIS interpolée dans le shell, et une
+  sortie `AUTRE_CLE=valeur` n'est pas rendue comme la clé demandée (fuite
+  croisée d'identifiants, pas un simple 401). À reprendre tels quels le jour
+  où on lira un secret depuis une commande. `agent/secret_sources/` (3 231)
+
 - [x] **17 · Rédaction des secrets** — 985 lignes rien que pour caviarder
       journaux et télémétrie. `agent/redact.py`, `monitoring/redaction.py`
       → `8be2f82c1`, branché à la sortie d'outil dans `422454103`
@@ -131,9 +151,14 @@ la raison — un écart sans raison se rouvre tous les mois.
   permissions, c'est un registre de MONTAGE de fichiers dans des
   conteneurs de terminal distants. Sans objet — T3 n'en a pas. Vérifié en
   lisant le fichier.
-- [ ] **19 · Hooks shell à consentement première utilisation** — allowlist
-      `(événement, commande)`, `shell=False` + `shlex.split`.
-      `agent/shell_hooks.py`
+- [–] **19 · ~~Hooks shell à consentement~~** — **Écarté sur enquête, 01/08.**
+  Ce chantier garde un mécanisme que T3 n'a PAS : recherche dédiée faite
+  (A3), il n'exécute aucun hook à lui. Les seules occurrences du mot dans le
+  dépôt sont dans `CibleSensible.ts` (n°11), qui protège contre l'écriture
+  dans les hooks de Claude Code — l'inverse exact. Écrire le consentement
+  d'une porte qui n'existe pas obligerait à créer la porte d'abord.
+  Les hooks que T3 côtoie sont ceux de Claude Code, qui portent déjà leur
+  propre modèle de consentement, et qu'on garde en écriture. `agent/shell_hooks.py`
 - [x] **20 · Audit de sécurité au démarrage** — consultatif, jamais bloquant,
       comme le leur. Deux de leurs quatre contrôles ne sont pas notre monde
       (sshd, conteneur) ; on garde root et on ajoute les PERMISSIONS des
@@ -297,8 +322,19 @@ la raison — un écart sans raison se rouvre tous les mois.
       sur le monde (H4).
       _(reste : l'upload de diagnostic vers un serveur — on ne l'enverra
       nulle part.)_
-- [ ] **60 · Observabilité** — OTLP, santé passerelle, santé cron, contrat de
-      métriques partagées
+- [–] **60 · ~~Observabilité~~** — **Déjà couvert, vérifié le 01/08.** Les
+  quatre points de la ligne existent ou sont sans objet :
+  · **OTLP** — `otlpTracesUrl`, `otlpMetricsUrl`, `otlpExportIntervalMs`,
+  `otlpServiceName` sont dans `config.ts`, et le dossier
+  `observability/` porte `Metrics.ts`, `Attributes.ts`,
+  `RpcInstrumentation.ts`, `BrowserTraceCollector.ts` ;
+  · **contrat de métriques partagées** — c'est `Attributes.ts` :
+  `MetricAttributes`, `ObservabilityOutcome`, `compactMetricAttributes`.
+  Les compteurs sont nommés et centralisés (`t3_rpc_requests_total`,
+  `t3_provider_turn_duration`, …) ;
+  · **santé passerelle** et **santé cron** — la passerelle (n°37→45) et le
+  cron intégré (n°47) n'existent pas ici. Une sonde de santé sur un
+  service absent n'est pas un manque, c'est une ligne sans objet.
 - [x] **61 · Classification d'erreurs** — fondue dans `classerEchec`, pas
       posée à côté : deux natures de plus, choisies parce que leur REMÈDE
       diffère (`contexte-trop-grand` → compresser ; `surcharge-fournisseur`
