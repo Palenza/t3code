@@ -115,7 +115,14 @@ la raison — un écart sans raison se rouvre tous les mois.
       (sshd, conteneur) ; on garde root et on ajoute les PERMISSIONS des
       fichiers d'état — qui ont trouvé un vrai défaut dès le premier passage.
       `security_audit_startup.py` (282)
-      _(reste : les avis poussés de `security_advisories.py`.)_
+      **Branché le 01/08** dans la construction du serveur. Il journalise et
+      ne répare PAS : `clerk-tokens.json` est posé en 0666 par
+      `@clerk/electron/storage`, un `chmod` au démarrage serait défait à la
+      prochaine écriture de la dépendance — et entre les deux on aurait le
+      confort d'avoir corrigé. Resserrer ces modes touche l'authentification,
+      donc ça se décide (remonte à Enzo, M2).
+      _(reste : les avis poussés de `security_advisories.py` ; et la décision
+      sur le mode de `clerk-tokens.json`.)_
 - [x] **21 · Sûreté de chemin** — une écriture ne suit plus un lien hors de
       l'espace. `tools/path_security.py`, `agent/file_safety.py`
       → `20212d888` (le chemin de LECTURE était déjà meilleur que le leur)

@@ -101,6 +101,7 @@ import * as CloudCliTokenManager from "./cloud/CliTokenManager.ts";
 import * as CloudCliState from "./cloud/CliState.ts";
 import * as ServerSelfUpdate from "./cloud/selfUpdate.ts";
 import * as ToursEnVol from "./persistence/ToursEnVol.ts";
+import * as auditAuDemarrage from "./securite/auditAuDemarrage.ts";
 import * as ProcessDiagnostics from "./diagnostics/ProcessDiagnostics.ts";
 import * as ProcessResourceMonitor from "./diagnostics/ProcessResourceMonitor.ts";
 import * as TraceDiagnostics from "./diagnostics/TraceDiagnostics.ts";
@@ -633,6 +634,9 @@ export const makeServerLayer = Layer.unwrap(
       runtimeStateLayer,
       tailscaleServeLayer,
       cloudDesiredLinkReconcileLayer,
+      // Audit de sécurité au démarrage (n°20) : consultatif, silencieux quand
+      // tout va bien, et incapable d'empêcher un démarrage.
+      auditAuDemarrage.layer,
     );
 
     return serverApplicationLayer.pipe(
