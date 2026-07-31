@@ -61,10 +61,6 @@ const DOSSIERS = [
  */
 const MUETS_ASSUMES = new Map<string, string>([
   [
-    "passerelle/Plateforme.ts",
-    "Contrat d'adaptateur de plateforme (n°41). Il n'a pas d'appelant tant qu'aucun adaptateur n'existe — c'est sa nature : il décrit ce qu'un adaptateur doit fournir, et le premier qui arrivera l'implémentera.",
-  ],
-  [
     "passerelle/CibleMorte.ts",
     "Décision de livraison fiable (n°39), écrite avant le premier adaptateur — comme l'autorisation et le débit. Aucune livraison ne part encore vers une plateforme tierce.",
   ],
