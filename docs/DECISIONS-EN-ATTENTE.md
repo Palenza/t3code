@@ -1,6 +1,6 @@
 # Décisions en attente — chantier Hermès
 
-> Quatre questions. Elles débloquent **15 des 25 lignes restantes** du
+> Quatre questions. Elles débloquent **14 des 22 lignes restantes** du
 > catalogue (`CHANTIER-HERMES.md`).
 >
 > Chacune porte : ce qui est déjà fait, ce que ta réponse déclenche, et **une**
@@ -67,17 +67,23 @@ skill à la fois, avec le rapport du scanner sous les yeux.
 
 ## 3 · Les surfaces et l'habillage — lesquelles ont un sens pour T3 ?
 
-**Débloque 7 lignes.** Elles touchent ce que T3 EST, donc c'est ton terrain.
+**Débloque 4 lignes.** J'en ai tranché trois moi-même parce que l'argument
+tenait sans toi et que l'annulation ne coûte rien : **64** computer use
+(`preview` fait déjà les 14 gestes sur un navigateur ; le bureau est la plus
+large surface d'attaque qu'on puisse s'ajouter), **67** kanban (T3 a déjà les
+fils), **80** achievements (les badges fêtent l'usage de l'outil, quand le bon
+tour est celui qu'on n'a pas eu besoin de faire). Un mot de toi les rouvre.
 
-| ligne                        | ce que c'est                                  | ma reco                                                                                                                                                                                                      |
-| ---------------------------- | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **64** computer use          | contrôle du bureau entier                     | **écarter** — `preview` fait déjà les 14 gestes sur un navigateur ; le bureau est la plus large surface d'attaque qu'on puisse s'ajouter, et une page hostile piloterait la machine                          |
-| **65** mot d'éveil           | 3 moteurs ONNX embarqués, aucun audio ne sort | **à toi** — on a déjà la VAD et la transcription dans `voice-core` ; c'est le dernier maillon d'un usage mains libres                                                                                        |
-| **66** TTS en streaming      | l'agent parle                                 | **à toi** — même famille que le 65, les deux vont ensemble ou pas du tout                                                                                                                                    |
-| **67** kanban                | décomposition, essaim, watchers (10 010 l.)   | **écarter pour l'instant** — c'est un produit entier, et T3 a déjà les fils                                                                                                                                  |
-| **69** images et vidéos      | génération                                    | **à toi** — engage de l'argent (clés d'API)                                                                                                                                                                  |
-| **79** bannière, onboarding  | première ouverture                            | **à toi** — ton et marque                                                                                                                                                                                    |
-| **80** achievements + petdex | gamification                                  | **écarter** — les badges fêtent l'USAGE de l'outil ; T3 sert à finir un travail. Une progression qu'on récompense pousse à faire plus de tours, quand le bon tour est celui qu'on n'a pas eu besoin de faire |
+Les quatre qui restent Elles touchent ce que T3 EST, donc c'est ton terrain.
+
+| ligne | ce que c'est | ma reco |
+| ----- | ------------ | ------- |
+
+| **65** mot d'éveil | 3 moteurs ONNX embarqués, aucun audio ne sort | **à toi** — on a déjà la VAD et la transcription dans `voice-core` ; c'est le dernier maillon d'un usage mains libres |
+| **66** TTS en streaming | l'agent parle | **à toi** — même famille que le 65, les deux vont ensemble ou pas du tout |
+
+| **69** images et vidéos | génération | **à toi** — engage de l'argent (clés d'API) |
+| **79** bannière, onboarding | première ouverture | **à toi** — ton et marque |
 
 - [ ] j'écarte tout sauf : **\_\_**
 - [ ] je prends tout

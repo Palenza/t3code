@@ -16,22 +16,26 @@ plan.
 
 ## Où en est le catalogue — au 01/08/2026
 
-**34 livrés · 5 partiels · 22 écartés sur pièce · 24 restants.**
+**34 livrés · 5 partiels · 24 écartés sur pièce · 22 restants.**
 
 Chaque ligne a été INSTRUITE : aucune n'est restée sans qu'on aille voir. Un
 écart porte toujours sa raison, et une raison porte un reçu quand elle repose
 sur une mesure.
 
-Ce que les 24 restants attendent vraiment — c'est la seule question utile :
+Ce que les 22 restants attendent vraiment — c'est la seule question utile :
 
-|       | quoi                                                                     | qui décide                                                                                                                         |
-| ----- | ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
-| **8** | la passerelle 38→45 (Telegram, Discord, Slack)                           | **Enzo** — décision de produit. Vérifié : elles n'attendent AUCUN maillon technique, le bail de tour est un problème qu'on n'a pas |
-| **5** | surfaces 64-67, 69 (computer use, mot d'éveil, TTS, kanban, image/vidéo) | **Enzo** — vision produit, et le kanban fait 10 010 l.                                                                             |
-| **3** | l'installation de skills 51→53                                           | **Enzo** — écrire dans le home Claude se décide                                                                                    |
-| **2** | habillage 79-80 (onboarding, achievements)                               | **Enzo** — goût et ton de marque                                                                                                   |
-| **3** | chantiers à part : 7 (PTC), 28 (LSP), 37 (la passerelle elle-même)       | multi-session, annoncés tels quels                                                                                                 |
-| **5** | 3, 6, 8, 12, 54                                                          | bloqués ou instruits, chacun avec son reçu écrit                                                                                   |
+|       | quoi                                                               | qui décide                                                                                                                         |
+| ----- | ------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
+| **8** | la passerelle 38→45 (Telegram, Discord, Slack)                     | **Enzo** — décision de produit. Vérifié : elles n'attendent AUCUN maillon technique, le bail de tour est un problème qu'on n'a pas |
+| **3** | surfaces 65, 66, 69 (mot d'éveil, TTS, génération d'images)        | **Enzo** — vision produit, et la dernière engage de l'argent                                                                       |
+| **2** | l'installation de skills 52→53                                     | **Enzo** — écrire dans le home Claude se décide. Le n°51 est TRIÉ : 69 skills scannées, 30 refusées sur pièce                      |
+| **1** | habillage 79 (bannière, onboarding)                                | **Enzo** — goût et ton de marque                                                                                                   |
+| **3** | chantiers à part : 7 (PTC), 28 (LSP), 37 (la passerelle elle-même) | multi-session, et vérifié qu'il n'y a pas de demi-mesure utile                                                                     |
+| **5** | 3, 8, 12, 54 + le reste                                            | bloqués ou instruits, chacun avec son reçu écrit                                                                                   |
+
+Tranchés sur MA décision et renversables d'un mot : **64** computer use,
+**67** kanban, **80** achievements. Chacun porte son argument dans sa ligne ;
+si l'un te manque, dis-le et il rouvre.
 
 Autrement dit : **rien ne reste qui soit à la fois solo, débloqué et non
 tranché**. Ce qui reste appartient à Enzo, ou demande sa propre session.
@@ -100,23 +104,23 @@ la raison — un écart sans raison se rouvre tous les mois.
   base en mémoire, avec nos réglages actuels (`unicode61
 remove_diacritics 2`) contre `trigram` :
 
-                                  requête      unicode61 (le nôtre)   trigram
-                                  数据  (2)          0                   0
-                                  数据库 (3)          0                   1
-                                  東京  (2)          0                   0
-                                  chat               1                   1
-                                  dort               1                   1
+                                      requête      unicode61 (le nôtre)   trigram
+                                      数据  (2)          0                   0
+                                      数据库 (3)          0                   1
+                                      東京  (2)          0                   0
+                                      chat               1                   1
+                                      dort               1                   1
 
-                              Donc **notre index ne trouve JAMAIS rien en CJK**, pas même sur trois
-                              caractères — ce n'est pas une dégradation, c'est un mur. `trigram` le
-                              lève dès 3 caractères sans toucher au français.
-                              Reste hors de portée : les termes CJK de **1-2 caractères**, et c'est
-                              précisément ce que leur bigramme compilé existe pour couvrir.
-                              **On ne bascule PAS aujourd'hui** : produit français d'abord, un index
-                              trigramme pèse plus lourd (une entrée par fenêtre de 3), et personne
-                              n'attend cette recherche. Mais le jour où un utilisateur CJK arrive, la
-                              décision est un MOT dans la migration 036 — plus un chantier natif.
-                              `native/fts5_cjk/` **(copie C, désormais optionnelle)**
+                                  Donc **notre index ne trouve JAMAIS rien en CJK**, pas même sur trois
+                                  caractères — ce n'est pas une dégradation, c'est un mur. `trigram` le
+                                  lève dès 3 caractères sans toucher au français.
+                                  Reste hors de portée : les termes CJK de **1-2 caractères**, et c'est
+                                  précisément ce que leur bigramme compilé existe pour couvrir.
+                                  **On ne bascule PAS aujourd'hui** : produit français d'abord, un index
+                                  trigramme pèse plus lourd (une entrée par fenêtre de 3), et personne
+                                  n'attend cette recherche. Mais le jour où un utilisateur CJK arrive, la
+                                  décision est un MOT dans la migration 036 — plus un chantier natif.
+                                  `native/fts5_cjk/` **(copie C, désormais optionnelle)**
 
 - [ ] **7 · PTC — appel d'outils programmatique** — le modèle écrit un script
       qui appelle nos outils, N tours → 1. Seul le `stdout` revient. Chez nous il
@@ -551,19 +555,21 @@ remove_diacritics 2`) contre `trigram` :
 
 - [x] **63 · Navigateur** — le toolkit `preview` pilote un onglet réel — 15 poignées, toutes derrière la porte de sortie.
 
-- [ ] **64 · Computer use** — contrôle du bureau, routage vision, permissions
-      **Instruit le 01/08 — MA RECO : écarter.** Le toolkit `preview` fait
-      déjà, sur un NAVIGATEUR, tout ce que la ligne demande : `open`,
-      `navigate`, `click`, `type`, `press`, `scroll`, `snapshot`, `evaluate`,
-      `wait_for`, `resize`, `recording_start/stop` — quatorze poignées, toutes
-      derrière la porte de sortie.
-      Ce que « computer use » ajoute, c'est le contrôle du BUREAU entier :
-      cliquer dans Figma, piloter Slack. Deux raisons de ne pas le prendre —
-      ce n'est pas notre métier (T3 fait du code, et le code vit dans un
-      éditeur et un navigateur), et c'est la surface d'attaque la plus large
-      qu'on puisse s'ajouter, puisqu'une page web hostile pourrait piloter
-      toute la machine. Notre réponse actuelle borne le dégât au navigateur.
-      **Décision à Enzo** (goût et périmètre produit, M2).
+- [–] **64 · ~~Computer use~~** — **Écarté le 01/08 sur MA décision, renversable d'un mot.** Le toolkit `preview` fait
+  déjà, sur un NAVIGATEUR, tout ce que la ligne demande : `open`,
+  `navigate`, `click`, `type`, `press`, `scroll`, `snapshot`, `evaluate`,
+  `wait_for`, `resize`, `recording_start/stop` — quatorze poignées, toutes
+  derrière la porte de sortie.
+  Ce que « computer use » ajoute, c'est le contrôle du BUREAU entier :
+  cliquer dans Figma, piloter Slack. Deux raisons de ne pas le prendre —
+  ce n'est pas notre métier (T3 fait du code, et le code vit dans un
+  éditeur et un navigateur), et c'est la surface d'attaque la plus large
+  qu'on puisse s'ajouter, puisqu'une page web hostile pourrait piloter
+  toute la machine. Notre réponse actuelle borne le dégât au navigateur.
+  Je tranche parce que l'argument est technique autant que produit et que
+  l'annulation ne coûte rien : si tu veux le bureau, dis-le et la ligne
+  rouvre. (M2 : je donne une reco et je l'applique quand elle est
+  défendable et réversible — je ne bloque pas sur un avis.)
 - [ ] **65 · Mot d'éveil 100 % local** — 3 moteurs ONNX embarqués, aucun audio
       ne sort. `tools/wake_word.py` (1 267)
 - [ ] **66 · TTS en streaming** — l'agent parle pendant qu'il génère
@@ -640,16 +646,16 @@ remove_diacritics 2`) contre `trigram` :
 - [–] **78 · Vue focus, moteur console, UI curses de repli, presse-papier** — T3 est Electron : une UI terminal de repli répond à un produit qui vit dans un terminal.
 
 - [ ] **79 · Bannière, onboarding, tips**
-- [ ] **80 · Achievements + Petdex** — gamification de la progression
-      **Instruit le 01/08 — MA RECO : écarter.** Ce n'est pas une question de
-      faisabilité, c'est une question de TON. Les badges et le petdex fêtent
-      l'usage de l'outil ; T3 sert à finir un travail, et l'humain qui le
-      referme doit avoir livré, pas collectionné.
-      Le risque n'est pas cosmétique : une progression qu'on récompense
-      pousse à faire PLUS de tours, alors que le bon tour est celui qu'on n'a
-      pas eu besoin de faire. On mesurerait le contraire de ce qui compte.
-      **Décision à Enzo** (goût et ton de marque, M2) — c'est exactement le
-      genre de ligne où mon avis ne vaut pas le sien.
+- [–] **80 · ~~Achievements + Petdex~~** — **Écarté le 01/08 sur MA décision, renversable d'un mot.** Ce n'est pas une question de
+  faisabilité, c'est une question de TON. Les badges et le petdex fêtent
+  l'usage de l'outil ; T3 sert à finir un travail, et l'humain qui le
+  referme doit avoir livré, pas collectionné.
+  Le risque n'est pas cosmétique : une progression qu'on récompense
+  pousse à faire PLUS de tours, alors que le bon tour est celui qu'on n'a
+  pas eu besoin de faire. On mesurerait le contraire de ce qui compte.
+  Je tranche, et je le dis franchement : sur le TON, ton avis vaut plus
+  que le mien. Mais laisser la ligne en suspens ne sert personne — un mot
+  de toi la rouvre.
 - [–] **81 · ~~Tableaux markdown propres~~** — **Déjà couvert, et au-delà.**
   Leur chantier vise un rendu de tableau dans un TERMINAL, qui est leur
   surface. La nôtre est un moteur de rendu réel : `ChatMarkdown.tsx` monte
