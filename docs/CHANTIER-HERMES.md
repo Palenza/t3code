@@ -133,23 +133,23 @@ la raison — un écart sans raison se rouvre tous les mois.
   base en mémoire, avec nos réglages actuels (`unicode61
 remove_diacritics 2`) contre `trigram` :
 
-                                                          requête      unicode61 (le nôtre)   trigram
-                                                          数据  (2)          0                   0
-                                                          数据库 (3)          0                   1
-                                                          東京  (2)          0                   0
-                                                          chat               1                   1
-                                                          dort               1                   1
+                                                            requête      unicode61 (le nôtre)   trigram
+                                                            数据  (2)          0                   0
+                                                            数据库 (3)          0                   1
+                                                            東京  (2)          0                   0
+                                                            chat               1                   1
+                                                            dort               1                   1
 
-                                                      Donc **notre index ne trouve JAMAIS rien en CJK**, pas même sur trois
-                                                      caractères — ce n'est pas une dégradation, c'est un mur. `trigram` le
-                                                      lève dès 3 caractères sans toucher au français.
-                                                      Reste hors de portée : les termes CJK de **1-2 caractères**, et c'est
-                                                      précisément ce que leur bigramme compilé existe pour couvrir.
-                                                      **On ne bascule PAS aujourd'hui** : produit français d'abord, un index
-                                                      trigramme pèse plus lourd (une entrée par fenêtre de 3), et personne
-                                                      n'attend cette recherche. Mais le jour où un utilisateur CJK arrive, la
-                                                      décision est un MOT dans la migration 036 — plus un chantier natif.
-                                                      `native/fts5_cjk/` **(copie C, désormais optionnelle)**
+                                                        Donc **notre index ne trouve JAMAIS rien en CJK**, pas même sur trois
+                                                        caractères — ce n'est pas une dégradation, c'est un mur. `trigram` le
+                                                        lève dès 3 caractères sans toucher au français.
+                                                        Reste hors de portée : les termes CJK de **1-2 caractères**, et c'est
+                                                        précisément ce que leur bigramme compilé existe pour couvrir.
+                                                        **On ne bascule PAS aujourd'hui** : produit français d'abord, un index
+                                                        trigramme pèse plus lourd (une entrée par fenêtre de 3), et personne
+                                                        n'attend cette recherche. Mais le jour où un utilisateur CJK arrive, la
+                                                        décision est un MOT dans la migration 036 — plus un chantier natif.
+                                                        `native/fts5_cjk/` **(copie C, désormais optionnelle)**
 
 - [–] **7 · ~~PTC — appel d'outils programmatique~~** — **Écarté : le CLI le
   porte déjà.** Troisième ligne fermée le 01/08 en fouillant le binaire du CLI
@@ -430,28 +430,26 @@ remove_diacritics 2`) contre `trigram` :
 - [ ] **37 · Architecture de passerelle** — continuité de session ENTRE
       plateformes, bail de tour (un seul écrivain), slash universelles.
       `gateway/session.py` (3 307), `turn_lease.py`, `slash_commands.py` (5 483)
-      **INSTRUIT le 01/08, et ça change la nature du blocage.** Le triage
-      disait « rien ne marche sans le n°37 (bail de tour) ». Vérifié : **le
-      bail de tour est un problème qu'on n'a pas.**
-      Leur `turn_lease.py` (302 l.) répond à une forme précise : leurs gardes
-      d'occupation sont indexés par CLÉ DE ROUTAGE, la transcription durable
-      est possédée par SESSION_ID, et `switch_session()` rend le lien
-      plusieurs-vers-un. Deux clés sur une session = deux tours concurrents
-      qu'aucun garde par clé ne voit, des écritures entrelacées, et un coin
-      `user;user` permanent dans la transcription.
-      Chez nous, trois choses ferment cette route AVANT qu'elle s'ouvre :
-      · `Map<ThreadId, Context>` — un pour un, aucune couche de routage,
-      aucun alias ;
-      · le dispatch d'orchestration est **sérialisé par file**
-      (`OrchestrationEngine.dispatch`) ;
-      · le réacteur consomme par `DrainableWorker`, qui prend **un élément à
-      la fois** et ne rend la main qu'une fois l'élément terminé.
-      Un second `sendTurn` sur le même fil ne peut donc pas s'entrelacer : il
-      est traité après, et l'adaptateur en fait un `steer`.
-      **Conséquence pour la suite du bloc (38→45)** : ils ne sont PAS bloqués
-      par une primitive manquante. Ils attendent une décision de produit —
-      faut-il que T3 réponde depuis Telegram ? — et c'est Enzo qui la prend
-      (M2 : goût, marque, vision).
+      **INSTRUIT deux fois le 01/08, et il n'en reste presque rien.**
+      · **Le bail de tour** est un problème qu'on n'a pas : leurs gardes sont
+      indexés par clé de routage et la transcription par session*id, avec un
+      lien plusieurs-vers-un. Chez nous `Map<ThreadId, Context>` un pour un,
+      dispatch sérialisé par file, worker qui prend un élément à la fois.
+      · **La continuité de session entre plateformes existe DÉJÀ** — et c'est
+      la découverte qui compte. T3 a un client **mobile natif complet**
+      (`apps/mobile`, Expo : agent-awareness, archive, diffs, files,
+      observability, réveils en arrière-plan) qui parle au MÊME serveur par
+      un **relais**, avec authentification Clerk. Un fil ouvert au bureau se
+      reprend sur le téléphone.
+      **Ce qui reste vraiment de la famille 37→45** n'est donc pas l'accès à
+      distance — il est livré — mais le fait de répondre depuis l'application
+      de quelqu'un d'autre : Telegram, Discord, Slack. C'est une SURFACE de
+      plus, pas une capacité de plus, et elle se paie en autorisation par
+      canal (leur `authz_mixin.py` fait 838 l. pour décider qui a le droit de
+      parler à l'agent depuis un salon public).
+      *(À arbitrer par Enzo en connaissance de ça : 9 lignes pour dupliquer
+      une infrastructure qu'on a, au profit d'une interface qu'on ne possède
+      pas.)\_
 - [ ] **38 · Streaming vers les messageries** `stream_consumer.py` (2 250)
 - [ ] **39 · Livraison fiable** — ledger, cibles mortes, miroir, caches média
 - [ ] **40 · Autorisation par utilisateur et par canal** — appairage,
