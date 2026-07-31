@@ -1,4 +1,6 @@
 import * as Effect from "effect/Effect";
+
+import { transformerSortie } from "../../SortieDOutil.ts";
 import type {
   PreviewAutomationOperation,
   PreviewAutomationOpenInput,
@@ -39,13 +41,30 @@ const invoke = Effect.fn("PreviewToolkit.invoke")(function* <A>(
 > {
   const scope = yield* McpInvocationContext.requireMcpCapability("preview");
   const broker = yield* PreviewAutomationBroker.PreviewAutomationBroker;
-  return yield* broker.invoke<A>({
+  const brut = yield* broker.invoke<A>({
     scope,
     operation,
     input,
     ...(timeoutMs === undefined ? {} : { timeoutMs }),
     ...(tabId === undefined ? {} : { tabId }),
   });
+
+  // LA PORTE DE SORTIE, posée au GOULOT.
+  //
+  // Les quinze poignées de ce toolkit passent toutes ici. La porte a été
+  // écrite le 31/07 en la déclarant « obligatoire », et ce toolkit-là ne la
+  // traversait pas — un `snapshot` rend le contenu d'une page, donc un jeton
+  // dans une URL ou un champ caché partait non caviardé dans le contexte.
+  //
+  // Les notes sont JOURNALISÉES et non collées au résultat : ces quinze
+  // poignées rendent des formes différentes (`null`, `void`, des objets à
+  // schéma strict), et y greffer un champ casserait la moitié d'entre elles.
+  // Le caviardage, lui, garde la forme intacte.
+  const transformee = transformerSortie(brut);
+  if (transformee.notes.length > 0) {
+    yield* Effect.logWarning(`preview:${operation} — ${transformee.notes.join(" ")}`);
+  }
+  return transformee.valeur;
 });
 
 const invokeTargeted = <A>(
