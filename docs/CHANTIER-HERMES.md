@@ -16,7 +16,7 @@ plan.
 
 ## Où en est le catalogue — au 01/08/2026
 
-**34 livrés · 14 partiels · 32 écartés sur pièce · 5 restants.**
+**34 livrés · 15 partiels · 32 écartés sur pièce · 4 restants.**
 
 Chaque ligne a été INSTRUITE : aucune n'est restée sans qu'on aille voir. Un
 écart porte toujours sa raison, et une raison porte un reçu quand elle repose
@@ -133,23 +133,23 @@ la raison — un écart sans raison se rouvre tous les mois.
   base en mémoire, avec nos réglages actuels (`unicode61
 remove_diacritics 2`) contre `trigram` :
 
-                                                                              requête      unicode61 (le nôtre)   trigram
-                                                                              数据  (2)          0                   0
-                                                                              数据库 (3)          0                   1
-                                                                              東京  (2)          0                   0
-                                                                              chat               1                   1
-                                                                              dort               1                   1
+                                                                                requête      unicode61 (le nôtre)   trigram
+                                                                                数据  (2)          0                   0
+                                                                                数据库 (3)          0                   1
+                                                                                東京  (2)          0                   0
+                                                                                chat               1                   1
+                                                                                dort               1                   1
 
-                                                                          Donc **notre index ne trouve JAMAIS rien en CJK**, pas même sur trois
-                                                                          caractères — ce n'est pas une dégradation, c'est un mur. `trigram` le
-                                                                          lève dès 3 caractères sans toucher au français.
-                                                                          Reste hors de portée : les termes CJK de **1-2 caractères**, et c'est
-                                                                          précisément ce que leur bigramme compilé existe pour couvrir.
-                                                                          **On ne bascule PAS aujourd'hui** : produit français d'abord, un index
-                                                                          trigramme pèse plus lourd (une entrée par fenêtre de 3), et personne
-                                                                          n'attend cette recherche. Mais le jour où un utilisateur CJK arrive, la
-                                                                          décision est un MOT dans la migration 036 — plus un chantier natif.
-                                                                          `native/fts5_cjk/` **(copie C, désormais optionnelle)**
+                                                                            Donc **notre index ne trouve JAMAIS rien en CJK**, pas même sur trois
+                                                                            caractères — ce n'est pas une dégradation, c'est un mur. `trigram` le
+                                                                            lève dès 3 caractères sans toucher au français.
+                                                                            Reste hors de portée : les termes CJK de **1-2 caractères**, et c'est
+                                                                            précisément ce que leur bigramme compilé existe pour couvrir.
+                                                                            **On ne bascule PAS aujourd'hui** : produit français d'abord, un index
+                                                                            trigramme pèse plus lourd (une entrée par fenêtre de 3), et personne
+                                                                            n'attend cette recherche. Mais le jour où un utilisateur CJK arrive, la
+                                                                            décision est un MOT dans la migration 036 — plus un chantier natif.
+                                                                            `native/fts5_cjk/` **(copie C, désormais optionnelle)**
 
 - [–] **7 · ~~PTC — appel d'outils programmatique~~** — **Écarté : le CLI le
   porte déjà.** Troisième ligne fermée le 01/08 en fouillant le binaire du CLI
@@ -777,8 +777,32 @@ seulement pour le bloc.`stream*consumer.py` (2 250)
   l'annulation ne coûte rien : si tu veux le bureau, dis-le et la ligne
   rouvre. (M2 : je donne une reco et je l'applique quand elle est
   défendable et réversible — je ne bloque pas sur un avis.)
-- [ ] **65 · Mot d'éveil 100 % local** — 3 moteurs ONNX embarqués, aucun audio
-      ne sort. `tools/wake_word.py` (1 267)
+- [~] **65 · Mot d'éveil** — **la décision livrée le 01/08.** On ne reprend
+  PAS leurs trois moteurs ONNX : ils répondent à une contrainte de basse
+  consommation — un détecteur minuscule toujours allumé, pour n'allumer la
+  reconnaissance complète qu'après. T3 tourne sur une machine de bureau
+  branchée, et `voice-core` porte déjà la VAD et la transcription en flux.
+  On écoute donc ce qui est déjà transcrit, et il ne reste que la décision.
+  **Leur invariant est tenu, et par construction** : aucun audio ne sort
+  de la machine, puisque ce module ne voit que du TEXTE produit localement.
+  Trois bornes, et chacune répond à une façon d'échouer :
+  · la **distance** tolère les erreurs de transcription, avec les
+  TRANSPOSITIONS comptées pour une seule correction — c'est l'erreur la
+  plus fréquente, et Levenshtein simple mettrait « raptro » aussi loin
+  de « raptor » qu'un mot sans rapport ;
+  · la **première lettre** doit correspondre. « captor » et « rapton » sont
+  tous deux à UNE correction de « raptor » et aucune distance ne les
+  sépare ; on reconnaît un mot d'éveil à son attaque, c'est ce qu'on
+  entend en premier et ce que la transcription rate en dernier ;
+  · la **position** — le mot d'éveil ouvre la phrase. « Il faudrait un
+  raptor pour ce travail » n'est pas un appel, et le laisser passer
+  réveillerait l'agent pendant une conversation qui ne le concerne pas.
+  C'est le genre d'erreur après quoi on coupe le micro.
+  Plus un repos de 2 s : la transcription en flux rend le même segment
+  plusieurs fois, et sans repos la fin de la phrase qui a réveillé l'agent
+  le réveille encore. `tools/wake_word.py` (1 267)
+  _(reste : brancher la boucle audio — écouter en continu et passer chaque
+  segment transcrit à ce module.)_
 - [~] **66 · TTS en streaming** — **le découpage livré le 01/08**, et il est
   toute la difficulté. On ne reprend PAS leur pile : T3 est Electron, donc
   Chromium, donc `speechSynthesis` est déjà là — zéro dépendance, zéro
