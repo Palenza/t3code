@@ -5,12 +5,18 @@ import { Button } from "../ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 
 /**
- * Visible entry point to the composer's existing image-attachment pipeline.
+ * Point d'entrée visible du dépôt de fichiers du composeur.
  *
- * Paste and drag-and-drop already feed `addComposerImages`; this button opens
- * a file picker into the same path, so every limit (count, size, image-only)
- * is enforced in exactly one place. The input accepts images only because the
- * providers' turn payload does — offering more here would be a lie.
+ * Collage et glisser-déposer alimentent déjà `addComposerFiles` ; ce bouton
+ * ouvre le sélecteur sur le MÊME chemin, pour que le tri (image → inline,
+ * reste → mention) et toutes les limites tiennent à un seul endroit.
+ *
+ * AUCUN filtre `accept`. L'ancienne version posait `accept="image/*"` en
+ * expliquant que « la charge utile des providers ne prend que des images ».
+ * C'est vrai de la voie inline seulement : un fichier peut aussi partir en
+ * MENTION — un lien `[nom](chemin)` dans le prompt, que l'agent ouvre
+ * lui-même. Un PDF, un CSV, un .mov, un dossier passent donc tous ; c'est
+ * `composerFileIntake` qui décide de la voie.
  */
 export function ComposerAttachButton({
   disabled,
@@ -26,7 +32,6 @@ export function ComposerAttachButton({
       <input
         ref={inputRef}
         type="file"
-        accept="image/*"
         multiple
         className="hidden"
         onChange={(event) => {
@@ -46,7 +51,7 @@ export function ComposerAttachButton({
               variant="ghost"
               type="button"
               className="shrink-0 rounded-full text-muted-foreground hover:text-foreground"
-              aria-label="Attach images"
+              aria-label="Joindre des fichiers"
               disabled={disabled}
               onClick={() => inputRef.current?.click()}
             >
@@ -54,7 +59,12 @@ export function ComposerAttachButton({
             </Button>
           }
         />
-        <TooltipPopup side="top">Attach images</TooltipPopup>
+        {/* Le sélecteur natif d'un `<input type=file>` ne sait pas prendre un
+            DOSSIER — ça, c'est le glisser-déposer qui le fait. On le dit
+            plutôt que de laisser l'utilisateur chercher. */}
+        <TooltipPopup side="top">
+          Joindre des fichiers — glissez un dossier pour l'ajouter
+        </TooltipPopup>
       </Tooltip>
     </>
   );

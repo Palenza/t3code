@@ -13,6 +13,7 @@ import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { APP_BASE_NAME, APP_DISPLAY_NAME, APP_STAGE_LABEL } from "../branding";
 import { resolveServerBackedAppDisplayName } from "../branding.logic";
 import { AppSidebarLayout } from "../components/AppSidebarLayout";
+import { VeilleFinDeTache } from "../components/VeilleFinDeTache";
 import { CommandPalette } from "../components/CommandPalette";
 import { ConnectOnboardingDialog } from "../components/cloud/ConnectOnboardingDialog";
 import { RelayClientInstallDialog } from "../components/cloud/RelayClientInstallDialog";
@@ -118,6 +119,11 @@ function RootRouteView() {
   const appShell = (
     <CommandPalette>
       <AppSidebarLayout>
+        {/* La veille vit AU-DESSUS des routes : une tâche finit dans l'espace
+            Design pendant qu'on travaille ailleurs, et il faut le voir depuis
+            n'importe où. Montée dans une route, elle mourrait à chaque
+            navigation — et raterait précisément ce qu'elle guette. */}
+        <VeilleFinDeTache />
         <Outlet />
       </AppSidebarLayout>
     </CommandPalette>

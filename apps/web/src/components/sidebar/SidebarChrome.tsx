@@ -6,7 +6,6 @@ import { useEnvironmentIdentificationMode } from "../../hooks/useSettings";
 import { cn } from "../../lib/utils";
 import { SidebarCarnet } from "./SidebarCarnet";
 import { SidebarModeTravail } from "./SidebarModeTravail";
-import { SidebarMemoire } from "./SidebarMemoire";
 import { GeneralSettingsPanel, ProviderSettingsPanel } from "../settings/SettingsPanels";
 import { TableauLocalSettingsPanel } from "../settings/TableauLocalSettings";
 import { Popover, PopoverPopup, PopoverTrigger } from "../ui/popover";
@@ -266,9 +265,10 @@ export const SidebarChromeFooter = memo(function SidebarChromeFooter() {
       {/* Le REGLAGE vit dans le composeur (à côté de Build) ; ici ne reste que
           le CRI quand un mode restrictif désarme les agents. */}
       <SidebarModeTravail />
-      {/* La mémoire AVANT le mode : ce que l'app a retenu de toi pèse sur
-          chaque session, et c'était jusqu'ici invisible et irrévocable. */}
-      <SidebarMemoire />
+      {/* La mémoire a DÉMÉNAGÉ dans la barre du composeur, à côté du modèle et
+          du mode — même registre : sous quelles règles ce message part-il ?
+          La garder ici EN PLUS faisait deux entrées pour une seule chose, et
+          rendait la colonne plus longue sans rien apprendre de neuf. */}
       <SidebarMenu>
         {SIDEBAR_QUICK_LINKS.map((link) => (
           <SidebarMenuItem key={link.to}>

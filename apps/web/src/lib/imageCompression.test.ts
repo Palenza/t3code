@@ -165,8 +165,15 @@ describe("compressImageForStash", () => {
   });
 
   it("compressImageToByteLimit passes small files through byte-for-byte", async () => {
-    const bitmapSpy = vi.fn();
-    vi.stubGlobal("createImageBitmap", bitmapSpy);
+    // L'image est MESURÉE désormais, y compris quand elle est légère : le
+    // poids ne dit rien des pixels, et l'API refuse au-delà de 2 000 px sur un
+    // côté dès que le fil contient plusieurs images. L'assertion « ne décode
+    // pas » décrivait un détail d'implémentation, pas le contrat — ce que la
+    // pass-through doit garantir, c'est que le fichier ressort IDENTIQUE.
+    vi.stubGlobal(
+      "createImageBitmap",
+      vi.fn(async () => ({ width: 800, height: 600, close: () => {} })),
+    );
 
     const original = makeFile(1024);
     const result = await compressImageToByteLimit(original, 10 * 1024 * 1024);
@@ -175,7 +182,23 @@ describe("compressImageForStash", () => {
     expect(result.ok && result.recompressed).toBe(false);
     // Pass-through must be the same File object, not a copy.
     expect(result.ok && result.file).toBe(original);
-    expect(bitmapSpy).not.toHaveBeenCalled();
+  });
+
+  it("compressImageToByteLimit redimensionne une image LÉGÈRE mais trop LARGE", async () => {
+    // Le bug du 31/07, en un test : une capture Retina de 3 600 px pèse ~1 Mo,
+    // donc très en dessous du plafond d'octets — elle sortait INTACTE à
+    // 3 600 px et se faisait refuser par l'API plus tard dans le fil
+    // (« max allowed size for many-image requests: 2000 pixels »).
+    vi.stubGlobal(
+      "createImageBitmap",
+      vi.fn(async () => ({ width: 3600, height: 2338, close: () => {} })),
+    );
+
+    const original = makeFile(1024);
+    const result = await compressImageToByteLimit(original, 10 * 1024 * 1024);
+
+    // Le ré-encodage est tenté : le fichier ne ressort PAS tel quel.
+    expect(result.ok && result.file).not.toBe(original);
   });
 
   it("compressImageToByteLimit re-encodes an oversized file under the byte cap", async () => {

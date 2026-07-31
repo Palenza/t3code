@@ -147,6 +147,10 @@ import { DiffWorkerPoolProvider } from "./DiffWorkerPoolProvider";
 import { BranchToolbar } from "./BranchToolbar";
 import { resolveShortcutCommand, shortcutLabelForCommand } from "../keybindings";
 import PlanSidebar from "./PlanSidebar";
+import { PlanEnCours } from "./chat/PlanEnCours";
+import { useFermetureEnCours } from "../fermetureEnCours";
+import { sidebarThemeAccent, useSidebarThemeStore } from "../sidebarThemeStore";
+import { activeSpaceTheme, useSidebarSpacesStore } from "../sidebarSpacesStore";
 import ThreadTerminalDrawer from "./ThreadTerminalDrawer";
 import {
   AlarmClockIcon,
@@ -1226,6 +1230,9 @@ function ChatViewContent(props: ChatViewProps) {
   );
   const timestampFormat = settings.timestampFormat;
   const autoOpenPlanSidebar = settings.autoOpenPlanSidebar;
+  // Le thème de l'espace actif décide de la couleur du plan et des notifs.
+  const themeEspaceActif = useSidebarSpacesStore(activeSpaceTheme);
+  const themeParDefautDuPlan = useSidebarThemeStore((state) => state.theme);
   const navigate = useNavigate();
   const { resolvedTheme } = useTheme();
   // Granular store selectors — avoid subscribing to prompt changes.
@@ -1887,6 +1894,7 @@ function ChatViewContent(props: ChatViewProps) {
   const serverUpdateState = useAtomValue(
     serverEnvironment.updateStateAtom(serverUpdateEnvironmentId),
   );
+  const fermetureEnCours = useFermetureEnCours();
   const systemComposerBannerItems = useMemo<ComposerBannerStackItem[]>(() => {
     const items: ComposerBannerStackItem[] = [];
     const updateRunning = serverUpdateState.status === "running";
@@ -1906,7 +1914,14 @@ function ChatViewContent(props: ChatViewProps) {
     // While an update runs, transient connect blips are expected (the server
     // restarts) and the update banner already shows progress. Hard failure
     // phases still surface so the Reconnect action stays reachable.
-    const suppressUnavailableBanner = updateRunning && environmentReconnecting;
+    // ON NE CRIE PAS À LA PANNE QUAND ON S'EN VA.
+    //
+    // Au moment de quitter, le serveur local s'éteint pendant que la fenêtre
+    // est encore à l'écran : le sondage échoue, et « Failed to connect »
+    // s'affichait sur le chemin de la sortie. Une extinction VOULUE n'est pas
+    // une panne. Le processus principal l'annonce avant d'éteindre.
+    const suppressUnavailableBanner =
+      fermetureEnCours || (updateRunning && environmentReconnecting);
     if (activeEnvironmentUnavailableState && unavailableConnection && !suppressUnavailableBanner) {
       if (reconnectingThroughVersionSkew) {
         items.push({
@@ -2019,6 +2034,7 @@ function ChatViewContent(props: ChatViewProps) {
     return items;
   }, [
     activeEnvironmentUnavailableState,
+    fermetureEnCours,
     handleReconnectActiveEnvironment,
     navigate,
     setDismissedVersionMismatchKey,
@@ -2136,6 +2152,10 @@ function ChatViewContent(props: ChatViewProps) {
     [activeLatestTurn?.turnId, threadActivities],
   );
   const planSidebarLabel = sidebarProposedPlan || interactionMode === "plan" ? "Plan" : "Tasks";
+  // La couleur du plan suit la PALETTE DE L'ESPACE — « si quelqu'un change la
+  // palette de couleur, ça change aussi la palette de ses notifs ». Sans
+  // thème, on retombe sur le bleu de « Working ».
+  const accentDuPlan = sidebarThemeAccent(themeEspaceActif ?? themeParDefautDuPlan);
   const showPlanFollowUpPrompt =
     pendingUserInputs.length === 0 &&
     interactionMode === "plan" &&
@@ -3894,8 +3914,19 @@ function ChatViewContent(props: ChatViewProps) {
     // activeThreadRef resets transitively with the active thread.
   }, [activeThread?.id]);
 
-  // Auto-open the plan sidebar when plan/todo steps arrive for the current turn.
-  // Don't auto-open for plans carried over from a previous turn (the user can open manually).
+  // LE PLAN VIT MAINTENANT DANS LE FIL — et le panneau latéral reste au
+  // réglage de celui qui s'en sert.
+  //
+  // Le doublon constaté le 31/07 (« Plan 3/6 » dans le fil ET « Plan / TASKS »
+  // à droite) vient de ce réglage laissé sur ON ; il est à OFF par défaut,
+  // donc personne ne le subit sans l'avoir demandé.
+  //
+  // Ma première correction posait `const OUVERTURE_AUTO = false` juste ici,
+  // au-dessus du test du réglage. Ça éteignait « Auto-open task panel » dans
+  // les Réglages en douce : un interrupteur qu'on bascule et qui ne fait plus
+  // rien — exactement le bouton mort que je venais de corriger ailleurs le
+  // même jour. Un réglage qu'on veut mort se retire de l'écran ; il ne se
+  // court-circuite pas derrière le dos de celui qui l'a coché.
   useEffect(() => {
     if (!autoOpenPlanSidebar) return;
     if (!activePlan) return;
@@ -6016,6 +6047,7 @@ function ChatViewContent(props: ChatViewProps) {
       <ThreadTasksPanel activities={activeThread?.activities ?? []} />
     ) : activeRightPanelSurface?.kind === "plan" ? (
       <PlanSidebar
+        accent={accentDuPlan}
         activePlan={activePlan}
         activeProposedPlan={sidebarProposedPlan}
         label={planSidebarLabel}
@@ -6213,6 +6245,13 @@ function ChatViewContent(props: ChatViewProps) {
                   ) : (
                     <ComposerBannerStack className="relative z-0" items={composerBannerItems} />
                   )}
+                  {/* LE PLAN, juste au-dessus du composeur. Pas un mode, pas
+                      un panneau latéral qu'il faut penser à ouvrir : il est
+                      là quand l'agent avance par étapes, il disparaît quand
+                      il n'y en a plus. Là où tu regardes déjà en attendant. */}
+                  <div className="relative z-0 pb-1.5">
+                    <PlanEnCours plan={activePlan} accent={accentDuPlan} />
+                  </div>
                   {threadSyncPhase && !activeEnvironmentUnavailable ? (
                     <ThreadSyncStatusPill phase={threadSyncPhase} />
                   ) : null}

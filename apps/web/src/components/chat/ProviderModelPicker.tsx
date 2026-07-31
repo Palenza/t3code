@@ -166,20 +166,31 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
               displayName={activeEntry.displayName}
               accentColor={activeEntry.accentColor}
               showBadge={showInstanceBadge}
+              // Une PASTILLE, pas des initiales. Sur une icône de 16 px, deux
+              // lettres à 7 px font ~5 px de haut : aucune lettre ne se dessine
+              // en 5 px, ça devient une tache — et le badge, à 12 px, couvrait
+              // 75 % du logo en débordant dessus. La couleur porte l'identité
+              // du compte ; le NOM est dans l'info-bulle, là où on va le lire.
+              badgeContent="none"
               className="size-4"
               iconClassName={cn("size-4", props.activeProviderIconClassName)}
               indicatorBackground="var(--input)"
-              badgeClassName={cn(
-                "right-[-0.125rem] bottom-[-0.125rem] h-3 min-w-3",
-                "px-0.5 text-[7px]",
-              )}
+              badgeClassName="right-[-0.1875rem] bottom-[-0.1875rem] size-2 min-w-0 border-2 p-0"
             />
           ) : null}
           <Tooltip>
             <TooltipTrigger render={<span className="min-w-0 flex-1 overflow-hidden truncate" />}>
               {triggerTitle}
             </TooltipTrigger>
-            <TooltipPopup side="top">{triggerLabel}</TooltipPopup>
+            {/* La pastille dit QU'IL Y EN A PLUSIEURS ; l'info-bulle dit
+                LEQUEL. C'est le seul endroit où un nom de compte tient en
+                entier — sur l'icône, il ne tenait qu'en deux lettres
+                illisibles. */}
+            <TooltipPopup side="top">
+              {showInstanceBadge && activeEntry
+                ? `${triggerLabel} — ${activeEntry.displayName}`
+                : triggerLabel}
+            </TooltipPopup>
           </Tooltip>
         </span>
         <span aria-hidden="true" className="flex items-center">

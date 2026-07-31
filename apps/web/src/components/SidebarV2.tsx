@@ -1012,7 +1012,16 @@ const SidebarV2Row = memo(function SidebarV2Row(props: {
                       )}
                     >
                       {topStatus.icon === "working" ? (
-                        <CircleDashedIcon aria-hidden className="size-4 shrink-0" />
+                        // Le rond TOURNE tant que ça travaille. Il était figé :
+                        // un pointillé immobile à côté d'un chrono qui monte se
+                        // lit comme une panne, pas comme du travail en cours.
+                        // 2,4 s par tour — assez lent pour rester calme, assez
+                        // net pour qu'on voie que ça vit ; `animate-spin` de
+                        // Tailwind (1 s) donnait un rond frénétique.
+                        <CircleDashedIcon
+                          aria-hidden
+                          className="size-4 shrink-0 animate-spin [animation-duration:2.4s] motion-reduce:animate-none"
+                        />
                       ) : topStatus.icon === "done" ? (
                         <CircleCheckIcon aria-hidden className="size-4 shrink-0" />
                       ) : topStatus.icon === "woke" ? (
@@ -1540,9 +1549,8 @@ export default function SidebarV2() {
         // Espace actif (façon Arc) : la vue « tout » (null) montre tout ;
         // un espace ne montre que les fils qu'on y a rangés.
         (activeSpaceId === null ||
-          spaceAssignments[
-            scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id))
-          ] === activeSpaceId),
+          spaceAssignments[scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id))] ===
+            activeSpaceId),
     );
     const active: EnvironmentThreadShell[] = [];
     const snoozed: EnvironmentThreadShell[] = [];
