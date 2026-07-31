@@ -98,14 +98,19 @@ la raison — un écart sans raison se rouvre tous les mois.
 - [ ] **3 · Graphe d'apprentissage** — mutations tracées, rendu visuel, frise
       `/journey`. `agent/learning_graph.py`, `learning_graph_render.py`,
       `learning_mutations.py`, `hermes_cli/journey.py`
-      **Bloqué en CHAÎNE, et la racine est mesurée (01/08).** Ce chantier
-      enregistre les MUTATIONS de skills — qui a changé quoi, quand, pourquoi.
-      Or personne ne mute encore : le curateur (n°1) décide et n'applique
-      rien, parce qu'il attend une fenêtre d'observation (la projection ne
-      couvre que 7,3 jours). Le graphe d'un ensemble vide est une page
-      blanche.
-      La racine n'est donc pas du code manquant, c'est du TEMPS : il faut que
-      la projection couvre la vie des skills. Rien à construire d'ici là.
+      **Verdict CORRIGÉ le 01/08.** J'avais écrit « bloqué en chaîne : personne
+      ne mute encore, le curateur décide et n'applique rien ». Faux sur le
+      premier point : les mutations sont DÉJÀ tracées, gratuitement, par git —
+      **45 commits touchent `.claude/skills/` dans Palenza**, avec leur date et
+      leur message. Qui a changé quoi et quand est un `git log`.
+      Le vrai blocage est ailleurs, et il est plus profond : ce chantier
+      s'appelle graphe d'APPRENTISSAGE, pas graphe de modifications. Sa valeur
+      est la CORRÉLATION — est-ce que ce changement a amélioré quelque chose ?
+      Répondre demande d'observer l'usage de la skill avant et après, donc une
+      fenêtre qui couvre sa vie. La projection en couvre 7,3 jours (mesuré,
+      élaguée). Sans ça, on rendrait une frise de commits — que `git log` donne
+      déjà — en l'appelant apprentissage.
+      Le rendu visuel et la frise `/journey` sont, eux, de l'interface : Enzo.
 - [x] **4 · Les NORMES d'une skill** — leur `_AUTHORING_STANDARDS` porté non
       pas en prompt mais en CONTRÔLE : un prompt est un espoir, un contrôle est
       un fait, et il s'applique aussi aux skills déjà écrites. Seuil de
@@ -128,23 +133,23 @@ la raison — un écart sans raison se rouvre tous les mois.
   base en mémoire, avec nos réglages actuels (`unicode61
 remove_diacritics 2`) contre `trigram` :
 
-                                                    requête      unicode61 (le nôtre)   trigram
-                                                    数据  (2)          0                   0
-                                                    数据库 (3)          0                   1
-                                                    東京  (2)          0                   0
-                                                    chat               1                   1
-                                                    dort               1                   1
+                                                      requête      unicode61 (le nôtre)   trigram
+                                                      数据  (2)          0                   0
+                                                      数据库 (3)          0                   1
+                                                      東京  (2)          0                   0
+                                                      chat               1                   1
+                                                      dort               1                   1
 
-                                                Donc **notre index ne trouve JAMAIS rien en CJK**, pas même sur trois
-                                                caractères — ce n'est pas une dégradation, c'est un mur. `trigram` le
-                                                lève dès 3 caractères sans toucher au français.
-                                                Reste hors de portée : les termes CJK de **1-2 caractères**, et c'est
-                                                précisément ce que leur bigramme compilé existe pour couvrir.
-                                                **On ne bascule PAS aujourd'hui** : produit français d'abord, un index
-                                                trigramme pèse plus lourd (une entrée par fenêtre de 3), et personne
-                                                n'attend cette recherche. Mais le jour où un utilisateur CJK arrive, la
-                                                décision est un MOT dans la migration 036 — plus un chantier natif.
-                                                `native/fts5_cjk/` **(copie C, désormais optionnelle)**
+                                                  Donc **notre index ne trouve JAMAIS rien en CJK**, pas même sur trois
+                                                  caractères — ce n'est pas une dégradation, c'est un mur. `trigram` le
+                                                  lève dès 3 caractères sans toucher au français.
+                                                  Reste hors de portée : les termes CJK de **1-2 caractères**, et c'est
+                                                  précisément ce que leur bigramme compilé existe pour couvrir.
+                                                  **On ne bascule PAS aujourd'hui** : produit français d'abord, un index
+                                                  trigramme pèse plus lourd (une entrée par fenêtre de 3), et personne
+                                                  n'attend cette recherche. Mais le jour où un utilisateur CJK arrive, la
+                                                  décision est un MOT dans la migration 036 — plus un chantier natif.
+                                                  `native/fts5_cjk/` **(copie C, désormais optionnelle)**
 
 - [–] **7 · ~~PTC — appel d'outils programmatique~~** — **Écarté : le CLI le
   porte déjà.** Troisième ligne fermée le 01/08 en fouillant le binaire du CLI
