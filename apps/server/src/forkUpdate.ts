@@ -94,7 +94,17 @@ export const forkUpdateEtatRouteLayer = HttpRouter.add(
     }
     // A fetch that fails (offline, repo moved) degrades to comparing against
     // the last-known remote ref — still honest, just possibly stale.
-    yield* runGit(["fetch", "origin", "travail"]);
+    //
+    // La refspec est écrite EN TOUTES LETTRES, jamais `fetch origin travail` :
+    // sans deux-points, git ne met à jour `refs/remotes/origin/travail` que si
+    // la refspec CONFIGURÉE du remote la couvre — et sur ce clone elle ne
+    // couvre que `main` (`remote.origin.fetch=+refs/heads/main:…`, clone
+    // single-branch). Mesuré le 31/07 : la ref de suivi était gelée au 29/07
+    // pendant que la branche distante avait 91 commits de plus, donc
+    // `HEAD..origin/travail` = 0. Un compteur de retard qui répond toujours
+    // « rien à prendre » est indiscernable d'un checkout à jour : le mode de
+    // panne qu'un indicateur de mise à jour ne peut pas se permettre.
+    yield* runGit(["fetch", "origin", "+refs/heads/travail:refs/remotes/origin/travail"]);
     const countOutput = yield* runGit(["rev-list", "--count", "HEAD..origin/travail"]);
     const behind = countOutput === null ? null : Number.parseInt(countOutput.trim(), 10);
     const subjectOutput =
@@ -108,7 +118,10 @@ export const forkUpdateEtatRouteLayer = HttpRouter.add(
     // release, et sur macOS electron-updater exige une app signée Apple
     // (compte refusé, décision fondateur). On donne donc l'information
     // autrement : combien de commits de Théo nous manquent, et le dernier.
-    yield* runGit(["fetch", "upstream", "main", "--tags"]);
+    // Même refspec explicite que ci-dessus : ici la config du remote la couvre
+    // (`+refs/heads/*:refs/remotes/upstream/*`), mais une config n'est pas un
+    // contrat — le compteur ne doit dépendre que de ce qui est écrit ici.
+    yield* runGit(["fetch", "upstream", "+refs/heads/main:refs/remotes/upstream/main", "--tags"]);
     const amontCountOutput = yield* runGit(["rev-list", "--count", "HEAD..upstream/main"]);
     const amontBehind =
       amontCountOutput === null ? null : Number.parseInt(amontCountOutput.trim(), 10);
