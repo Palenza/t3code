@@ -24,6 +24,17 @@
 export type NaturePreuve = "tests" | "types" | "lint" | "build" | "aucune";
 
 /**
+ * Les natures qui VÉRIFIENT quelque chose — « aucune » exclue.
+ *
+ * Le type le dit pour que l'appelant n'ait pas à s'en souvenir : un état de
+ * preuve ne porte jamais sur « aucune », et un rendu qui prétendrait le
+ * contraire ne compilerait pas.
+ */
+export type NatureVerifiee = Exclude<NaturePreuve, "aucune">;
+
+export const NATURES_VERIFIEES: ReadonlyArray<NatureVerifiee> = ["tests", "types", "lint", "build"];
+
+/**
  * L'ÉTENDUE de ce qui a été prouvé — la distinction qui fait tout.
  *
  * `vitest src/rappel/x.test.ts` prouve CE FICHIER. Il ne prouve pas que le
@@ -223,14 +234,13 @@ export function verdictDeSortie(sortie: string, estErreur: boolean): VerdictPreu
  * c'est la façon la plus courante de se mentir.
  */
 export interface EtatDePreuve {
-  readonly nature: NaturePreuve;
+  readonly nature: NatureVerifiee;
   readonly prouve: boolean;
   readonly detail: string;
 }
 
 export function etatDesPreuves(preuves: ReadonlyArray<Preuve>): EtatDePreuve[] {
-  const natures: ReadonlyArray<NaturePreuve> = ["tests", "types", "lint", "build"];
-  return natures.map((nature) => {
+  return NATURES_VERIFIEES.map((nature) => {
     const siennes = preuves.filter((preuve) => preuve.nature === nature);
     if (siennes.length === 0) {
       return { nature, prouve: false, detail: "jamais lancé" };

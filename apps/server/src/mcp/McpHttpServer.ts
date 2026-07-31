@@ -22,6 +22,9 @@ import {
   PreviewSnapshotToolkit,
   PreviewStandardToolkit,
 } from "./toolkits/preview/tools.ts";
+import { PreuveToolkitHandlersLive } from "./toolkits/preuve/handlers.ts";
+import { PreuveToolkit } from "./toolkits/preuve/tools.ts";
+import { PreuveStoreLive } from "../preuve/PreuveStore.ts";
 import { RappelToolkitHandlersLive } from "./toolkits/rappel/handlers.ts";
 import { RappelToolkit } from "./toolkits/rappel/tools.ts";
 import { RappelStoreLive } from "../rappel/RappelStore.ts";
@@ -238,6 +241,15 @@ const RappelToolkitRegistrationLive = McpServer.toolkit(RappelToolkit).pipe(
   Layer.provide(RappelStoreLive),
 );
 
+/**
+ * Le registre de preuve (chantier n°22) : lecture seule du flux d'activité
+ * que T3 enregistre déjà — il n'écrit rien et ne lance rien.
+ */
+const PreuveToolkitRegistrationLive = McpServer.toolkit(PreuveToolkit).pipe(
+  Layer.provide(PreuveToolkitHandlersLive),
+  Layer.provide(PreuveStoreLive),
+);
+
 const McpTransportLive = McpServer.layerHttp({
   name: "T3 Code",
   version: packageJson.version,
@@ -248,4 +260,5 @@ export const layer = Layer.mergeAll(
   PreviewToolkitRegistrationLive,
   RepoToolkitRegistrationLive,
   RappelToolkitRegistrationLive,
+  PreuveToolkitRegistrationLive,
 ).pipe(Layer.provideMerge(McpTransportLive));
