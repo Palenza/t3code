@@ -41,7 +41,19 @@ export interface FaitsDInventaire {
     /** Le chemin de son dossier de configuration — raccourci avant sortie. */
     readonly chemin?: string;
   }>;
-  readonly serveursMcp: ReadonlyArray<{ readonly nom: string; readonly joignable: boolean }>;
+  /**
+   * Les serveurs MCP, ou `null` quand on ne les a pas regardés.
+   *
+   * La distinction n'est pas un raffinement : une liste VIDE dit « on a
+   * cherché, il n'y en a pas » et `null` dit « on n'a pas cherché ». Les
+   * confondre transformerait un fait sur NOUS en affirmation sur le monde
+   * (H4) — et c'est le cas courant, puisque T3 ne configure pas les serveurs
+   * MCP : ils vivent dans chaque home Claude.
+   */
+  readonly serveursMcp: ReadonlyArray<{
+    readonly nom: string;
+    readonly joignable: boolean;
+  }> | null;
   readonly skills: number;
   /** Taille de l'état sur disque, en octets. */
   readonly etatOctets: number;
@@ -101,10 +113,14 @@ export function rendreInventaire(faits: FaitsDInventaire): string {
   }
 
   lignes.push("");
-  lignes.push(`serveurs MCP (${faits.serveursMcp.length})`);
-  if (faits.serveursMcp.length === 0) lignes.push("  aucun");
-  for (const serveur of faits.serveursMcp) {
-    lignes.push(`  ${serveur.joignable ? "✅" : "⛔"} ${serveur.nom}`);
+  if (faits.serveursMcp === null) {
+    lignes.push("serveurs MCP  non inspectés — ils vivent dans chaque home Claude, pas ici");
+  } else {
+    lignes.push(`serveurs MCP (${faits.serveursMcp.length})`);
+    if (faits.serveursMcp.length === 0) lignes.push("  aucun");
+    for (const serveur of faits.serveursMcp) {
+      lignes.push(`  ${serveur.joignable ? "✅" : "⛔"} ${serveur.nom}`);
+    }
   }
 
   if (faits.variables.length > 0) {
@@ -125,7 +141,9 @@ export function rendreInventaire(faits: FaitsDInventaire): string {
  * personne en entier. Cette phrase-là, si.
  */
 export function saillantDeLInventaire(faits: FaitsDInventaire): string | null {
-  const morts = faits.serveursMcp.filter((s) => !s.joignable).map((s) => s.nom);
+  // Non inspectés : rien à signaler, et surtout pas un faux calme. L'absence
+  // de constat n'est pas un constat d'absence.
+  const morts = (faits.serveursMcp ?? []).filter((s) => !s.joignable).map((s) => s.nom);
   const alarmes: string[] = [];
   if (faits.comptes.length === 0) alarmes.push("aucun compte configuré");
   else if (!faits.comptes.some((c) => c.actif)) alarmes.push("aucun compte actif");

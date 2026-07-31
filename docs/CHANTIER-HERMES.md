@@ -264,6 +264,13 @@ la raison — un écart sans raison se rouvre tous les mois.
       part d'où on ne peut plus le retirer, donc aucune valeur n'y entre : les
       variables par NOM, les chemins sans le nom de session.
       `inventory.py`, `dump.py`, `status.py`
+      **Branché le 01/08** : outil MCP `inventaire`. Un défaut corrigé au
+      passage — `serveursMcp` était une liste, donc « vide » se lisait « il
+      n'y en a pas ». Or T3 ne configure PAS les serveurs MCP, ils vivent dans
+      chaque home Claude : le champ accepte maintenant `null`, qui dit « pas
+      regardé ». Une liste vide dit « on a cherché », `null` dit « on n'a pas
+      cherché », et les confondre transforme un fait sur NOUS en affirmation
+      sur le monde (H4).
       _(reste : l'upload de diagnostic vers un serveur — on ne l'enverra
       nulle part.)_
 - [ ] **60 · Observabilité** — OTLP, santé passerelle, santé cron, contrat de

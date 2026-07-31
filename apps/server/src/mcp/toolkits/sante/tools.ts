@@ -4,6 +4,9 @@ import * as SqlClient from "effect/unstable/sql/SqlClient";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 
+import * as ServerConfig from "../../../config.ts";
+import { ServerSettingsService } from "../../../serverSettings.ts";
+
 /**
  * L'outil `sante` — la BOUCHE du doctor.
  *
@@ -63,4 +66,47 @@ export const SanteTool = Tool.make("sante", {
   .annotate(Tool.Destructive, false)
   .annotate(Tool.Idempotent, true);
 
-export const SanteToolkit = Toolkit.make(SanteTool);
+/**
+ * L'outil `inventaire` — la bouche du chantier n°59.
+ *
+ * Le doctor DIAGNOSTIQUE, l'inventaire DÉCRIT. Deux métiers, et les confondre
+ * donnerait un outil qui répond mal aux deux questions : « qu'est-ce qui est
+ * cassé ? » et « c'est quoi, ton installation ? ».
+ *
+ * La contrainte qui décide de sa forme : un inventaire est fait pour être
+ * COLLÉ — dans un message, une issue, un rapport de bug, c'est-à-dire dans un
+ * endroit d'où on ne peut plus le retirer. Donc aucune valeur n'y entre. Les
+ * variables d'environnement par NOM, les chemins sans le nom de session. Il
+ * n'y a rien à caviarder parce qu'il n'y a rien à cacher — c'est plus sûr
+ * qu'un caviardage qui pourrait rater un cas.
+ */
+export const InventaireInput = Schema.Struct({});
+
+export const InventaireResultat = Schema.Struct({
+  /** Le texte prêt à coller. Aucune valeur de secret n'y figure. */
+  texte: Schema.String,
+  /** Ce qui mérite un regard tout de suite, ou `null` si rien. */
+  saillant: Schema.NullOr(Schema.String),
+  /** Ce que cet inventaire ne couvre PAS — et par où passe la porte de sortie. */
+  note: Schema.optional(Schema.String),
+});
+
+export const InventaireTool = Tool.make("inventaire", {
+  description:
+    "L'installation en une page prête à coller dans un rapport : versions, plateforme, comptes configurés et lequel est actif, nombre de skills, poids de l'état sur disque, variables d'environnement PRÉSENTES (par nom, jamais leur valeur). Ne dit pas ce qui est cassé — pour ça, `sante`.",
+  parameters: InventaireInput,
+  success: InventaireResultat,
+  failure: SanteError,
+  dependencies: [
+    FileSystem.FileSystem,
+    Path.Path,
+    ServerConfig.ServerConfig,
+    ServerSettingsService,
+  ],
+})
+  .annotate(Tool.Title, "Inventaire de l'installation")
+  .annotate(Tool.Readonly, true)
+  .annotate(Tool.Destructive, false)
+  .annotate(Tool.Idempotent, true);
+
+export const SanteToolkit = Toolkit.make(SanteTool, InventaireTool);

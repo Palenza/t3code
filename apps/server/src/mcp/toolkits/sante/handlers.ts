@@ -1,7 +1,10 @@
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Schema from "effect/Schema";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 
+import packageJson from "../../../../package.json" with { type: "json" };
+import * as ServerConfig from "../../../config.ts";
 import {
   diagnostiquerComptes,
   diagnostiquerIndex,
@@ -12,7 +15,19 @@ import {
   type IndexObserve,
   type PanneInconnue,
 } from "../../../doctor/Diagnostic.ts";
+import {
+  rendreInventaire,
+  saillantDeLInventaire,
+  type FaitsDInventaire,
+} from "../../../doctor/Inventaire.ts";
+import { ServerSettingsService } from "../../../serverSettings.ts";
+import { skillsSurDisque } from "../../../skills/SurDisque.ts";
 import type { ServerProviderRateLimitWindow } from "@t3tools/contracts";
+import {
+  HostProcessArchitecture,
+  HostProcessEnvironment,
+  HostProcessPlatform,
+} from "@t3tools/shared/hostProcess";
 
 import { lireCarnet } from "../../../provider/carnetInconnus.ts";
 import type { SanteCompte } from "../../../provider/comptePool.ts";
@@ -30,6 +45,52 @@ const CINQ_HEURES = "five_hour";
 const SEPT_JOURS = "seven_day";
 
 const UneLigne = Schema.Struct({ n: Schema.Number });
+
+/**
+ * Les variables qu'on cherche, par NOM.
+ *
+ * Liste fermée et non un balayage de `process.env` : un balayage recopierait
+ * l'environnement entier dans un texte fait pour être collé quelque part
+ * d'où on ne peut plus le retirer. Seuls les NOMS sortent, jamais les valeurs
+ * — mais même un nom inattendu peut en dire trop sur une machine.
+ */
+const VARIABLES_REGARDEES = [
+  "CLAUDE_CONFIG_DIR",
+  "ANTHROPIC_API_KEY",
+  "ANTHROPIC_BASE_URL",
+  "ANTHROPIC_AUTH_TOKEN",
+  "HTTP_PROXY",
+  "HTTPS_PROXY",
+  "NO_PROXY",
+  "NODE_OPTIONS",
+  "T3_BASE_DIR",
+] as const;
+
+/**
+ * Le poids de l'état sur disque.
+ *
+ * Récursif, et volontairement TOLÉRANT : un sous-dossier illisible compte
+ * pour zéro plutôt que de faire échouer tout l'inventaire. Un inventaire
+ * qu'une permission fait échouer n'est jamais collé dans le rapport de bug
+ * qui en avait besoin.
+ */
+const poidsDuDossier = (racine: string): Effect.Effect<number, never, FileSystem.FileSystem> =>
+  Effect.gen(function* () {
+    const fileSystem = yield* FileSystem.FileSystem;
+    const info = yield* fileSystem.stat(racine).pipe(Effect.orElseSucceed(() => null));
+    if (info === null) return 0;
+    if (info.type !== "Directory") return Number(info.size);
+
+    const entrees = yield* fileSystem.readDirectory(racine).pipe(Effect.orElseSucceed(() => []));
+    const poids = yield* Effect.forEach(
+      entrees,
+      (entree) => poidsDuDossier(`${racine}/${entree}`),
+      {
+        concurrency: 8,
+      },
+    );
+    return poids.reduce((total, n) => total + n, 0);
+  });
 
 /**
  * Ce que les stores savent des comptes EN CE MOMENT.
@@ -156,6 +217,66 @@ const handlers = {
           verdict: verdictGeneral(constats),
           constats,
           note: `Regardé : ${angles.join(" · ")}. Ce passage ne dit rien de ce qui n'est pas dans cette liste.`,
+        };
+      }),
+      porteDeSortie,
+    ),
+  inventaire: () =>
+    Effect.flatMap(
+      Effect.gen(function* () {
+        const config = yield* ServerConfig.ServerConfig;
+        const settings = yield* ServerSettingsService;
+        // Références et non lectures directes de `process` : c'est la règle du
+        // dépôt, et elle rend l'inventaire reproductible sous test.
+        const plateforme = yield* HostProcessPlatform;
+        const architecture = yield* HostProcessArchitecture;
+        const environnement = yield* HostProcessEnvironment;
+        const reglages = yield* settings.getSettings.pipe(
+          Effect.mapError(
+            (cause) =>
+              new SanteError({
+                message: `Les réglages n'ont pas pu être lus (${String(cause)}), donc la liste des comptes configurés est inconnue.`,
+              }),
+          ),
+        );
+        const home = environnement.HOME ?? environnement.USERPROFILE ?? "";
+        const santes = new Map(toutesLesSantes().map((s) => [String(s.instanceId), s]));
+
+        const skills = yield* skillsSurDisque({
+          config: { homePath: "" },
+          environment: environnement,
+        });
+
+        const faits: FaitsDInventaire = {
+          versionApp: packageJson.version,
+          plateforme: `${plateforme} ${architecture}`,
+          versionNode: process.versions.node,
+          home,
+          comptes: Object.entries(reglages.providerInstances).map(([id, instance]) => ({
+            nom: instance.displayName ?? id,
+            driver: instance.driver,
+            // Un compte est DÉSACTIVÉ explicitement, ou écarté par sa santé.
+            // Un compte qui n'a simplement pas encore servi reste « actif » :
+            // les stores de santé repartent vides à chaque démarrage, et le
+            // compter inactif ferait dire à l'inventaire « aucun compte
+            // actif » sur une installation parfaitement saine.
+            actif: instance.enabled !== false && (santes.get(id)?.etat ?? "ok") === "ok",
+          })),
+          // `null` et non `[]` : T3 ne configure PAS les serveurs MCP, ils
+          // vivent dans chaque home Claude. Rendre une liste vide dirait
+          // « il n'y en a pas », ce qu'on n'a pas vérifié (H4).
+          serveursMcp: null,
+          skills: skills.length,
+          etatOctets: yield* poidsDuDossier(config.baseDir),
+          variables: VARIABLES_REGARDEES.filter((nom) => environnement[nom] !== undefined),
+        };
+        return {
+          texte: rendreInventaire(faits),
+          saillant: saillantDeLInventaire(faits),
+          // H4 : ce qui n'a pas été regardé se dit. Sans cette ligne, un
+          // inventaire complet en apparence laisserait croire qu'on a vérifié
+          // les serveurs MCP et qu'ils vont bien.
+          note: "Les serveurs MCP ne sont pas inspectés : T3 ne les configure pas, ils vivent dans chaque home Claude. Les variables d'environnement sont listées par NOM seulement — aucune valeur ne sort d'ici.",
         };
       }),
       porteDeSortie,

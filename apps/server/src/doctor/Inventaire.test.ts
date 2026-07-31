@@ -67,6 +67,26 @@ describe("rendreInventaire · ce qu'il dit", () => {
     const texte = rendreInventaire({ ...FAITS, comptes: [], serveursMcp: [] });
     assert.include(texte, "c'est probablement la cause");
   });
+
+  it("« pas regardé » ne se dit pas « aucun »", () => {
+    // Une liste vide dit « on a cherché, il n'y en a pas ». `null` dit « on
+    // n'a pas cherché ». Les confondre transforme un fait sur NOUS en
+    // affirmation sur le monde (H4) — et c'est le cas COURANT : T3 ne
+    // configure pas les serveurs MCP, ils vivent dans chaque home Claude.
+    const pasRegarde = rendreInventaire({ ...FAITS, serveursMcp: null });
+    assert.include(pasRegarde, "non inspectés");
+    assert.notInclude(pasRegarde, "serveurs MCP (0)");
+
+    const cherche = rendreInventaire({ ...FAITS, serveursMcp: [] });
+    assert.include(cherche, "serveurs MCP (0)");
+    assert.include(cherche, "aucun");
+  });
+
+  it("des serveurs non inspectés ne fabriquent pas un faux calme", () => {
+    // L'absence de constat n'est pas un constat d'absence : le saillant doit
+    // rester muet là-dessus, pas rassurer.
+    assert.isNull(saillantDeLInventaire({ ...FAITS, serveursMcp: null }));
+  });
 });
 
 describe("saillantDeLInventaire", () => {
