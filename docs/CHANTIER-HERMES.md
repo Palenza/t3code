@@ -16,13 +16,13 @@ plan.
 
 ## Où en est le catalogue — au 01/08/2026
 
-**34 livrés · 3 partiels · 21 écartés sur pièce · 27 restants.**
+**34 livrés · 4 partiels · 21 écartés sur pièce · 26 restants.**
 
 Chaque ligne a été INSTRUITE : aucune n'est restée sans qu'on aille voir. Un
 écart porte toujours sa raison, et une raison porte un reçu quand elle repose
 sur une mesure.
 
-Ce que les 27 restants attendent vraiment — c'est la seule question utile :
+Ce que les 26 restants attendent vraiment — c'est la seule question utile :
 
 |       | quoi                                                                     | qui décide                                                                                                                         |
 | ----- | ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
@@ -31,16 +31,10 @@ Ce que les 27 restants attendent vraiment — c'est la seule question utile :
 | **3** | l'installation de skills 51→53                                           | **Enzo** — écrire dans le home Claude se décide                                                                                    |
 | **2** | habillage 79-80 (onboarding, achievements)                               | **Enzo** — goût et ton de marque                                                                                                   |
 | **3** | chantiers à part : 7 (PTC), 28 (LSP), 37 (la passerelle elle-même)       | multi-session, annoncés tels quels                                                                                                 |
-| **6** | 3, 6, 8, 12, 54, 71                                                      | bloqués ou instruits, chacun avec son reçu écrit                                                                                   |
+| **5** | 3, 6, 8, 12, 54                                                          | bloqués ou instruits, chacun avec son reçu écrit                                                                                   |
 
 Autrement dit : **rien ne reste qui soit à la fois solo, débloqué et non
 tranché**. Ce qui reste appartient à Enzo, ou demande sa propre session.
-
-Le plus urgent des six est le **n°71** : notre porte de sortie ne caviarde que
-nos 23 outils MCP, jamais les `Bash`/`Read`/`WebFetch` du SDK. Le crochet
-existe (`PostToolUse.updatedToolOutput`), le point de câblage est écrit — mais
-il remplace la sortie de TOUS les outils, donc il exige une preuve sur un vrai
-tour avant de partir (D3).
 
 ---
 
@@ -102,23 +96,23 @@ la raison — un écart sans raison se rouvre tous les mois.
       base en mémoire, avec nos réglages actuels (`unicode61
 remove_diacritics 2`) contre `trigram` :
 
-                    requête      unicode61 (le nôtre)   trigram
-                    数据  (2)          0                   0
-                    数据库 (3)          0                   1
-                    東京  (2)          0                   0
-                    chat               1                   1
-                    dort               1                   1
+                      requête      unicode61 (le nôtre)   trigram
+                      数据  (2)          0                   0
+                      数据库 (3)          0                   1
+                      東京  (2)          0                   0
+                      chat               1                   1
+                      dort               1                   1
 
-                Donc **notre index ne trouve JAMAIS rien en CJK**, pas même sur trois
-                caractères — ce n'est pas une dégradation, c'est un mur. `trigram` le
-                lève dès 3 caractères sans toucher au français.
-                Reste hors de portée : les termes CJK de **1-2 caractères**, et c'est
-                précisément ce que leur bigramme compilé existe pour couvrir.
-                **On ne bascule PAS aujourd'hui** : produit français d'abord, un index
-                trigramme pèse plus lourd (une entrée par fenêtre de 3), et personne
-                n'attend cette recherche. Mais le jour où un utilisateur CJK arrive, la
-                décision est un MOT dans la migration 036 — plus un chantier natif.
-                `native/fts5_cjk/` **(copie C, désormais optionnelle)**
+                  Donc **notre index ne trouve JAMAIS rien en CJK**, pas même sur trois
+                  caractères — ce n'est pas une dégradation, c'est un mur. `trigram` le
+                  lève dès 3 caractères sans toucher au français.
+                  Reste hors de portée : les termes CJK de **1-2 caractères**, et c'est
+                  précisément ce que leur bigramme compilé existe pour couvrir.
+                  **On ne bascule PAS aujourd'hui** : produit français d'abord, un index
+                  trigramme pèse plus lourd (une entrée par fenêtre de 3), et personne
+                  n'attend cette recherche. Mais le jour où un utilisateur CJK arrive, la
+                  décision est un MOT dans la migration 036 — plus un chantier natif.
+                  `native/fts5_cjk/` **(copie C, désormais optionnelle)**
 
 - [ ] **7 · PTC — appel d'outils programmatique** — le modèle écrit un script
       qui appelle nos outils, N tours → 1. Seul le `stdout` revient. Chez nous il
