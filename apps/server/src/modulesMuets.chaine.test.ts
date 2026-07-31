@@ -73,6 +73,10 @@ const MUETS_ASSUMES = new Map<string, string>([
     "Décision de livraison fiable (n°39), écrite avant le premier adaptateur — comme l'autorisation et le débit. Aucune livraison ne part encore vers une plateforme tierce.",
   ],
   [
+    "securite/BudgetDeGeneration.ts",
+    "Garde de dépense pour la génération d'images (n°69), écrit AVANT le moteur — comme l'autorisation avant l'adaptateur de passerelle. Aucun fournisseur n'est branché : ça engage de l'argent et le choix appartient à Enzo.",
+  ],
+  [
     "skills/Curateur.ts",
     "Mesuré le 01/08 : la projection ne couvre que 7,3 jours (élaguée). Le curateur répondrait « indécidable » sur toute skill plus vieille, c'est-à-dire presque toutes. Lui donner une bouche maintenant livrerait un outil incapable de rien dire. Il attend une fenêtre d'observation, pas du code.",
   ],

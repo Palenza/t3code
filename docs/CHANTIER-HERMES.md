@@ -16,7 +16,7 @@ plan.
 
 ## Où en est le catalogue — au 01/08/2026
 
-**34 livrés · 16 partiels · 32 écartés sur pièce · 3 restants.**
+**34 livrés · 17 partiels · 32 écartés sur pièce · 2 restants.**
 
 Chaque ligne a été INSTRUITE : aucune n'est restée sans qu'on aille voir. Un
 écart porte toujours sa raison, et une raison porte un reçu quand elle repose
@@ -133,23 +133,23 @@ la raison — un écart sans raison se rouvre tous les mois.
   base en mémoire, avec nos réglages actuels (`unicode61
 remove_diacritics 2`) contre `trigram` :
 
-                                                                                  requête      unicode61 (le nôtre)   trigram
-                                                                                  数据  (2)          0                   0
-                                                                                  数据库 (3)          0                   1
-                                                                                  東京  (2)          0                   0
-                                                                                  chat               1                   1
-                                                                                  dort               1                   1
+                                                                                    requête      unicode61 (le nôtre)   trigram
+                                                                                    数据  (2)          0                   0
+                                                                                    数据库 (3)          0                   1
+                                                                                    東京  (2)          0                   0
+                                                                                    chat               1                   1
+                                                                                    dort               1                   1
 
-                                                                              Donc **notre index ne trouve JAMAIS rien en CJK**, pas même sur trois
-                                                                              caractères — ce n'est pas une dégradation, c'est un mur. `trigram` le
-                                                                              lève dès 3 caractères sans toucher au français.
-                                                                              Reste hors de portée : les termes CJK de **1-2 caractères**, et c'est
-                                                                              précisément ce que leur bigramme compilé existe pour couvrir.
-                                                                              **On ne bascule PAS aujourd'hui** : produit français d'abord, un index
-                                                                              trigramme pèse plus lourd (une entrée par fenêtre de 3), et personne
-                                                                              n'attend cette recherche. Mais le jour où un utilisateur CJK arrive, la
-                                                                              décision est un MOT dans la migration 036 — plus un chantier natif.
-                                                                              `native/fts5_cjk/` **(copie C, désormais optionnelle)**
+                                                                                Donc **notre index ne trouve JAMAIS rien en CJK**, pas même sur trois
+                                                                                caractères — ce n'est pas une dégradation, c'est un mur. `trigram` le
+                                                                                lève dès 3 caractères sans toucher au français.
+                                                                                Reste hors de portée : les termes CJK de **1-2 caractères**, et c'est
+                                                                                précisément ce que leur bigramme compilé existe pour couvrir.
+                                                                                **On ne bascule PAS aujourd'hui** : produit français d'abord, un index
+                                                                                trigramme pèse plus lourd (une entrée par fenêtre de 3), et personne
+                                                                                n'attend cette recherche. Mais le jour où un utilisateur CJK arrive, la
+                                                                                décision est un MOT dans la migration 036 — plus un chantier natif.
+                                                                                `native/fts5_cjk/` **(copie C, désormais optionnelle)**
 
 - [–] **7 · ~~PTC — appel d'outils programmatique~~** — **Écarté : le CLI le
   porte déjà.** Troisième ligne fermée le 01/08 en fouillant le binaire du CLI
@@ -834,7 +834,25 @@ seulement pour le bloc.`stream*consumer.py` (2 250)
   chantier réel se perd faute de tableau. `kanban_db.py` (10 010)
 - [x] **68 · Projets** — sélecteur de projet (⌘P) et recherche de contenu (⇧⌘F), livrés en amont.
 
-- [ ] **69 · Génération d'images et de vidéos** — 7 fournisseurs image, FLUX3
+- [~] **69 · Génération d'images et de vidéos** — **le GARDE livré le 01/08,
+  avant le moteur** — comme le garde anti-zombie avant l'ordonnanceur et
+  l'autorisation avant l'adaptateur de passerelle.
+  Celui-ci n'est pas facultatif, parce que la panne qu'il empêche est la
+  plus coûteuse de nos formes habituelles : chaque appel RÉUSSIT, chaque
+  appel est facturé, et rien ne dépasse jusqu'au relevé. Un agent qui
+  n'aime pas un résultat réessaie ; la facture court.
+  **La règle : pas de budget, pas de dépense.** Un budget absent ne veut
+  pas dire « illimité », il veut dire que personne n'a décidé — et
+  personne n'a décidé veut dire non.
+  Ce qu'on refuse aussi, et qui surprend : une demande DÉJÀ servie. Le même
+  texte rendra la même image, à la variation près ; la refaire coûte deux
+  fois pour la même chose. Le refus dit de CHANGER la demande, pas de
+  réessayer. L'empreinte est normalisée — sinon une majuscule contournerait
+  le garde.
+  Alerte à 80 %, comme le seuil de quota des comptes : à 100 % il est déjà
+  trop tard, la génération suivante est refusée au milieu d'un travail.
+  _(reste : le fournisseur lui-même — DALL·E, Imagen, autre. Ça engage de
+  l'argent : le choix et le plafond appartiennent à Enzo, M2.)_
 - [x] **70 · Vision** — 11 commits sur les images du composeur ; le modèle voit déjà.
 
 - [~] **71 · Hooks de plugin** — **le hook de TRANSFORMATION livré le 01/08**,
