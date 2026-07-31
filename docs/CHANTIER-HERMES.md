@@ -162,8 +162,19 @@ la raison — un écart sans raison se rouvre tous les mois.
       exposé en outil MCP. `agent/lsp/`
 - [ ] **29 · Environnements d'exécution** — Docker, Modal, Daytona, Vercel
       Sandbox + synchro de fichiers. `tools/environments/`
-- [ ] **30 · Registre de processus + pool de démons + interruption**
-      `tools/process_registry.py` (2 422), `daemon_pool.py`, `interrupt.py`
+- [–] **30 · Registre de processus + pool de démons + interruption** —
+  **Écarté sur enquête, 01/08.** Leurs 2 422 lignes lancent, suivent,
+  tamponnent, surveillent et tuent des processus d'arrière-plan. Chez nous
+  RIEN de ça ne nous appartient : le lancement en arrière-plan est au SDK
+  Claude Agent (`run_in_background`, `BashOutput`, `KillShell`), comme la
+  boucle d'agent elle-même. Écrire notre registre doublerait un moteur
+  qu'on ne possède pas — même verdict que le n°25.
+  Mais l'enquête n'a pas été vaine : elle a trouvé **63 processus
+  orphelins** sur la machine, tous des fixtures de test à nous, le plus
+  vieux vivant depuis 1 j 15 h. La seule idée transférable de leur
+  registre est là — quelqu'un doit SURVEILLER ce qu'on a lancé. Corrigé et
+  gardé par un test (`e601ec4f3`), pas par un registre.
+  `tools/process_registry.py` (2 422), `daemon_pool.py`, `interrupt.py`
 - [–] **31 · Profils totalement isolés** — **Écarté pour l'instant** :
   spéculatif. On n'a pas le problème (un seul humain, une seule machine
   principale). _Le garde de changement de contexte, lui, reste à prendre._
