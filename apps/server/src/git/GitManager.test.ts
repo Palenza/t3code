@@ -289,7 +289,7 @@ function createTextGeneration(
         branch: "update-workflow",
       }),
     groupThreadsByTheme: () => Effect.succeed({ groups: [] }),
-  generateThreadTitle: () =>
+    generateThreadTitle: () =>
       Effect.succeed({
         title: "Update workflow",
       }),

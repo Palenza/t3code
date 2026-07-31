@@ -18,11 +18,11 @@ const quotas = (...pourcents: ReadonlyArray<number>): ServerProviderRateLimits =
 
 const sain = (valeur: string): SanteCompte => ({ instanceId: id(valeur), etat: "ok" });
 
-const candidat = (
-  nom: string,
-  charge: number,
-  sante: SanteCompte = sain(nom),
-): Candidat => ({ instanceId: id(nom), sante, quotas: quotas(charge) });
+const candidat = (nom: string, charge: number, sante: SanteCompte = sain(nom)): Candidat => ({
+  instanceId: id(nom),
+  sante,
+  quotas: quotas(charge),
+});
 
 const selection: ModelSelection = {
   instanceId: id("A"),

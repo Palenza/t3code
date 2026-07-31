@@ -124,10 +124,7 @@ export const favorisEpinglerRouteLayer = HttpRouter.add(
     const request = yield* HttpServerRequest.HttpServerRequest;
     const refus = gardeLocale(request);
     if (refus !== null) return refus;
-    const corps = yield* Effect.orElseSucceed(
-      decodeCorps(yield* request.json),
-      () => null,
-    );
+    const corps = yield* Effect.orElseSucceed(decodeCorps(yield* request.json), () => null);
     if (corps === null) {
       return HttpServerResponse.jsonUnsafe(
         { epingle: false, raison: "Il faut au minimum une url." },

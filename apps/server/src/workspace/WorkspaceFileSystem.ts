@@ -16,6 +16,7 @@ import type {
   ProjectWriteFileResult,
 } from "@t3tools/contracts";
 import { ancetresDuPlusProfond, verdictDeChemin } from "./CheminSur.ts";
+import { verdictDeCible } from "../securite/CibleSensible.ts";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -385,6 +386,27 @@ export const make = Effect.gen(function* () {
     // On ne peut pas résoudre la cible : elle n'existe pas encore. On regarde
     // donc la FEUILLE sans la suivre (`lstat`), puis on remonte au premier
     // ANCÊTRE EXISTANT et on résout celui-là.
+    // CE QUI EST DEDANS N'EST PAS ORDINAIRE POUR AUTANT.
+    //
+    // Le garde ci-dessous ferme la SORTIE de l'espace de travail. Il ne dit
+    // rien de `.git/hooks/pre-commit`, qui ne franchit aucune frontière et
+    // donne pourtant l'exécution de code arbitraire au prochain commit — sur
+    // la machine de l'humain, avec ses droits.
+    const cible = verdictDeCible(target.relativePath);
+    if (cible.nature === "interdite") {
+      return yield* new WorkspaceFilePathEscapeError({
+        workspaceRoot: input.cwd,
+        relativePath: input.relativePath,
+        resolvedWorkspaceRoot: input.cwd,
+        resolvedPath: cible.pourquoi,
+      });
+    }
+    if (cible.nature === "sensible") {
+      // On ÉCRIT quand même : ce sont des fichiers qu'on édite pour de vraies
+      // raisons, et les bloquer les ferait éditer autrement, sans trace.
+      yield* Effect.logWarning(cible.pourquoi);
+    }
+
     yield* verifierEcritureReelle({
       workspaceRoot: input.cwd,
       relativePath: input.relativePath,

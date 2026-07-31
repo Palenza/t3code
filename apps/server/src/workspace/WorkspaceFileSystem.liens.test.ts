@@ -155,6 +155,85 @@ it.layer(TestLayer, { excludeTestServices: true })("writeFile · liens symboliqu
     );
   });
 
+  describe("cibles sensibles DANS l'espace de travail", () => {
+    it.effect("`.git/hooks/pre-commit` est refusé — c'est du code exécuté au commit", () =>
+      Effect.gen(function* () {
+        // Le garde des liens ferme la SORTIE. Celui-ci ferme ce qui donne
+        // l'exécution de code SANS sortir : un hook git s'exécute au prochain
+        // commit, sur la machine de l'humain, avec ses droits.
+        const workspaceFileSystem = yield* WorkspaceFileSystem.WorkspaceFileSystem;
+        const path = yield* Path.Path;
+        const { cwd } = yield* monterLeDecor;
+
+        const refus = yield* workspaceFileSystem
+          .writeFile({
+            cwd,
+            relativePath: ".git/hooks/pre-commit",
+            contents: "#!/bin/sh\ncurl evil",
+          })
+          .pipe(Effect.flip);
+
+        assert.equal(refus._tag, "WorkspaceFilePathEscapeError");
+        assert.include(refus.message, "core.pager");
+        assert.isFalse(yield* existe(path.join(cwd, ".git", "hooks", "pre-commit")));
+      }),
+    );
+
+    it.effect("`.env` s'écrit quand même — on le DIT, on ne le bloque pas", () =>
+      Effect.gen(function* () {
+        // Bloquer un fichier qu'on édite pour de vraies raisons le ferait
+        // éditer autrement, sans trace.
+        const workspaceFileSystem = yield* WorkspaceFileSystem.WorkspaceFileSystem;
+        const fileSystem = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const { cwd } = yield* monterLeDecor;
+
+        yield* workspaceFileSystem.writeFile({
+          cwd,
+          relativePath: ".env.local",
+          contents: "CLE=valeur\n",
+        });
+
+        expect(yield* fileSystem.readFileString(path.join(cwd, ".env.local"))).toBe("CLE=valeur\n");
+      }),
+    );
+
+    it.effect("le garde des cibles est BRANCHÉ — invariant de la chaîne C", () =>
+      Effect.gen(function* () {
+        // La chaîne C n'avait aucun invariant testé, et la carte la désigne
+        // comme la plus dangereuse. Celui-ci : aucun chemin d'écriture du
+        // module `workspace` ne contourne les deux gardes.
+        const fileSystem = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const dossier = path.join(process.cwd(), "src", "workspace");
+        const source = yield* fileSystem
+          .readFileString(path.join(dossier, "WorkspaceFileSystem.ts"))
+          .pipe(Effect.orDie);
+        assert.include(source, "verifierEcritureReelle", "le garde des liens a disparu");
+        assert.include(source, "verdictDeCible", "le garde des cibles a disparu");
+
+        // Et personne d'autre n'écrit dans ce module : un second chemin
+        // d'écriture serait un contournement complet.
+        const noms = yield* fileSystem.readDirectory(dossier).pipe(Effect.orDie);
+        const ecrivains: string[] = [];
+        for (const nom of noms) {
+          if (!nom.endsWith(".ts") || nom.includes(".test.") || nom === "WorkspaceFileSystem.ts") {
+            continue;
+          }
+          const autre = yield* fileSystem
+            .readFileString(path.join(dossier, nom))
+            .pipe(Effect.orElseSucceed(() => ""));
+          if (autre.includes("writeFileString")) ecrivains.push(nom);
+        }
+        assert.deepEqual(
+          ecrivains,
+          [],
+          `Ces modules écrivent sans passer par les gardes : ${ecrivains.join(", ")}`,
+        );
+      }),
+    );
+  });
+
   describe("laisse passer ce qui reste dedans", () => {
     it.effect("un lien de DOSSIER interne — la forme normale d'un dépôt pnpm", () =>
       Effect.gen(function* () {

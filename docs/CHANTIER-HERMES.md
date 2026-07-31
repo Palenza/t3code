@@ -64,9 +64,14 @@ la raison — un écart sans raison se rouvre tous les mois.
 - [ ] **10 · Scanner de skills importées** — exfiltration, injection de
       prompt, commandes destructrices, persistance + politique par niveau de
       confiance. `tools/skills_guard.py` (1 153), `skills_ast_audit.py`
-- [ ] **11 · Approbation intelligente** — patterns dangereux, LLM auxiliaire
-      qui auto-approuve le faible risque, allowlist persistée.
-      `tools/approval.py` (4 161), `write_approval.py`
+- [x] **11 · Cibles sensibles** — la table de `approval.py` aspirée : ce qui
+      est DANS l'espace de travail n'est pas ordinaire pour autant. `.git/`
+      refusé (un hook s'exécute au commit, `core.pager` est une commande) ;
+      `.env`, les réglages et hooks de l'agent, les identifiants de paquets
+      sont ÉCRITS mais DITS. `tools/approval.py` (4 131)
+      _(reste : l'approbation interactive elle-même — un LLM auxiliaire qui
+      auto-approuve le faible risque, et la mise en attente d'écriture de
+      `write_approval.py`. Palier D2.)_
 - [ ] **12 · Suggestions d'allowlist** — l'agent propose ce qu'il faudrait
       autoriser. `hermes_cli/approvals_suggest.py`
 - [x] **13 · Patterns de menace** — les 36 motifs d'Hermès portés en DONNÉE,

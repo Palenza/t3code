@@ -86,7 +86,10 @@ export const rangerFilsRouteLayer = HttpRouter.add(
     if (result === null) {
       // Fail-loud côté client : un échec se DIT, il ne se déguise pas en
       // « rien à ranger ».
-      return HttpServerResponse.jsonUnsafe({ groups: [], reason: "generation-failed" }, { status: 502 });
+      return HttpServerResponse.jsonUnsafe(
+        { groups: [], reason: "generation-failed" },
+        { status: 502 },
+      );
     }
     return HttpServerResponse.jsonUnsafe(
       { groups: result.groups, reason: null },

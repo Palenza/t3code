@@ -9,7 +9,9 @@ describe("claudeUsageLimitRefusal", () => {
   it("detects the live session-limit refusal wording", () => {
     // Verbatim from a walled account, 29/07/2026.
     expect(
-      detectClaudeUsageLimitRefusal("You've hit your session limit · resets 12:50pm (Asia/Makassar)"),
+      detectClaudeUsageLimitRefusal(
+        "You've hit your session limit · resets 12:50pm (Asia/Makassar)",
+      ),
     ).toEqual({ windowKind: "five_hour" });
     expect(detectClaudeUsageLimitRefusal("You've hit your usage limit.")).toEqual({
       windowKind: "five_hour",
@@ -20,9 +22,9 @@ describe("claudeUsageLimitRefusal", () => {
   });
 
   it("maps weekly wordings to the seven-day window", () => {
-    expect(
-      detectClaudeUsageLimitRefusal("You've hit your weekly limit · resets Tue 10am"),
-    ).toEqual({ windowKind: "seven_day" });
+    expect(detectClaudeUsageLimitRefusal("You've hit your weekly limit · resets Tue 10am")).toEqual(
+      { windowKind: "seven_day" },
+    );
     expect(detectClaudeUsageLimitRefusal("Weekly limit reached · resets Aug 4")).toEqual({
       windowKind: "seven_day",
     });

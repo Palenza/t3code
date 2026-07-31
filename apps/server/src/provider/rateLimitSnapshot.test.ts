@@ -163,9 +163,7 @@ describe("mergeRateLimitWindows", () => {
       [{ kind: "five_hour", utilization: 12, resetsAtEpoch: 1_753_020_000 }],
     );
 
-    expect(merged).toEqual([
-      { kind: "five_hour", utilization: 12, resetsAtEpoch: 1_753_020_000 },
-    ]);
+    expect(merged).toEqual([{ kind: "five_hour", utilization: 12, resetsAtEpoch: 1_753_020_000 }]);
   });
 
   it("keeps a stored rejected while the API still reports high utilization", () => {
