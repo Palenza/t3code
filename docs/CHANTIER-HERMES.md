@@ -76,7 +76,11 @@ la raison — un écart sans raison se rouvre tous les mois.
       LOI ne les déclenche pas. `threat_patterns.py` (284)
       _(reste : le scan PRÉ-EXÉCUTION de `tirith_security.py` (871), qui
       appartient au n°11)_
-- [ ] **14 · Sûreté d'URL + politique de site** `tools/url_safety.py` (874)
+- [x] **14 · Sûreté d'URL** — SSRF. Le lien-local `169.254.0.0/16` et les
+      points de métadonnées de cloud sont TOUJOURS refusés ; `localhost` et le
+      privé restent permis (voir son serveur de dev est le produit). Branché
+      sur `preview_navigate` et `preview_open`. `tools/url_safety.py` (862)
+      _(reste : `website_policy.py`, la liste de sites par configuration)_
 - [ ] **15 · Vérification CVE/OSV comme OUTIL** (pas seulement en CI)
       `tools/osv_check.py`
 - [ ] **16 · Sources de secrets externes** — 1Password, Bitwarden, commande.
@@ -84,8 +88,11 @@ la raison — un écart sans raison se rouvre tous les mois.
 - [x] **17 · Rédaction des secrets** — 985 lignes rien que pour caviarder
       journaux et télémétrie. `agent/redact.py`, `monitoring/redaction.py`
       → `8be2f82c1`, branché à la sortie d'outil dans `422454103`
-- [ ] **18 · Permissions des fichiers de credentials vérifiées**
-      `tools/credential_files.py`
+- [–] **18 · ~~Permissions des credentials~~** — **Écarté, le catalogue se
+  trompait** : `credential_files.py` (525 l.) n'est pas un contrôle de
+  permissions, c'est un registre de MONTAGE de fichiers dans des
+  conteneurs de terminal distants. Sans objet — T3 n'en a pas. Vérifié en
+  lisant le fichier.
 - [ ] **19 · Hooks shell à consentement première utilisation** — allowlist
       `(événement, commande)`, `shell=False` + `shlex.split`.
       `agent/shell_hooks.py`
