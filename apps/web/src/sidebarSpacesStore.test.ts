@@ -89,9 +89,9 @@ describe("sidebarSpacesStore", () => {
     expect(useSidebarSpacesStore.getState().favorites).toHaveLength(MAX_SIDEBAR_FAVORITES);
     useSidebarSpacesStore.getState().toggleFavorite(favorite(0));
     expect(useSidebarSpacesStore.getState().favorites).toHaveLength(MAX_SIDEBAR_FAVORITES - 1);
-    expect(
-      useSidebarSpacesStore.getState().favorites.some((f) => f.threadKey === "env:t0"),
-    ).toBe(false);
+    expect(useSidebarSpacesStore.getState().favorites.some((f) => f.threadKey === "env:t0")).toBe(
+      false,
+    );
   });
 });
 

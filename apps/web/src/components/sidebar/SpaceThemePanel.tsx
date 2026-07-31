@@ -1,42 +1,43 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 
-import {
-  ChevronLeftIcon,
-  ChevronRightIcon,
-  MinusIcon,
-  MoonIcon,
-  PencilIcon,
-  PlusIcon,
-} from "lucide-react";
+import { ChevronLeftIcon, ChevronRightIcon, MinusIcon, PlusIcon } from "lucide-react";
 
 import { cn } from "../../lib/utils";
+import { useTheme } from "../../hooks/useTheme";
 import { useSidebarSpacesStore } from "../../sidebarSpacesStore";
 import {
   makeSidebarThemeFromColors,
   SIDEBAR_THEME_GRAIN_URL,
   useSidebarThemeStore,
   type SidebarTheme,
-  type SidebarThemeStop,
 } from "../../sidebarThemeStore";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
+import {
+  ajouterRond,
+  deplacerFigure,
+  poserFigure,
+  retirerRond,
+  stopsAvecCouleurs,
+  stopsDepuisPoints,
+  wheelColorAt,
+  wheelPositionOf,
+} from "./SpaceThemePanel.logic";
 
 /**
- * L'éditeur de thème d'Arc — recalé sur la MÉTROLOGIE du 30/07 soir :
- * 4 965 frames réelles à 120 Hz, résolution native, mesurées par programme
- * (scripts mesure_frames/mesure2/synthese, session du 30/07).
+ * L'éditeur de thème d'Arc.
  *
- * Ce que la mesure a tranché contre l'implémentation précédente :
+ * La géométrie de la toile vit dans `SpaceThemePanel.logic.ts` — elle porte
+ * l'invariant « les ronds restent TOUJOURS à distance égale », et il est
+ * testé. Ici on ne fait que la peau : le verre, le nuancier, la vague, la
+ * molette.
  *
- * LE TRIO EST UN ASSEMBLAGE RIGIDE PENDANT LE GLISSÉ. Ratio de déplacement
- * satellite/dominante : médiane 0,98 (p10 0,80 · p90 1,12) sur 244 mesures.
- * Le retard élastique d'avant (transition left/top 75 ms) était une faute —
- * en glissé, AUCUNE transition ; les transitions ne servent que les sauts
- * discrets (clic nuancier, promotion).
- *
- * RAYON COMMUN, ANGLES PROPRES. Les trois ronds vivent à la même distance
- * du centre de la toile (rayons mesurés 107/108/115 puis 163/164/174 selon
- * l'instant), mais leurs écarts angulaires VARIENT (61°, 92°, 149° observés) :
- * le ±42° forcé d'avant n'existe pas. Chaque rond garde SON angle ; bouger
- * la dominante fixe l'angle de celle-ci et le rayon de tous.
+ * L'apparence claire/sombre du panneau suit le THÈME DE L'APP
+ * (`useTheme().resolvedTheme`), jamais la préférence système brute. La
+ * version précédente interrogeait `matchMedia("(prefers-color-scheme:dark)")`
+ * en direct : sur une app forcée en nuit avec un macOS en clair, le panneau
+ * se peignait en CLAIR par-dessus du noir — d'où les chevrons illisibles et
+ * les icônes qui « disparaissaient » au survol (elles s'assombrissaient vers
+ * le fond gris au lieu de s'éclaircir).
  */
 
 const MAX_ARC_STOPS = 3;
@@ -75,125 +76,39 @@ const GRADIENT_SWATCHES: ReadonlyArray<readonly [string, string, string]> = [
 const STOP_SIZES_PX = [34, 20, 20] as const;
 
 /**
- * Deux apparences, plus trois : ordre fondateur du 30/07 — « le mode clair,
- * on va l'enlever, on garde le dark et l'automatique ».
+ * UN SEUL MODE — ordre fondateur du 31/07 : « on va aussi enlever le mode
+ * nuit, c'est moche ; on garde qu'un seul mode, celui avec les trois étoiles
+ * scintillantes ». Le 30/07 avait déjà retiré le mode clair. Il ne reste donc
+ * plus de CHOIX à faire : les étoiles ne sont plus un bouton, ce sont
+ * l'ENSEIGNE de ce que fait la carte — les couleurs suivent le thème de
+ * l'app. Le champ `appearance` reste dans le type (des thèmes enregistrés le
+ * portent encore) ; le panneau le remet à « auto » dès qu'il écrit.
  */
-const APPEARANCE_CHOICES = [
-  { value: "auto", label: "Suivre le système" },
-  { value: "dark", label: "Toujours sombre" },
-] as const;
-
-// ---------------------------------------------------------------- couleur
-// LA ROUE INVISIBLE (10 761 frames, vidéo précédente) : teinte = angle
-// autour du centre (hue ≈ angle − 5°), pleine au centre, pâle au bord.
-
-function hslToHex(h: number, s: number, l: number): string {
-  const hue = ((h % 360) + 360) % 360;
-  const sat = Math.max(0, Math.min(100, s)) / 100;
-  const light = Math.max(0, Math.min(100, l)) / 100;
-  const chroma = (1 - Math.abs(2 * light - 1)) * sat;
-  const x = chroma * (1 - Math.abs(((hue / 60) % 2) - 1));
-  const m = light - chroma / 2;
-  const [r, g, b] =
-    hue < 60
-      ? [chroma, x, 0]
-      : hue < 120
-        ? [x, chroma, 0]
-        : hue < 180
-          ? [0, chroma, x]
-          : hue < 240
-            ? [0, x, chroma]
-            : hue < 300
-              ? [x, 0, chroma]
-              : [chroma, 0, x];
-  const toHex = (channel: number) =>
-    Math.round((channel + m) * 255)
-      .toString(16)
-      .padStart(2, "0");
-  return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
-}
-
-function hexToHsl(hex: string): { h: number; s: number; l: number } {
-  const value = hex.replace("#", "");
-  const r = Number.parseInt(value.slice(0, 2), 16) / 255;
-  const g = Number.parseInt(value.slice(2, 4), 16) / 255;
-  const b = Number.parseInt(value.slice(4, 6), 16) / 255;
-  const max = Math.max(r, g, b);
-  const min = Math.min(r, g, b);
-  const l = (max + min) / 2;
-  if (max === min) return { h: 0, s: 0, l: l * 100 };
-  const d = max - min;
-  const s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
-  const h =
-    max === r
-      ? ((g - b) / d + (g < b ? 6 : 0)) * 60
-      : max === g
-        ? ((b - r) / d + 2) * 60
-        : ((r - g) / d + 4) * 60;
-  return { h, s: s * 100, l: l * 100 };
-}
-
-/** La couleur de la roue à une position de toile. */
-function wheelColorAt(x: number, y: number): string {
-  const dx = x - 0.5;
-  const dy = y - 0.5;
-  const hue = (Math.atan2(dy, dx) * 180) / Math.PI - 5;
-  const dist = Math.hypot(dx, dy);
-  const light = Math.min(86, 42 + dist * 75);
-  const sat = Math.max(55, 95 - dist * 55);
-  return hslToHex(hue, sat, light);
-}
-
-/** L'inverse : où poser un rond pour obtenir (au plus près) cette couleur. */
-function wheelPositionOf(hex: string): { x: number; y: number } {
-  const { h, l } = hexToHsl(hex);
-  const angle = ((h + 5) * Math.PI) / 180;
-  const distFromLight = (Math.min(86, Math.max(42, l)) - 42) / 75;
-  const dist = Math.min(0.44, Math.max(0.06, distFromLight));
-  return {
-    x: 0.5 + Math.cos(angle) * dist,
-    y: 0.5 + Math.sin(angle) * dist,
-  };
-}
-
-const clampToile = (value: number) => Math.max(0.04, Math.min(0.96, value));
-
-/** L'angle d'un arrêt autour du centre de la toile, en radians. */
-const angleDe = (stop: { x: number; y: number }) => Math.atan2(stop.y - 0.5, stop.x - 0.5);
+const MODE_TITRE = "Dynamique";
+const MODE_EXPLICATION = "Les couleurs suivent le thème de l'app.";
 
 /**
- * Replace le trio pour une dominante posée en (x, y) : le trio TOURNE ET
- * RESPIRE EN BLOC autour du centre de la toile. Chaque satellite garde son
- * ÉCART D'ANGLE relatif à la dominante (écarts variés mesurés : 61°, 92°,
- * 149° selon l'arrangement) ; tous partagent le rayon du pointeur. C'est la
- * seule loi compatible avec les DEUX mesures : équidistances au centre
- * conservées, et ratio de déplacement satellite/dominante ≈ 1 pendant le
- * glissé. Un satellite manquant naît à ±140° (écartements larges observés).
+ * Le socle, en chiffres NOMMÉS. La largeur du rail de la vague se DÉDUIT du
+ * reste : elle était écrite en dur (242) à côté de son calcul en commentaire,
+ * donc changer l'écart vague/molette déréglait silencieusement la longueur
+ * d'onde mesurée. Ici, c'est impossible.
  */
-function replacerTrio(
-  stops: ReadonlyArray<SidebarThemeStop>,
-  x: number,
-  y: number,
-  count: number,
-): SidebarThemeStop[] {
-  const rayon = Math.min(0.46, Math.hypot(x - 0.5, y - 0.5));
-  const angleDominante = Math.atan2(y - 0.5, x - 0.5);
-  const ancienne = stops[0];
-  const angleAncien = ancienne === undefined ? angleDominante : angleDe(ancienne);
-  return Array.from({ length: count }, (_, index) => {
-    const existant = stops[index];
-    const ecart =
-      index === 0
-        ? 0
-        : existant !== undefined
-          ? angleDe(existant) - angleAncien
-          : ((index === 1 ? 140 : -140) * Math.PI) / 180;
-    const angle = angleDominante + ecart;
-    const px = index === 0 ? clampToile(x) : clampToile(0.5 + Math.cos(angle) * rayon);
-    const py = index === 0 ? clampToile(y) : clampToile(0.5 + Math.sin(angle) * rayon);
-    return { color: wheelColorAt(px, py), x: px, y: py };
-  });
-}
+const PANNEAU_LARGEUR = 358;
+const SOCLE_PADDING_X = 16;
+/** L'écart entre la vague et la molette — l'ancien (12) les collait. */
+const ECART_VAGUE_MOLETTE = 20;
+const MOLETTE_TAILLE = 72;
+const RAIL_LARGEUR = PANNEAU_LARGEUR - 2 * SOCLE_PADDING_X - ECART_VAGUE_MOLETTE - MOLETTE_TAILLE;
+
+/**
+ * Le verre liquide n'ondule pas si l'utilisateur a demandé moins de
+ * mouvement. Lu une fois : le panneau se monte bien après le chargement, et
+ * une préférence d'accessibilité ne change pas en cours de glissé.
+ */
+const MOUVEMENT_REDUIT =
+  typeof window !== "undefined" && typeof window.matchMedia === "function"
+    ? window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    : false;
 
 /**
  * `spaceId` vise un espace PRÉCIS plutôt que l'espace courant (tableau des
@@ -206,10 +121,16 @@ export function SpaceThemePanel({ spaceId }: { readonly spaceId?: string } = {})
   const setSpaceTheme = useSidebarSpacesStore((state) => state.setSpaceTheme);
   const defaultTheme = useSidebarThemeStore((state) => state.theme);
   const setDefaultTheme = useSidebarThemeStore((state) => state.setTheme);
+  const { resolvedTheme } = useTheme();
 
   const activeSpace = spaces.find((space) => space.id === cibleId) ?? null;
-  const current: SidebarTheme =
+  const enregistre =
     (activeSpace ? activeSpace.theme : defaultTheme) ?? makeSidebarThemeFromColors(["#f2a3c0"]);
+  // Un seul mode : un thème enregistré avec une apparence ÉPINGLÉE (mode nuit
+  // d'avant le 31/07) est relu comme « auto », et repart en « auto » à la
+  // première retouche. Rien à migrer, rien qui reste coincé en nuit.
+  const current: SidebarTheme =
+    enregistre.appearance === "auto" ? enregistre : { ...enregistre, appearance: "auto" };
   const apply = useCallback(
     (next: SidebarTheme) => {
       if (activeSpace) {
@@ -239,7 +160,10 @@ export function SpaceThemePanel({ spaceId }: { readonly spaceId?: string } = {})
       const rect = canvas.getBoundingClientRect();
       const x = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
       const y = Math.max(0, Math.min(1, (clientY - rect.top) / rect.height));
-      apply({ ...current, stops: replacerTrio(current.stops, x, y, current.stops.length) });
+      // TRANSLATION de toute la figure : les écarts entre ronds sont
+      // invariants par translation, donc « à distance égale » tient sans
+      // qu'on ait à le rattraper après coup.
+      apply({ ...current, stops: stopsDepuisPoints(deplacerFigure(current.stops, x, y)) });
     },
     [apply, current],
   );
@@ -251,10 +175,13 @@ export function SpaceThemePanel({ spaceId }: { readonly spaceId?: string } = {})
 
   const applySolid = useCallback(
     (color: string) => {
+      // UNE couleur unie = UN rond, avec la couleur EXACTE de la pastille.
+      // (Reproche fondateur : revenir des gradients aux unis laissait trois
+      // ronds ; « si je choisis le jaune, ça me met que le rond jaune ».)
       const position = wheelPositionOf(color);
       apply({
         ...current,
-        stops: replacerTrio(current.stops, position.x, position.y, current.stops.length),
+        stops: stopsAvecCouleurs(poserFigure(position.x, position.y, 1), [color]),
       });
     },
     [apply, current],
@@ -262,37 +189,43 @@ export function SpaceThemePanel({ spaceId }: { readonly spaceId?: string } = {})
 
   const applyGradient = useCallback(
     (trio: readonly [string, string, string]) => {
-      // Le gradient pose TROIS ronds d'un coup, ancrés sur le premier ton.
+      // Un gradient = TROIS ronds, aux couleurs EXACTES du préréglage,
+      // ancrés sur le premier ton.
       const position = wheelPositionOf(trio[0]);
-      apply({ ...current, stops: replacerTrio([], position.x, position.y, 3) });
+      apply({ ...current, stops: stopsAvecCouleurs(poserFigure(position.x, position.y, 3), trio) });
     },
     [apply, current],
   );
 
   const addStop = useCallback(() => {
     if (current.stops.length >= MAX_ARC_STOPS) return;
+    // Les ronds déjà là GARDENT leur couleur — ajouter un point ne doit pas
+    // repeindre le choix de l'utilisateur. Seul le nouveau se lit sur la
+    // roue, et il naît du côté pâle : « ça garde le plus blanc ».
     apply({
       ...current,
-      stops: replacerTrio(current.stops, dominant.x, dominant.y, current.stops.length + 1),
+      stops: stopsAvecCouleurs(
+        ajouterRond(current.stops, MAX_ARC_STOPS),
+        current.stops.map((stop) => stop.color),
+      ),
     });
-  }, [apply, current, dominant.x, dominant.y]);
+  }, [apply, current]);
   const removeStop = useCallback(() => {
     if (current.stops.length <= 1) return;
-    apply({
-      ...current,
-      stops: replacerTrio(current.stops, dominant.x, dominant.y, current.stops.length - 1),
-    });
-  }, [apply, current, dominant.x, dominant.y]);
+    // Les rescapés ne bougent pas : ils gardent position ET couleur, donc
+    // l'écart entre eux survit tel quel.
+    const restants = retirerRond(current.stops).length;
+    apply({ ...current, stops: current.stops.slice(0, restants) });
+  }, [apply, current]);
 
-  const isDarkCanvas =
-    current.appearance === "dark" ||
-    (current.appearance === "auto" &&
-      typeof window !== "undefined" &&
-      window.matchMedia("(prefers-color-scheme: dark)").matches);
+  // Plus de mode épinglé : la carte suit le thème de l'app, point. (Et
+  // JAMAIS `matchMedia` en direct — c'est ce qui peignait la carte en clair
+  // par-dessus une app en nuit quand le macOS, lui, était en clair.)
+  const isDarkCanvas = resolvedTheme === "dark";
 
   const mutedControl = isDarkCanvas
-    ? "text-white/50 hover:text-white/80"
-    : "text-neutral-400 hover:text-neutral-600";
+    ? "text-white/70 hover:bg-white/12 hover:text-white"
+    : "text-neutral-600 hover:bg-black/8 hover:text-neutral-900";
 
   // Glissé : rigide. Saut discret : glissade. (Mesure : ratio 0,98 en drag.)
   const transitionRonds = enGlisse
@@ -301,13 +234,15 @@ export function SpaceThemePanel({ spaceId }: { readonly spaceId?: string } = {})
 
   return (
     // 358 × 510 css MESURÉS (bords à ±1 px sur frame claire et sombre),
-    // coins larges. Verre mince : la toile laisse passer, le socle est laiteux.
+    // coins larges. Le panneau EST du verre liquide : il réfracte le fond
+    // (Chromium), et retombe sur un verre dépoli propre ailleurs.
     <div
       className={cn(
-        "flex w-[358px] flex-col overflow-hidden rounded-2xl backdrop-blur-2xl backdrop-saturate-150 transition-colors",
-        isDarkCanvas ? "bg-neutral-900/28" : "bg-white/28",
+        "t3-verre relative flex w-[358px] flex-col overflow-hidden rounded-2xl",
+        isDarkCanvas ? "t3-verre-nuit" : "t3-verre-jour",
       )}
     >
+      <VerreLiquideDefs />
       {/* La toile-palette : pointillée. Panneau total 510 css (mesure bords
           13→1033 crop) ; la séparation toile/socle mesurée oscille entre 369
           et 393 selon la frame — 372 tient les deux. */}
@@ -324,26 +259,25 @@ export function SpaceThemePanel({ spaceId }: { readonly spaceId?: string } = {})
         }}
         onPointerUp={finDeGlisse}
       >
-        <div className="absolute inset-x-0 top-3 flex items-center justify-center gap-2">
-          {APPEARANCE_CHOICES.map(({ value, label }) => (
-            <button
-              key={value}
-              type="button"
-              aria-label={label}
-              title={label}
-              onClick={() => apply({ ...current, appearance: value })}
-              className={cn(
-                "t3-etoiles flex size-7 cursor-pointer items-center justify-center rounded-lg transition-colors",
-                current.appearance === value
-                  ? isDarkCanvas
-                    ? "bg-white/15 text-white"
-                    : "bg-black/10 text-neutral-700"
-                  : mutedControl,
-              )}
-            >
-              {value === "auto" ? <EtoilesScintillantes /> : <MoonIcon className="size-4" />}
-            </button>
-          ))}
+        <div className="absolute inset-x-0 top-3 flex items-center justify-center">
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <span
+                  aria-label={`${MODE_TITRE} — ${MODE_EXPLICATION}`}
+                  className={cn(
+                    "t3-etoiles flex size-7 items-center justify-center rounded-lg",
+                    isDarkCanvas ? "text-white/85" : "text-neutral-700",
+                  )}
+                >
+                  <EtoilesScintillantes />
+                </span>
+              }
+            />
+            <TooltipPopup side="top">
+              {MODE_TITRE} — {MODE_EXPLICATION}
+            </TooltipPopup>
+          </Tooltip>
         </div>
         {current.stops.slice(1).map((stop, index) => {
           const size = STOP_SIZES_PX[index + 1] ?? 20;
@@ -357,7 +291,9 @@ export function SpaceThemePanel({ spaceId }: { readonly spaceId?: string } = {})
               aria-label={`Prendre cette couleur comme dominante`}
               onPointerDown={(event) => {
                 // Promotion : le satellite DEVIENT la dominante, sur place —
-                // échange de rôles, pas de rotation du trio.
+                // échange de rôles, pas de rotation du trio. Un triangle
+                // équilatéral vu depuis n'importe quel sommet reste
+                // équilatéral : l'invariant survit à la permutation.
                 event.preventDefault();
                 event.stopPropagation();
                 const stops = [...current.stops];
@@ -379,7 +315,7 @@ export function SpaceThemePanel({ spaceId }: { readonly spaceId?: string } = {})
         })}
         <button
           type="button"
-          aria-label="Mélanger — la position module la couleur, les satellites gardent leur angle"
+          aria-label="Mélanger — la position module la couleur, les ronds gardent leur écart"
           onPointerDown={(event) => {
             event.preventDefault();
             draggingRef.current = true;
@@ -411,7 +347,7 @@ export function SpaceThemePanel({ spaceId }: { readonly spaceId?: string } = {})
             disabled={current.stops.length <= 1}
             onClick={removeStop}
             className={cn(
-              "flex size-6 cursor-pointer items-center justify-center rounded-md transition-colors disabled:cursor-default disabled:opacity-30",
+              "flex size-6 cursor-pointer items-center justify-center rounded-md transition-colors disabled:cursor-default disabled:opacity-35 disabled:hover:bg-transparent",
               mutedControl,
             )}
           >
@@ -423,7 +359,7 @@ export function SpaceThemePanel({ spaceId }: { readonly spaceId?: string } = {})
             disabled={current.stops.length >= MAX_ARC_STOPS}
             onClick={addStop}
             className={cn(
-              "flex size-6 cursor-pointer items-center justify-center rounded-md transition-colors disabled:cursor-default disabled:opacity-30",
+              "flex size-6 cursor-pointer items-center justify-center rounded-md transition-colors disabled:cursor-default disabled:opacity-35 disabled:hover:bg-transparent",
               mutedControl,
             )}
           >
@@ -433,22 +369,21 @@ export function SpaceThemePanel({ spaceId }: { readonly spaceId?: string } = {})
       </div>
 
       {/* Le SOCLE laiteux : nuancier + vague + molette. */}
-      <div className={cn("flex flex-col", isDarkCanvas ? "bg-neutral-900/45" : "bg-white/55")}>
+      <div className={cn("flex flex-col", isDarkCanvas ? "bg-neutral-900/40" : "bg-white/45")}>
         {/* Le nuancier GLISSE entre ses pages (mesure : ~300 ms par page). */}
-        <div className="flex items-center gap-1.5 px-3 pt-3 pb-1.5">
-          <button
-            type="button"
-            aria-label="Couleurs unies"
+        <div className="flex items-center gap-1 px-2.5 pt-3 pb-1.5">
+          <FlecheNuancier
+            direction="gauche"
+            libelle="Couleurs unies"
             disabled={swatchPage === 0}
             onClick={() => setSwatchPage(0)}
-            className={cn(
-              "flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-md transition-colors disabled:cursor-default disabled:opacity-30",
-              mutedControl,
-            )}
-          >
-            <ChevronLeftIcon className="size-4" />
-          </button>
-          <div className="relative flex-1 overflow-hidden">
+            muted={mutedControl}
+          />
+          {/* Le rembourrage EST la correction du rognage : les pastilles
+              grandissent de 10 % au survol (24 → 26,4 css) et l'anneau
+              ajoute 1 css ; sans ces 6 css de marge intérieure, le masque
+              qui fait glisser les pages leur coupait les bords. */}
+          <div className="relative flex-1 overflow-hidden px-1.5 py-1.5">
             <div
               className="flex w-[200%] transition-transform duration-300 ease-[cubic-bezier(0.25,1,0.5,1)] motion-reduce:transition-none"
               style={{ transform: swatchPage === 0 ? "translateX(0%)" : "translateX(-50%)" }}
@@ -461,12 +396,11 @@ export function SpaceThemePanel({ spaceId }: { readonly spaceId?: string } = {})
                     aria-label={`Couleur ${color}`}
                     tabIndex={swatchPage === 0 ? 0 : -1}
                     onClick={() => applySolid(color)}
+                    // La pastille montre la couleur qu'elle POSE — pas une
+                    // version assombrie d'elle-même : le jaune doit donner
+                    // le jaune.
                     className="size-6 cursor-pointer rounded-full ring-1 ring-black/10 transition-transform hover:scale-110"
-                    style={{
-                      backgroundColor: isDarkCanvas
-                        ? `color-mix(in oklab, ${color} 72%, black)`
-                        : color,
-                    }}
+                    style={{ backgroundColor: color }}
                   />
                 ))}
               </div>
@@ -483,29 +417,32 @@ export function SpaceThemePanel({ spaceId }: { readonly spaceId?: string } = {})
                     className="size-6 cursor-pointer rounded-full shadow-[inset_0_0_0_2px_rgba(0,0,0,0.14)] transition-transform hover:scale-110"
                     style={{
                       background: `linear-gradient(135deg, ${trio[0]} 0%, ${trio[1]} 50%, ${trio[2]} 100%)`,
-                      ...(isDarkCanvas ? { filter: "brightness(0.78)" } : {}),
                     }}
                   />
                 ))}
               </div>
             </div>
           </div>
-          <button
-            type="button"
-            aria-label="Gradients préréglés"
+          <FlecheNuancier
+            direction="droite"
+            libelle="Dégradés préréglés"
             disabled={swatchPage === 1}
             onClick={() => setSwatchPage(1)}
-            className={cn(
-              "flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-md transition-colors disabled:cursor-default disabled:opacity-30",
-              mutedControl,
-            )}
-          >
-            <ChevronRightIcon className="size-4" />
-          </button>
+            muted={mutedControl}
+          />
         </div>
 
-        {/* La vague d'intensité + la molette de grain. */}
-        <div className="flex items-center gap-3 px-4 pt-1.5 pb-4">
+        {/* La vague d'intensité + la molette de grain. L'écart vient de la
+            constante, pas d'une classe : c'est le même nombre qui décide de
+            l'espace ICI et de la largeur du rail LÀ-BAS. */}
+        <div
+          className="flex items-center pt-1.5 pb-4"
+          style={{
+            paddingLeft: SOCLE_PADDING_X,
+            paddingRight: SOCLE_PADDING_X,
+            gap: ECART_VAGUE_MOLETTE,
+          }}
+        >
           <IntensityWave
             dark={isDarkCanvas}
             value={current.intensity}
@@ -524,10 +461,94 @@ export function SpaceThemePanel({ spaceId }: { readonly spaceId?: string } = {})
 }
 
 /**
- * Les étoiles de l'apparence automatique — elles SCINTILLENT au survol
- * (mesure : bouffées de ~200 ms toutes les 0,5-1 s pendant 7,5 s de survol
- * observées sur la cellule de l'icône). Trois étoiles, délais décalés ;
- * l'animation vit dans index.css (`t3-etoile-scintille`).
+ * Le filtre de réfraction du verre liquide (feTurbulence → feDisplacementMap),
+ * technique vérifiée. L'id est constant : deux panneaux montés en même temps
+ * poseraient deux `<filter>` BYTE POUR BYTE identiques, le navigateur résout
+ * le premier — inerte. `@supports` (index.css) fait retomber Safari/Firefox
+ * sur un verre dépoli propre.
+ */
+function VerreLiquideDefs() {
+  return (
+    <svg width="0" height="0" aria-hidden className="absolute">
+      <filter
+        id="t3-verre-liquide"
+        x="-30%"
+        y="-30%"
+        width="160%"
+        height="160%"
+        colorInterpolationFilters="sRGB"
+      >
+        <feTurbulence
+          type="fractalNoise"
+          baseFrequency="0.008 0.010"
+          numOctaves={2}
+          seed={7}
+          result="bruit"
+        >
+          {MOUVEMENT_REDUIT ? null : (
+            <animate
+              attributeName="baseFrequency"
+              dur="18s"
+              values="0.008 0.010;0.012 0.008;0.008 0.010"
+              repeatCount="indefinite"
+            />
+          )}
+        </feTurbulence>
+        <feGaussianBlur in="bruit" stdDeviation="2.4" result="bruitDoux" />
+        <feDisplacementMap
+          in="SourceGraphic"
+          in2="bruitDoux"
+          scale={44}
+          xChannelSelector="R"
+          yChannelSelector="G"
+        />
+      </filter>
+    </svg>
+  );
+}
+
+/**
+ * Les flèches de page du nuancier. Elles étaient quasi invisibles : gris pâle
+ * sur socle pâle, et 30 % d'opacité une fois désactivées. Une commande qu'on
+ * ne voit pas est une commande qui n'existe pas — d'où la pastille au survol,
+ * le contraste plein et l'info-bulle qui dit où mène la flèche.
+ */
+function FlecheNuancier(props: {
+  direction: "gauche" | "droite";
+  libelle: string;
+  disabled: boolean;
+  muted: string;
+  onClick: () => void;
+}) {
+  const Icone = props.direction === "gauche" ? ChevronLeftIcon : ChevronRightIcon;
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <button
+            type="button"
+            aria-label={props.libelle}
+            disabled={props.disabled}
+            onClick={props.onClick}
+            className={cn(
+              "flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-lg transition-colors disabled:cursor-default disabled:opacity-30 disabled:hover:bg-transparent",
+              props.muted,
+            )}
+          >
+            <Icone className="size-[18px]" strokeWidth={2.25} />
+          </button>
+        }
+      />
+      <TooltipPopup side="top">{props.libelle}</TooltipPopup>
+    </Tooltip>
+  );
+}
+
+/**
+ * Les étoiles de l'apparence dynamique. Elles scintillent EN PERMANENCE
+ * (l'animation vit dans index.css) et le survol ne fait que les presser :
+ * l'ancienne version n'animait qu'au survol, en descendant à 35 % d'opacité —
+ * l'icône avait l'air de s'ÉTEINDRE quand on la visait.
  */
 function EtoilesScintillantes() {
   return (
@@ -574,9 +595,9 @@ function IntensityWave(props: { dark: boolean; value: number; onChange: (value: 
     const rect = rail.getBoundingClientRect();
     props.onChange(Math.max(0, Math.min(1, (clientX - rect.left) / rect.width)));
   };
-  // Largeur de rail = 358 − px-4 (32) − gap-3 (12) − molette (72) : le
-  // viewBox colle au rendu 1:1, la longueur d'onde reste 36 css, mesurée.
-  const LARGEUR = 242;
+  // Le viewBox colle au rendu 1:1, sinon la longueur d'onde mesurée (36 css)
+  // se déforme. La largeur vient de RAIL_LARGEUR, déduite du socle.
+  const LARGEUR = RAIL_LARGEUR;
   const HAUTEUR = 56;
   const [remplie, pale] = useMemo(() => {
     const valeur = Math.max(0, Math.min(1, props.value));
@@ -701,6 +722,10 @@ function GrainDial(props: {
     <div
       ref={rootRef}
       role="slider"
+      // Le picto seul ne dit pas ce qu'il fait — le titre l'explique,
+      // sans envelopper un contrôle À GLISSER dans un déclencheur
+      // d'info-bulle (qui lui volerait ses évènements de pointeur).
+      title={`Grain — ${notch === 0 ? "aucun" : `${notch} sur ${CRANS - 1}`}. Tourner la molette texture le fond ; le tour complet revient à zéro.`}
       aria-label="Grain de la texture — roue sans fin, le cran après le maximum revient à zéro"
       aria-valuemin={0}
       aria-valuemax={CRANS - 1}
@@ -739,13 +764,10 @@ function GrainDial(props: {
           poserCran(notch + crans);
         }
       }}
-      onPointerUp={() => {
-        rotationRef.current = null;
-      }}
       className="relative size-[72px] shrink-0 cursor-grab touch-none outline-none focus-visible:ring-2 focus-visible:ring-ring active:cursor-grabbing"
     >
-      {/* Les 20 crans : allumés jusqu'au cran courant, la pilule POSÉE sur
-          le cran courant, tangente à l'anneau. */}
+      {/* Les 20 crans : allumés jusqu'au cran courant, la pilule POSÉE
+                sur le cran courant, tangente à l'anneau. */}
       {Array.from({ length: CRANS }, (_, index) => {
         if (index === notch) return null;
         const allume = index < notch;
@@ -776,34 +798,30 @@ function GrainDial(props: {
           transform: `translate(-50%, -50%) rotate(${notch * PAS - 90}deg) translateX(30px) rotate(90deg)`,
         }}
       />
-      {notch > 0 ? (
+      {/* Le disque central montre TOUJOURS la couleur dominante — elle suit
+          les ronds en direct pendant qu'on les déplace — et le grain par
+          DESSUS, dosé par le cran. Avant, à zéro il n'y avait qu'un crayon :
+          on ne voyait ni la couleur, ni ce que la molette ajoutait (reproche
+          fondateur du 31/07). À zéro le disque est donc lisse ; chaque cran
+          ajoute sa dose, visiblement. */}
+      <span
+        aria-hidden
+        className="absolute top-1/2 left-1/2 size-10 -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-full ring-1 ring-black/15 transition-colors"
+        style={{ backgroundColor: props.couleur }}
+      >
         <span
-          aria-hidden
-          className="absolute top-1/2 left-1/2 size-10 -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-full ring-1 ring-black/15"
+          className="absolute inset-0 mix-blend-overlay"
           style={{
-            backgroundColor: `color-mix(in oklab, ${props.couleur} 52%, ${props.dark ? "#2a2e2c" : "#c9cdc9"})`,
+            backgroundImage: `url("${SIDEBAR_THEME_GRAIN_URL}")`,
+            // MÊME COURBE que le voile de la sidebar (puissance 0,75), mais
+            // déployée jusqu'à 1 : sur 40 css, la course du voile (plafond
+            // 0,42) ne se lirait pas. Sans plafonnement — une première
+            // version amplifiée saturait dès le cran 9, et les six derniers
+            // crans se ressemblaient tous (vérifié au rendu).
+            opacity: props.value ** 0.75,
           }}
-        >
-          {/* L'aperçu vivant : le grain lui-même, dosé par la valeur. */}
-          <span
-            className="absolute inset-0 mix-blend-overlay"
-            style={{
-              backgroundImage: `url("${SIDEBAR_THEME_GRAIN_URL}")`,
-              opacity: 0.35 + 0.65 * props.value,
-            }}
-          />
-        </span>
-      ) : (
-        <span
-          aria-hidden
-          className={cn(
-            "absolute top-1/2 left-1/2 flex size-10 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full transition-colors",
-            props.dark ? "text-white/60" : "text-black/45",
-          )}
-        >
-          <PencilIcon className="size-3.5" />
-        </span>
-      )}
+        />
+      </span>
     </div>
   );
 }

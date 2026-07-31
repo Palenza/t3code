@@ -8,7 +8,6 @@ import {
   useSyncExternalStore,
   type CSSProperties,
   type ReactNode,
-  type WheelEvent as ReactWheelEvent,
 } from "react";
 import { useLocation, useNavigate } from "@tanstack/react-router";
 
@@ -20,6 +19,7 @@ import { primaryServerKeybindingsAtom } from "../state/server";
 import { useEnvironmentIdentificationMode, useSidebarV2Enabled } from "../hooks/useSettings";
 import ThreadSidebar from "./Sidebar";
 import { useSidebarSpacesStore } from "../sidebarSpacesStore";
+import { peutEncoreDefiler, seuilDuSwipe } from "../swipeEspaces";
 import { SidebarEdgePeek, useSidebarPeekStore } from "./sidebar/SidebarEdgePeek";
 import { BibliothequeOverlay, useBibliothequeStore } from "./sidebar/BibliothequeOverlay";
 import { SidebarThemeWash } from "./sidebar/SidebarThemeWash";
@@ -152,6 +152,41 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
   const spaceSwipeAccumRef = useRef(0);
   const spaceSwipeLastFireRef = useRef(0);
   const spaceSwipeSettleRef = useRef<number | null>(null);
+  /**
+   * L'INERTIE DU TRACKPAD — la cause des deux défauts du geste.
+   *
+   * Sur macOS, quand les doigts quittent la surface, le système continue
+   * d'émettre des `wheel` à `deltaX` décroissant pendant près d'une seconde.
+   * Ces évènements-là ne sont plus un geste : c'est la traîne du précédent.
+   *
+   * Le temps mort de 450 ms ne suffisait pas à la couvrir. Passé ce délai,
+   * l'accumulateur se remplissait de la SEULE inertie résiduelle, atteignait
+   * le seuil, et changeait d'espace tout seul — « parfois ça continue à
+   * swiper tout seul ». Et comme chaque évènement de traîne repoussait le
+   * minuteur de retombée de 140 ms, la carte continuait de dériver puis
+   * revenait tard : le rebond et la latence.
+   *
+   * On ne compte donc plus une DURÉE, on attend le SILENCE : après un
+   * basculement, tout évènement est avalé, et le verrou ne se lève que
+   * lorsque le trackpad s'est réellement tu.
+   */
+  const spaceSwipeVerrouRef = useRef(false);
+  const spaceSwipeSilenceRef = useRef<number | null>(null);
+  /** Durée sans le moindre évènement au-delà de laquelle le geste est fini. */
+  const SILENCE_FIN_DE_GESTE_MS = 120;
+  /**
+   * LE DERNIER |deltaX| VU — ce qui sépare la traîne d'un NOUVEAU geste.
+   *
+   * Le verrou seul était une régression : il se faisait renouveler par les
+   * évènements du geste SUIVANT, donc il ne se levait que si on s'arrêtait
+   * complètement — « je swipe une fois et après ça ne marche plus, il faut
+   * que je bouge ma souris pour re-swiper ».
+   *
+   * L'inertie DÉCROÎT, toujours : c'est sa signature physique. Un doigt qui
+   * repart produit au contraire un delta plus GRAND que la traîne en cours.
+   * On lit donc la pente, pas l'horloge : ça remonte → c'est toi, on rouvre.
+   */
+  const spaceSwipeDernierDeltaRef = useRef(0);
   // Le geste se VOIT pendant qu'il se fait. Avant, rien ne bougeait jusqu'au
   // seuil puis l'espace sautait d'un coup — « l'animation est très nulle, pas
   // fluide » (fondateur, 30/07). Désormais le contenu SUIT les doigts (offset
@@ -198,9 +233,78 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
       inner.style.opacity = "1";
     }, 150);
   };
-  const handleSidebarWheel = useCallback((event: ReactWheelEvent<HTMLDivElement>) => {
+  /**
+   * LE GESTE MARCHE AUSSI DANS LA ZONE DE TRAVAIL — décision fondateur 31/07.
+   *
+   * Il ne vivait que sur la barre latérale (`onWheel` posé sur elle seule) :
+   * il fallait viser une bande étroite pour changer d'espace. Un seul
+   * écouteur au niveau de la fenêtre couvre maintenant les deux surfaces,
+   * plutôt qu'un second gestionnaire jumeau qu'il faudrait garder aligné.
+   *
+   * Deux différences quand le geste vient de la zone de travail :
+   *  · ce qui peut ENCORE défiler sous le doigt garde le geste (blocs de
+   *    code, tableaux larges) — la règle vit dans `swipeEspaces.ts` ;
+   *  · le seuil est bien plus haut, pour que seul un geste voulu le touche.
+   *
+   * L'animation, elle, reste celle de la BARRE dans tous les cas : c'est
+   * elle qui change. On la retrouve donc par son attribut, et non dans la
+   * cible de l'évènement — sinon un geste depuis le chat chercherait le
+   * panneau de la barre à l'intérieur du chat, ne trouverait rien, et le
+   * changement d'espace se ferait sans la moindre animation.
+   */
+  const surLaMolette = useCallback((event: WheelEvent) => {
+    const depart = event.target instanceof Element ? event.target : null;
+    if (depart === null) return;
+    const barre = depart.closest<HTMLElement>("[data-app-sidebar]");
+    const zoneDeTravail = depart.closest<HTMLElement>("[data-slot=sidebar-inset]");
+    if (barre === null && zoneDeTravail === null) return;
+    const depuisLaBarre = barre !== null;
+
+    // Ce qui a encore de la course sous le doigt garde le geste. On s'arrête
+    // à la surface qu'on a reconnue : au-delà, on sortirait de notre domaine.
+    if (!depuisLaBarre) {
+      const limite = zoneDeTravail;
+      for (let noeud: Element | null = depart; noeud !== null; noeud = noeud.parentElement) {
+        if (peutEncoreDefiler(noeud, event.deltaX)) return;
+        if (noeud === limite) break;
+      }
+    }
+
+    const carte = document.querySelector<HTMLDivElement>("[data-app-sidebar]");
+    if (carte === null) return;
+
+    // VERROU D'INERTIE : tant que la traîne du geste précédent n'a pas cessé,
+    // on avale tout. Chaque évènement repousse la fin du silence — le verrou
+    // ne se lève donc qu'une fois le trackpad vraiment muet, quelle que soit
+    // la durée de l'inertie.
+    const ampleur = Math.abs(event.deltaX);
+    if (spaceSwipeVerrouRef.current) {
+      // Ça REMONTE : ce n'est plus la traîne, c'est un doigt qui repart. On
+      // rouvre immédiatement et on laisse cet évènement compter — sinon il
+      // faudrait s'arrêter net entre deux gestes.
+      const repart = ampleur > spaceSwipeDernierDeltaRef.current * 1.25 + 2;
+      spaceSwipeDernierDeltaRef.current = ampleur;
+      if (!repart) {
+        if (spaceSwipeSilenceRef.current !== null) {
+          window.clearTimeout(spaceSwipeSilenceRef.current);
+        }
+        spaceSwipeSilenceRef.current = window.setTimeout(() => {
+          spaceSwipeVerrouRef.current = false;
+          spaceSwipeAccumRef.current = 0;
+          spaceSwipeDernierDeltaRef.current = 0;
+        }, SILENCE_FIN_DE_GESTE_MS);
+        return;
+      }
+      spaceSwipeVerrouRef.current = false;
+      spaceSwipeAccumRef.current = 0;
+      if (spaceSwipeSilenceRef.current !== null) {
+        window.clearTimeout(spaceSwipeSilenceRef.current);
+        spaceSwipeSilenceRef.current = null;
+      }
+    }
+    spaceSwipeDernierDeltaRef.current = ampleur;
     if (Math.abs(event.deltaX) <= Math.abs(event.deltaY)) {
-      if (spaceSwipeAccumRef.current !== 0) retomber(event.currentTarget);
+      if (spaceSwipeAccumRef.current !== 0) retomber(carte);
       spaceSwipeAccumRef.current = 0;
       return;
     }
@@ -209,12 +313,12 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
     spaceSwipeAccumRef.current += event.deltaX;
     // Un geste qui s'arrête sans atteindre le seuil retombe en douceur.
     if (spaceSwipeSettleRef.current !== null) window.clearTimeout(spaceSwipeSettleRef.current);
-    const cible = event.currentTarget;
+    const cible = carte;
     spaceSwipeSettleRef.current = window.setTimeout(() => {
       spaceSwipeAccumRef.current = 0;
       retomber(cible);
     }, 140);
-    if (Math.abs(spaceSwipeAccumRef.current) < 110) {
+    if (Math.abs(spaceSwipeAccumRef.current) < seuilDuSwipe(depuisLaBarre)) {
       suivreLeDoigt(cible, spaceSwipeAccumRef.current);
       return;
     }
@@ -227,6 +331,14 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
     const versLaDroite = spaceSwipeAccumRef.current < 0 ? 1 : -1;
     spaceSwipeAccumRef.current = 0;
     spaceSwipeLastFireRef.current = now;
+    // Le geste a abouti : tout ce qui suit est de la traîne, pas une intention.
+    // On verrouille jusqu'au silence — un seul geste, un seul espace franchi.
+    spaceSwipeVerrouRef.current = true;
+    if (spaceSwipeSilenceRef.current !== null) window.clearTimeout(spaceSwipeSilenceRef.current);
+    spaceSwipeSilenceRef.current = window.setTimeout(() => {
+      spaceSwipeVerrouRef.current = false;
+      spaceSwipeAccumRef.current = 0;
+    }, SILENCE_FIN_DE_GESTE_MS);
     // Deux doigts vers la DROITE ouvrent la bibliothèque — mais SEULEMENT
     // depuis la vue principale. Depuis un espace, le même geste ramène
     // d'abord vers « Tous » : sinon il faudrait deviner quand il navigue et
@@ -245,6 +357,14 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
       useSidebarSpacesStore.getState().cycleSpace(versLaDroite);
     });
   }, []);
+
+  useEffect(() => {
+    // `passive` : on ne coupe jamais le défilement natif — les blocs qui ont
+    // encore de la course l'ont déjà gardé plus haut, et laisser le navigateur
+    // faire évite toute saccade.
+    window.addEventListener("wheel", surLaMolette, { passive: true });
+    return () => window.removeEventListener("wheel", surLaMolette);
+  }, [surLaMolette]);
 
   /**
    * ⌘⇧E — la SECONDE porte de la bibliothèque.
@@ -320,7 +440,6 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
         collapsible="offcanvas"
         data-app-sidebar=""
         data-sidebar-version={useSidebarV2Theme ? "v2" : "v1"}
-        onWheel={handleSidebarWheel}
         // `sidebar-inner` (the opaque bg-sidebar layer) must be its own
         // stacking context, otherwise the theme wash's -z-10 escapes to THIS
         // context and paints underneath that opaque background — invisible.

@@ -1650,14 +1650,112 @@ label:has(> select#reasoning-effort) select {
   color: var(--sidebar-muted-foreground);
 }
 
-/* Les étoiles de l'apparence automatique (éditeur de thème) : elles
- * SCINTILLENT au survol — mesuré sur la capture Arc du 30/07 (bouffées de
- * ~200 ms toutes les 0,5-1 s pendant le survol). Trois étoiles décalées. */
+/* MÊME PANNE, AUTRE COULEUR : les libellés d'état (« Working » en ciel,
+ * « Approval » en ambre, « Input » en indigo…) sont peints en teintes FIXES,
+ * décidées pour un fond neutre. Sous un voile, le fond n'est plus neutre — il
+ * est n'importe quelle couleur que l'utilisateur pose. Un « Working » ciel sur
+ * un voile pêche descend sous le seuil de lisibilité : le texte est là, on ne
+ * le lit plus (reproche fondateur, capture du 31/07).
+ *
+ * La correction garde le SIGNAL et rend la LISIBILITÉ : 30 % de la teinte
+ * d'origine — assez pour que ciel, ambre et indigo restent distincts — fondus
+ * dans `--sidebar-foreground`, qui est déjà l'encre choisie par CONTRASTE
+ * WCAG contre ce voile précis (`sidebarThemeInk`). Le résultat suit donc
+ * n'importe quel mélange de couleurs, y compris ceux qui n'existent pas
+ * encore. La liste couvre TOUTES les familles chromatiques de Tailwind, pas
+ * seulement celles employées aujourd'hui : une famille oubliée serait une
+ * mine qui saute le jour où quelqu'un ajoute un état. Les gris (slate, zinc,
+ * neutral, stone) sont volontairement hors liste — ils servent l'encre
+ * neutre, que la règle du dessus traite déjà. */
+[data-app-sidebar][data-wash-ink] [class*="text-red-"] {
+  color: color-mix(in oklab, var(--color-red-400) 30%, var(--sidebar-foreground));
+}
+[data-app-sidebar][data-wash-ink] [class*="text-orange-"] {
+  color: color-mix(in oklab, var(--color-orange-400) 30%, var(--sidebar-foreground));
+}
+[data-app-sidebar][data-wash-ink] [class*="text-amber-"] {
+  color: color-mix(in oklab, var(--color-amber-400) 30%, var(--sidebar-foreground));
+}
+[data-app-sidebar][data-wash-ink] [class*="text-yellow-"] {
+  color: color-mix(in oklab, var(--color-yellow-400) 30%, var(--sidebar-foreground));
+}
+[data-app-sidebar][data-wash-ink] [class*="text-lime-"] {
+  color: color-mix(in oklab, var(--color-lime-400) 30%, var(--sidebar-foreground));
+}
+[data-app-sidebar][data-wash-ink] [class*="text-green-"] {
+  color: color-mix(in oklab, var(--color-green-400) 30%, var(--sidebar-foreground));
+}
+[data-app-sidebar][data-wash-ink] [class*="text-emerald-"] {
+  color: color-mix(in oklab, var(--color-emerald-400) 30%, var(--sidebar-foreground));
+}
+[data-app-sidebar][data-wash-ink] [class*="text-teal-"] {
+  color: color-mix(in oklab, var(--color-teal-400) 30%, var(--sidebar-foreground));
+}
+[data-app-sidebar][data-wash-ink] [class*="text-cyan-"] {
+  color: color-mix(in oklab, var(--color-cyan-400) 30%, var(--sidebar-foreground));
+}
+[data-app-sidebar][data-wash-ink] [class*="text-sky-"] {
+  color: color-mix(in oklab, var(--color-sky-400) 30%, var(--sidebar-foreground));
+}
+[data-app-sidebar][data-wash-ink] [class*="text-blue-"] {
+  color: color-mix(in oklab, var(--color-blue-400) 30%, var(--sidebar-foreground));
+}
+[data-app-sidebar][data-wash-ink] [class*="text-indigo-"] {
+  color: color-mix(in oklab, var(--color-indigo-400) 30%, var(--sidebar-foreground));
+}
+[data-app-sidebar][data-wash-ink] [class*="text-violet-"] {
+  color: color-mix(in oklab, var(--color-violet-400) 30%, var(--sidebar-foreground));
+}
+[data-app-sidebar][data-wash-ink] [class*="text-purple-"] {
+  color: color-mix(in oklab, var(--color-purple-400) 30%, var(--sidebar-foreground));
+}
+[data-app-sidebar][data-wash-ink] [class*="text-fuchsia-"] {
+  color: color-mix(in oklab, var(--color-fuchsia-400) 30%, var(--sidebar-foreground));
+}
+[data-app-sidebar][data-wash-ink] [class*="text-pink-"] {
+  color: color-mix(in oklab, var(--color-pink-400) 30%, var(--sidebar-foreground));
+}
+[data-app-sidebar][data-wash-ink] [class*="text-rose-"] {
+  color: color-mix(in oklab, var(--color-rose-400) 30%, var(--sidebar-foreground));
+}
+
+/* Le libellé « Working » clignote de 1 à 0,75 d'opacité. Sur fond neutre,
+ * c'est un battement ; sur un voile, c'est 25 % de contraste en moins sur un
+ * texte déjà tendu. Sous voile, le battement se resserre — il reste visible,
+ * il ne coûte plus la lisibilité. */
+[data-app-sidebar][data-wash-ink] .animate-sidebar-working-text {
+  animation-name: sidebar-working-text-voile;
+}
+@keyframes sidebar-working-text-voile {
+  0%,
+  36% {
+    opacity: 1;
+    animation-timing-function: steps(10);
+  }
+  50%,
+  86% {
+    opacity: 0.92;
+    animation-timing-function: steps(10);
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+/* L'enseigne du mode dynamique de l'éditeur de thème (les trois étoiles —
+ * seul mode restant depuis le 31/07) SCINTILLE EN CONTINU, pas seulement au
+ * survol.
+ *
+ * L'ancienne version n'animait qu'au survol ET plongeait à 35 % d'opacité /
+ * 70 % d'échelle : viser l'icône la faisait donc DISPARAÎTRE au lieu de la
+ * réveiller (reproche fondateur). Le plancher est maintenant à 0,62 — assez
+ * bas pour qu'on voie le scintillement, assez haut pour que l'icône reste
+ * lisible à chaque instant. Le survol ne fait qu'ACCÉLÉRER. */
 @keyframes t3-etoile-scintille {
   0%,
   100% {
-    opacity: 0.35;
-    transform: scale(0.7);
+    opacity: 0.62;
+    transform: scale(0.84);
   }
   50% {
     opacity: 1;
@@ -1667,18 +1765,56 @@ label:has(> select#reasoning-effort) select {
 .t3-etoile {
   transform-box: fill-box;
   transform-origin: center;
+  animation: t3-etoile-scintille 2.6s ease-in-out infinite;
+}
+.t3-etoile-2 {
+  animation-delay: 0.55s;
+}
+.t3-etoile-3 {
+  animation-delay: 1.1s;
 }
 .t3-etoiles:hover .t3-etoile {
-  animation: t3-etoile-scintille 1.4s ease-in-out infinite;
+  animation-duration: 1.2s;
 }
-.t3-etoiles:hover .t3-etoile-2 {
-  animation-delay: 0.45s;
-}
-.t3-etoiles:hover .t3-etoile-3 {
-  animation-delay: 0.9s;
-}
+
 @media (prefers-reduced-motion: reduce) {
-  .t3-etoiles:hover .t3-etoile {
+  .t3-etoile {
     animation: none;
+  }
+}
+
+/* ------------------------------------------------------------------------ */
+/* Le VERRE LIQUIDE de l'éditeur de thème : la carte réfracte le fond au lieu
+ * de simplement le flouter (feTurbulence → feDisplacementMap, filtre
+ * `#t3-verre-liquide` posé par le composant).
+ *
+ * Le chemin par défaut est le FALLBACK — verre dépoli propre, valable
+ * partout. La réfraction ne s'ajoute que là où le navigateur sait mettre un
+ * filtre SVG dans un `backdrop-filter` (Chromium, donc l'app desktop).
+ * Aucun token global touché : purement additif. */
+.t3-verre {
+  -webkit-backdrop-filter: blur(24px) saturate(1.6);
+  backdrop-filter: blur(24px) saturate(1.6);
+}
+.t3-verre-nuit {
+  background: color-mix(in oklab, var(--color-neutral-900) 34%, transparent);
+  box-shadow:
+    0 26px 64px -16px rgb(0 0 0 / 0.62),
+    inset 0 1px 0 0 rgb(255 255 255 / 0.2),
+    inset 0 0 0 1px rgb(255 255 255 / 0.09),
+    inset 0 -28px 44px -34px rgb(255 255 255 / 0.34);
+}
+.t3-verre-jour {
+  background: color-mix(in oklab, white 34%, transparent);
+  box-shadow:
+    0 26px 64px -16px rgb(0 0 0 / 0.3),
+    inset 0 1px 0 0 rgb(255 255 255 / 0.72),
+    inset 0 0 0 1px rgb(255 255 255 / 0.4),
+    inset 0 -28px 44px -34px rgb(255 255 255 / 0.6);
+}
+@supports (backdrop-filter: url(#t3-verre-liquide)) {
+  .t3-verre {
+    /* Réfraction + un flou léger : le fond ONDULE derrière la carte. */
+    backdrop-filter: blur(11px) saturate(1.6) url(#t3-verre-liquide);
   }
 }
