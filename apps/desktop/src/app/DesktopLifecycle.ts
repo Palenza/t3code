@@ -1,6 +1,8 @@
 import * as Context from "effect/Context";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
@@ -72,7 +74,35 @@ function addScopedListener<Args extends ReadonlyArray<unknown>>(
   ).pipe(Effect.asVoid);
 }
 
-const requestDesktopShutdownAndWait = Effect.fn("desktop.lifecycle.requestShutdownAndWait")(
+/**
+ * LE FIL-PIÈGE DE L'ARRÊT — une attente sans borne était une mine.
+ *
+ * `awaitComplete` est un `Deferred.await` nu. Il n'est libéré qu'après que
+ * CHAQUE moteur du pool s'est arrêté (`DesktopApp.ts`, finalizer). Un seul
+ * moteur coincé avant d'atteindre son propre `forceKillAfter` — une sonde de
+ * disponibilité sans réponse, un drain de sortie qui ne finit pas — et
+ * `markComplete` n'arrive jamais. Cmd+Q ne rend alors PLUS JAMAIS la main :
+ * la fenêtre reste, l'app reste au Dock, il faut forcer.
+ *
+ * DIMENSIONNEMENT, pas un chiffre en l'air. Les deux étapes longues de
+ * l'arrêt sont déjà bornées dans `DesktopBackendManager` :
+ *   · `DEFAULT_BACKEND_TERMINATE_GRACE`      = 2 s (SIGTERM puis SIGKILL)
+ *   · `DEFAULT_BACKEND_OUTPUT_DRAIN_TIMEOUT` = 5 s
+ * Les moteurs s'arrêtent en CONCURRENCE, donc un arrêt sain tient dans ces
+ * 5 s, plus le temps de vider les bornes de fenêtre. On pose la limite à 3×
+ * la plus longue étape bornée : aucun chemin sain ne peut l'approcher, et
+ * seul ce qui est vraiment coincé la touche.
+ *
+ * Et quand elle est touchée, on le DIT (A7) : la limite, sa valeur, et ce
+ * qui n'a pas fini. Puis on part quand même — mieux vaut un arrêt bruyant
+ * qu'une application qu'on ne peut plus fermer.
+ */
+export const ARRET_LIMITE = Duration.seconds(15);
+
+// Exporté pour être TESTÉ : c'est cette fonction qui porte le fil-piège, et
+// la faire tomber depuis `before-quit` demanderait de piloter quatre-vingt-dix
+// lignes de doublures Electron pour observer un simple délai.
+export const requestDesktopShutdownAndWait = Effect.fn("desktop.lifecycle.requestShutdownAndWait")(
   function* (): Effect.fn.Return<
     void,
     never,
@@ -82,7 +112,19 @@ const requestDesktopShutdownAndWait = Effect.fn("desktop.lifecycle.requestShutdo
     const desktopWindow = yield* DesktopWindow.DesktopWindow;
     yield* desktopWindow.flushMainWindowBounds;
     yield* shutdown.request;
-    yield* shutdown.awaitComplete;
+    const fini = yield* shutdown.awaitComplete.pipe(
+      Effect.timeoutOption(ARRET_LIMITE),
+      Effect.map(Option.isSome),
+    );
+    if (!fini) {
+      yield* logLifecycleError("arrêt non terminé dans le délai — on quitte quand même", {
+        limiteMs: Duration.toMillis(ARRET_LIMITE),
+        // Ce qui manque est TOUJOURS la même chose : le finalizer du pool de
+        // moteurs n'a pas rendu la main. Le nommer évite au prochain lecteur
+        // de repartir de zéro.
+        bloque: "DesktopApp finalizer — arrêt des moteurs du pool",
+      });
+    }
   },
 );
 
