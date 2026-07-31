@@ -42,7 +42,15 @@ import * as Path from "effect/Path";
  * câblage n'a jamais posé de question. Un garde qui crie partout est un garde
  * qu'on désactive.
  */
-const DOSSIERS = ["contexte", "doctor", "persistance", "sauvegarde", "securite", "skills"];
+const DOSSIERS = [
+  "contexte",
+  "doctor",
+  "passerelle",
+  "persistance",
+  "sauvegarde",
+  "securite",
+  "skills",
+];
 
 /**
  * Les modules SANS appelant, avec la raison. Chaque entrée est une décision
@@ -52,6 +60,10 @@ const DOSSIERS = ["contexte", "doctor", "persistance", "sauvegarde", "securite",
  * clé porte une phrase et pas un booléen.
  */
 const MUETS_ASSUMES = new Map<string, string>([
+  [
+    "passerelle/QuiPeutParler.ts",
+    "Fondation de sûreté de la passerelle (n°40), écrite AVANT le premier adaptateur — même ordre que le garde anti-zombie avant l'ordonnanceur. Elle n'a pas d'appelant parce qu'aucun message n'arrive encore d'une plateforme tierce ; le jour où le premier adaptateur existe, il ne peut pas ne pas la traverser, puisqu'il n'y a pas d'autre chemin pour décider.",
+  ],
   [
     "skills/Curateur.ts",
     "Mesuré le 01/08 : la projection ne couvre que 7,3 jours (élaguée). Le curateur répondrait « indécidable » sur toute skill plus vieille, c'est-à-dire presque toutes. Lui donner une bouche maintenant livrerait un outil incapable de rien dire. Il attend une fenêtre d'observation, pas du code.",

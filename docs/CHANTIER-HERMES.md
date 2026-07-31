@@ -133,23 +133,23 @@ la raison — un écart sans raison se rouvre tous les mois.
   base en mémoire, avec nos réglages actuels (`unicode61
 remove_diacritics 2`) contre `trigram` :
 
-                                                              requête      unicode61 (le nôtre)   trigram
-                                                              数据  (2)          0                   0
-                                                              数据库 (3)          0                   1
-                                                              東京  (2)          0                   0
-                                                              chat               1                   1
-                                                              dort               1                   1
+                                                                requête      unicode61 (le nôtre)   trigram
+                                                                数据  (2)          0                   0
+                                                                数据库 (3)          0                   1
+                                                                東京  (2)          0                   0
+                                                                chat               1                   1
+                                                                dort               1                   1
 
-                                                          Donc **notre index ne trouve JAMAIS rien en CJK**, pas même sur trois
-                                                          caractères — ce n'est pas une dégradation, c'est un mur. `trigram` le
-                                                          lève dès 3 caractères sans toucher au français.
-                                                          Reste hors de portée : les termes CJK de **1-2 caractères**, et c'est
-                                                          précisément ce que leur bigramme compilé existe pour couvrir.
-                                                          **On ne bascule PAS aujourd'hui** : produit français d'abord, un index
-                                                          trigramme pèse plus lourd (une entrée par fenêtre de 3), et personne
-                                                          n'attend cette recherche. Mais le jour où un utilisateur CJK arrive, la
-                                                          décision est un MOT dans la migration 036 — plus un chantier natif.
-                                                          `native/fts5_cjk/` **(copie C, désormais optionnelle)**
+                                                            Donc **notre index ne trouve JAMAIS rien en CJK**, pas même sur trois
+                                                            caractères — ce n'est pas une dégradation, c'est un mur. `trigram` le
+                                                            lève dès 3 caractères sans toucher au français.
+                                                            Reste hors de portée : les termes CJK de **1-2 caractères**, et c'est
+                                                            précisément ce que leur bigramme compilé existe pour couvrir.
+                                                            **On ne bascule PAS aujourd'hui** : produit français d'abord, un index
+                                                            trigramme pèse plus lourd (une entrée par fenêtre de 3), et personne
+                                                            n'attend cette recherche. Mais le jour où un utilisateur CJK arrive, la
+                                                            décision est un MOT dans la migration 036 — plus un chantier natif.
+                                                            `native/fts5_cjk/` **(copie C, désormais optionnelle)**
 
 - [–] **7 · ~~PTC — appel d'outils programmatique~~** — **Écarté : le CLI le
   porte déjà.** Troisième ligne fermée le 01/08 en fouillant le binaire du CLI
@@ -452,8 +452,30 @@ remove_diacritics 2`) contre `trigram` :
       pas.)\_
 - [ ] **38 · Streaming vers les messageries** `stream_consumer.py` (2 250)
 - [ ] **39 · Livraison fiable** — ledger, cibles mortes, miroir, caches média
-- [ ] **40 · Autorisation par utilisateur et par canal** — appairage,
-      `/whoami`. `authz_mixin.py` (838)
+- [~] **40 · Autorisation par utilisateur et par canal** — **la décision
+  livrée le 01/08, AVANT le premier adaptateur.** Même ordre que le garde
+  anti-zombie avant l'ordonnanceur : c'est elle qui rend le reste sûr.
+  Ce qu'elle garde : un agent qui a `bypassPermissions` sur la machine
+  d'Enzo, joignable depuis un groupe public, c'est une machine ouverte. Il
+  n'y a pas de « on verra plus tard » possible ici.
+  **La règle tient en un mot : REFUSER.** Chaque autorisation est un OUI
+  explicite que quelqu'un a posé, jamais l'absence d'un non — une
+  passerelle qui laisse passer faute de configuration est une passerelle
+  ouverte.
+  Repris d'eux mot pour mot, le piège qu'ils documentent : la délégation à
+  un amont authentifié (notre relais) est légitime, mais le marqueur se
+  compare à `true` STRICTEMENT — `is True` chez eux, « defensive against
+  accidental fail-open ». Une chaîne `"true"` venue de JSON, un `1`, un
+  objet de test auto-vivifié passeraient une vérification large, et chacun
+  ouvrirait la passerelle en grand. Le test le vérifie sur sept valeurs.
+  Deux détails qui viennent de l'usage : un message SANS expéditeur passe
+  quand même si le canal est appairé (Telegram émet des messages
+  d'administrateur anonyme et des diffusions), et la réponse au refus est
+  volontairement PAUVRE — elle ne dit ni que l'agent existe, ni qui le
+  possède, ni comment entrer. Un refus bavard sur un salon public est une
+  invitation. `authz_mixin.py` (838)
+  _(reste : l'appairage lui-même — le geste par lequel un canal devient
+  autorisé — et son stockage. Ils viendront avec le premier adaptateur.)_
 - [ ] **41 · SDK d'ajout de plateforme sans toucher au cœur**
       `platform_registry.py` + `ADDING_A_PLATFORM.md`
 - [ ] **42 · Telegram d'abord**, puis Discord, Slack, WhatsApp, Signal
