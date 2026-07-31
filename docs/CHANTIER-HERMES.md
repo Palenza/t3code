@@ -16,13 +16,13 @@ plan.
 
 ## Où en est le catalogue — au 01/08/2026
 
-**34 livrés · 4 partiels · 21 écartés sur pièce · 26 restants.**
+**34 livrés · 5 partiels · 21 écartés sur pièce · 25 restants.**
 
 Chaque ligne a été INSTRUITE : aucune n'est restée sans qu'on aille voir. Un
 écart porte toujours sa raison, et une raison porte un reçu quand elle repose
 sur une mesure.
 
-Ce que les 26 restants attendent vraiment — c'est la seule question utile :
+Ce que les 25 restants attendent vraiment — c'est la seule question utile :
 
 |       | quoi                                                                     | qui décide                                                                                                                         |
 | ----- | ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
@@ -96,23 +96,23 @@ la raison — un écart sans raison se rouvre tous les mois.
       base en mémoire, avec nos réglages actuels (`unicode61
 remove_diacritics 2`) contre `trigram` :
 
-                          requête      unicode61 (le nôtre)   trigram
-                          数据  (2)          0                   0
-                          数据库 (3)          0                   1
-                          東京  (2)          0                   0
-                          chat               1                   1
-                          dort               1                   1
+                            requête      unicode61 (le nôtre)   trigram
+                            数据  (2)          0                   0
+                            数据库 (3)          0                   1
+                            東京  (2)          0                   0
+                            chat               1                   1
+                            dort               1                   1
 
-                      Donc **notre index ne trouve JAMAIS rien en CJK**, pas même sur trois
-                      caractères — ce n'est pas une dégradation, c'est un mur. `trigram` le
-                      lève dès 3 caractères sans toucher au français.
-                      Reste hors de portée : les termes CJK de **1-2 caractères**, et c'est
-                      précisément ce que leur bigramme compilé existe pour couvrir.
-                      **On ne bascule PAS aujourd'hui** : produit français d'abord, un index
-                      trigramme pèse plus lourd (une entrée par fenêtre de 3), et personne
-                      n'attend cette recherche. Mais le jour où un utilisateur CJK arrive, la
-                      décision est un MOT dans la migration 036 — plus un chantier natif.
-                      `native/fts5_cjk/` **(copie C, désormais optionnelle)**
+                        Donc **notre index ne trouve JAMAIS rien en CJK**, pas même sur trois
+                        caractères — ce n'est pas une dégradation, c'est un mur. `trigram` le
+                        lève dès 3 caractères sans toucher au français.
+                        Reste hors de portée : les termes CJK de **1-2 caractères**, et c'est
+                        précisément ce que leur bigramme compilé existe pour couvrir.
+                        **On ne bascule PAS aujourd'hui** : produit français d'abord, un index
+                        trigramme pèse plus lourd (une entrée par fenêtre de 3), et personne
+                        n'attend cette recherche. Mais le jour où un utilisateur CJK arrive, la
+                        décision est un MOT dans la migration 036 — plus un chantier natif.
+                        `native/fts5_cjk/` **(copie C, désormais optionnelle)**
 
 - [ ] **7 · PTC — appel d'outils programmatique** — le modèle écrit un script
       qui appelle nos outils, N tours → 1. Seul le `stdout` revient. Chez nous il
@@ -528,6 +528,18 @@ remove_diacritics 2`) contre `trigram` :
 - [x] **63 · Navigateur** — le toolkit `preview` pilote un onglet réel — 15 poignées, toutes derrière la porte de sortie.
 
 - [ ] **64 · Computer use** — contrôle du bureau, routage vision, permissions
+      **Instruit le 01/08 — MA RECO : écarter.** Le toolkit `preview` fait
+      déjà, sur un NAVIGATEUR, tout ce que la ligne demande : `open`,
+      `navigate`, `click`, `type`, `press`, `scroll`, `snapshot`, `evaluate`,
+      `wait_for`, `resize`, `recording_start/stop` — quatorze poignées, toutes
+      derrière la porte de sortie.
+      Ce que « computer use » ajoute, c'est le contrôle du BUREAU entier :
+      cliquer dans Figma, piloter Slack. Deux raisons de ne pas le prendre —
+      ce n'est pas notre métier (T3 fait du code, et le code vit dans un
+      éditeur et un navigateur), et c'est la surface d'attaque la plus large
+      qu'on puisse s'ajouter, puisqu'une page web hostile pourrait piloter
+      toute la machine. Notre réponse actuelle borne le dégât au navigateur.
+      **Décision à Enzo** (goût et périmètre produit, M2).
 - [ ] **65 · Mot d'éveil 100 % local** — 3 moteurs ONNX embarqués, aucun audio
       ne sort. `tools/wake_word.py` (1 267)
 - [ ] **66 · TTS en streaming** — l'agent parle pendant qu'il génère
@@ -605,6 +617,15 @@ remove_diacritics 2`) contre `trigram` :
 
 - [ ] **79 · Bannière, onboarding, tips**
 - [ ] **80 · Achievements + Petdex** — gamification de la progression
+      **Instruit le 01/08 — MA RECO : écarter.** Ce n'est pas une question de
+      faisabilité, c'est une question de TON. Les badges et le petdex fêtent
+      l'usage de l'outil ; T3 sert à finir un travail, et l'humain qui le
+      referme doit avoir livré, pas collectionné.
+      Le risque n'est pas cosmétique : une progression qu'on récompense
+      pousse à faire PLUS de tours, alors que le bon tour est celui qu'on n'a
+      pas eu besoin de faire. On mesurerait le contraire de ce qui compte.
+      **Décision à Enzo** (goût et ton de marque, M2) — c'est exactement le
+      genre de ligne où mon avis ne vaut pas le sien.
 - [–] **81 · ~~Tableaux markdown propres~~** — **Déjà couvert, et au-delà.**
   Leur chantier vise un rendu de tableau dans un TERMINAL, qui est leur
   surface. La nôtre est un moteur de rendu réel : `ChatMarkdown.tsx` monte
