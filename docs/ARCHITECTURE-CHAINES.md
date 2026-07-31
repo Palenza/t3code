@@ -202,6 +202,13 @@ n°79 bannière · n°80 achievements · n°81 tableaux · n°82 migration
 **Aucune ne bloque une autre.** C'est la réserve : ce qu'on prend quand une
 chaîne est bloquée par une décision qui appartient au fondateur.
 
+**⚠️ G N'EST PAS UNE CHAÎNE, et c'est officiel.** Passée à l'épreuve de la
+question qui révèle un invariant — _« quelle phrase deviendrait fausse si un
+membre faisait autrement ? »_ — G est la seule des huit à ne rien produire.
+Rien ne relie un mot d'éveil ONNX à un moteur de skins. C'est un SAC, et le
+nommer ainsi est un verdict utile : on n'y cherche pas d'ordre, on n'y pose
+pas d'invariant, on y pioche.
+
 ## Chaîne H · LE TRAVAIL ORGANISÉ
 
 n°67 kanban ── n°68 projets ── n°83 trajectoires. Se pose sur D (la
@@ -224,16 +231,32 @@ de travail futur.**
 6. **E** — la passerelle. Un chantier à part entière, pas une fin de journée.
 7. **G / H** — à la demande, ou quand une chaîne est bloquée.
 
-## Ce que je changerais dans cette carte (v1, à challenger)
+## Les invariants, en un tableau
 
-Trois choses que je n'ai pas tranchées et qu'il faut regarder à la relecture :
+C'est la colonne de droite qui compte : un invariant sans test est une
+intention.
 
-- **A et D se disputent le n°55** (compression dirigée). Je l'ai mis dans A
-  parce qu'il touche la fenêtre, mais il pilote la boucle. Si `/goal` arrive
-  avant, il devrait migrer.
-- **La chaîne C n'a pas encore d'invariant testé.** C'est la plus dangereuse
-  du lot et c'est celle qui repose encore sur des règles écrites. À poser au
-  moment du n°13, pas après.
-- **La chaîne G est peut-être une fausse chaîne.** Douze chantiers sans lien
-  entre eux, ce n'est pas une chaîne, c'est un sac. À découper ou à assumer
-  comme réserve.
+| chaîne               | l'invariant                                                                                   | testé ?                                  |
+| -------------------- | --------------------------------------------------------------------------------------------- | ---------------------------------------- |
+| Étage 0              | TOUT ce qui sort vers le modèle traverse la porte                                             | ✅ `porteDeSortie.chaine.test.ts`        |
+| A · contexte         | AUCUNE sortie au-dessus du plafond n'atteint le modèle sans qu'un fichier porte l'intégralité | ❌ à écrire avec n°24b                   |
+| B · skills           | AUCUNE skill n'entre sans le scanner ; AUCUNE n'est archivée sans verdict décidable           | ❌ à écrire avec n°10                    |
+| C · droit d'agir     | TOUTE action à effet passe par un point de décision unique                                    | ❌ **le plus dangereux du lot**          |
+| D · la boucle        | TOUTE continuation est un message NORMAL, jamais un préambule                                 | ❌ à écrire avec n°8                     |
+| E · passerelle       | TOUT tour a un seul écrivain (le bail de tour)                                                | ❌ à écrire avec n°37                    |
+| F · exploitation     | TOUT échec non reconnu entre au carnet, jamais avalé                                          | ❌ le carnet existe, l'invariant non     |
+| G · surfaces         | — _aucun formulable : c'est un sac_                                                           | sans objet                               |
+| H · travail organisé | TOUTE tâche déléguée a un propriétaire et un état lisible                                     | ⚠️ ne nomme pas encore de passage obligé |
+
+## Ce que cette carte n'a pas tranché (v2)
+
+- **A et D se disputent le n°55** (compression dirigée). Placé dans A parce
+  qu'il touche la fenêtre, mais il pilote la boucle. Si `/goal` arrive avant,
+  il migre.
+- **C est la chaîne la plus dangereuse et la seule sans invariant testé.**
+  Elle repose encore entièrement sur des règles écrites — exactement la forme
+  qui a lâché deux fois le 31/07. À poser au moment du n°13, pas après.
+- **H ne nomme pas encore son passage obligé.** « Un propriétaire et un état
+  lisible » est presque un invariant : il lui manque le module par lequel tout
+  passe. À durcir avant de commencer le n°67.
+- **Résolu en v2** : G est bien un sac, confirmé par l'épreuve de la question.
