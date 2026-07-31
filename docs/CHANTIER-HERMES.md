@@ -51,14 +51,13 @@ la raison — un écart sans raison se rouvre tous les mois.
 - [ ] **8 · `/goal` — la boucle Ralph** — juge après chaque tour, continuation
       = message normal (cache intact), juge fail-OPEN, message utilisateur
       préempte, survit au `/resume`. `hermes_cli/goals.py` (1 807)
-- [ ] **9 · Nudges de persistance** — l'agent se rappelle d'écrire ce qu'il
-      apprend. `agent/memory_manager.py` (1 241), `memory_provider.py`
-      _(deux pièces posées en chemin, pas le chantier : le hook `PreCompact`
-      côté Palenza grave une balise au moment où le contexte tombe, et
-      `contexte/Compactage.ts` fait DIRE au compactage ce qu'il jette —
-      97,5 à 98,6 % de la fenêtre, 9 fois en 7 jours, `b7eb20b9e`. T3 ne
-      capture toujours que ce que l'HUMAIN dit, jamais ce que l'agent
-      établit : c'est ça, le n°9.)_
+- [x] **9 · Nudges de persistance** — la DETTE DE PERSISTANCE : combien de
+      tours et d'outils depuis la dernière écriture de fichier. Fil-piège
+      MESURÉ (p95 = 9 tours, p99 = 22 → seuil 12 tours ET 40 outils : 2 séries
+      sur 89). Ne crie pas au loup — 56 % des tours n'écrivent rien, et une
+      enquête de neuf tours reste normale. `agent/memory_manager.py` (1 241)
+      _(reste : l'injection AUTOMATIQUE dans le tour, qui touche l'adaptateur
+      — palier D2. L'outil `dette` est appelable dès maintenant.)_
 
 ## Niveau 2 — très bon · sécurité et secrets
 

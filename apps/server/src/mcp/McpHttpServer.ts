@@ -25,6 +25,9 @@ import {
 import { PreuveToolkitHandlersLive } from "./toolkits/preuve/handlers.ts";
 import { PreuveToolkit } from "./toolkits/preuve/tools.ts";
 import { PreuveStoreLive } from "../preuve/PreuveStore.ts";
+import { DetteToolkitHandlersLive } from "./toolkits/persistance/handlers.ts";
+import { DetteToolkit } from "./toolkits/persistance/tools.ts";
+import { DetteStoreLive } from "../persistance/DetteStore.ts";
 import { UsageSkillsToolkitHandlersLive } from "./toolkits/skills/handlers.ts";
 import { UsageSkillsToolkit } from "./toolkits/skills/tools.ts";
 import { UsageStoreLive } from "../skills/UsageStore.ts";
@@ -263,6 +266,16 @@ const UsageSkillsToolkitRegistrationLive = McpServer.toolkit(UsageSkillsToolkit)
   Layer.provide(UsageStoreLive),
 );
 
+/**
+ * La dette de persistance (chantier n°9) : lecture seule du même flux. Elle
+ * dit ce qui a été établi et n'existe nulle part — avant que le compactage
+ * l'emporte.
+ */
+const DetteToolkitRegistrationLive = McpServer.toolkit(DetteToolkit).pipe(
+  Layer.provide(DetteToolkitHandlersLive),
+  Layer.provide(DetteStoreLive),
+);
+
 const McpTransportLive = McpServer.layerHttp({
   name: "T3 Code",
   version: packageJson.version,
@@ -275,4 +288,5 @@ export const layer = Layer.mergeAll(
   RappelToolkitRegistrationLive,
   PreuveToolkitRegistrationLive,
   UsageSkillsToolkitRegistrationLive,
+  DetteToolkitRegistrationLive,
 ).pipe(Layer.provideMerge(McpTransportLive));
