@@ -61,6 +61,10 @@ const DOSSIERS = [
  */
 const MUETS_ASSUMES = new Map<string, string>([
   [
+    "passerelle/TenirLaConnexion.ts",
+    "Décision de cycle de vie de la passerelle (n°43). Aucune connexion à tenir tant qu'aucun adaptateur ne se connecte.",
+  ],
+  [
     "passerelle/LireUneCommande.ts",
     "Lecture des commandes de passerelle (n°44-45), écrite avant le premier adaptateur complet. Aucun message n'arrive encore d'une plateforme tierce.",
   ],

@@ -16,7 +16,7 @@ plan.
 
 ## Où en est le catalogue — au 01/08/2026
 
-**34 livrés · 12 partiels · 31 écartés sur pièce · 8 restants.**
+**34 livrés · 13 partiels · 31 écartés sur pièce · 7 restants.**
 
 Chaque ligne a été INSTRUITE : aucune n'est restée sans qu'on aille voir. Un
 écart porte toujours sa raison, et une raison porte un reçu quand elle repose
@@ -133,23 +133,23 @@ la raison — un écart sans raison se rouvre tous les mois.
   base en mémoire, avec nos réglages actuels (`unicode61
 remove_diacritics 2`) contre `trigram` :
 
-                                                                          requête      unicode61 (le nôtre)   trigram
-                                                                          数据  (2)          0                   0
-                                                                          数据库 (3)          0                   1
-                                                                          東京  (2)          0                   0
-                                                                          chat               1                   1
-                                                                          dort               1                   1
+                                                                            requête      unicode61 (le nôtre)   trigram
+                                                                            数据  (2)          0                   0
+                                                                            数据库 (3)          0                   1
+                                                                            東京  (2)          0                   0
+                                                                            chat               1                   1
+                                                                            dort               1                   1
 
-                                                                      Donc **notre index ne trouve JAMAIS rien en CJK**, pas même sur trois
-                                                                      caractères — ce n'est pas une dégradation, c'est un mur. `trigram` le
-                                                                      lève dès 3 caractères sans toucher au français.
-                                                                      Reste hors de portée : les termes CJK de **1-2 caractères**, et c'est
-                                                                      précisément ce que leur bigramme compilé existe pour couvrir.
-                                                                      **On ne bascule PAS aujourd'hui** : produit français d'abord, un index
-                                                                      trigramme pèse plus lourd (une entrée par fenêtre de 3), et personne
-                                                                      n'attend cette recherche. Mais le jour où un utilisateur CJK arrive, la
-                                                                      décision est un MOT dans la migration 036 — plus un chantier natif.
-                                                                      `native/fts5_cjk/` **(copie C, désormais optionnelle)**
+                                                                        Donc **notre index ne trouve JAMAIS rien en CJK**, pas même sur trois
+                                                                        caractères — ce n'est pas une dégradation, c'est un mur. `trigram` le
+                                                                        lève dès 3 caractères sans toucher au français.
+                                                                        Reste hors de portée : les termes CJK de **1-2 caractères**, et c'est
+                                                                        précisément ce que leur bigramme compilé existe pour couvrir.
+                                                                        **On ne bascule PAS aujourd'hui** : produit français d'abord, un index
+                                                                        trigramme pèse plus lourd (une entrée par fenêtre de 3), et personne
+                                                                        n'attend cette recherche. Mais le jour où un utilisateur CJK arrive, la
+                                                                        décision est un MOT dans la migration 036 — plus un chantier natif.
+                                                                        `native/fts5_cjk/` **(copie C, désormais optionnelle)**
 
 - [–] **7 · ~~PTC — appel d'outils programmatique~~** — **Écarté : le CLI le
   porte déjà.** Troisième ligne fermée le 01/08 en fouillant le binaire du CLI
@@ -555,9 +555,24 @@ seulement pour le bloc.`stream*consumer.py` (2 250)
   une personne ouvrirait alors le groupe entier.
   _(reste : la connexion elle-même — jeton de bot, réception des mises à
   jour, envoi. Le jeton est une activation à demander à Enzo, M10.)_
-- [ ] **43 · Cycle de vie robuste** — vidange, forensique d'arrêt, watchdog,
-      anti-boucle de redémarrage, scale-to-zero, moniteur mémoire, skew de code
-      _(la borne d'arrêt de Cmd+Q est faite : `2ea9b9951`)_
+- [~] **43 · Cycle de vie robuste** — **la décision livrée le 01/08**,
+  dernière du bloc avant l'adaptateur réel.
+  Une connexion échoue de DEUX façons, et la seconde est celle qui coûte :
+  elle tombe (facile — on le voit), ou **elle reste ouverte et ne dit plus
+  rien**. Un mandataire l'a coupée sans fermer la socket ; la socket paraît
+  vivante, aucune erreur n'arrive, et le bot est muet pendant des heures
+  sans que rien ne l'indique. Ça ne se détecte QUE par le silence.
+  Fil-piège avec son reçu : Telegram répond à un long-poll au plus tard au
+  bout de son propre délai (50 s par défaut), donc **90 s de silence ne
+  peuvent pas être normaux**. Posé au-delà du sain, pas deviné.
+  Ce qui ne se réessaie JAMAIS : un jeton refusé. Reconnecter ne le rendra
+  pas valide, et s'acharner fait limiter puis bannir le bot. La passerelle
+  RENONCE et le dit, avec le geste qui la remet en service.
+  Et le décalage aléatoire n'est pas cosmétique : une coupure réseau
+  générale fait redémarrer plusieurs instances ensemble, et un repli
+  purement exponentiel les ferait toutes frapper à la même seconde. Il
+  vient de l'APPELANT — une horloge cachée rendrait le module intestable.
+  _(reste : la boucle de connexion elle-même, qui vient avec le jeton.)_
 - [~] **44 · `/handoff`, `/sethome`, `/platforms`** — **la lecture livrée le
   01/08**, avec le n°45 : les deux lignes partagent le même module, parce
   qu'une commande de passerelle se reconnaît de la même façon quelle que
