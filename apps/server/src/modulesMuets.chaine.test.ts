@@ -61,6 +61,10 @@ const DOSSIERS = [
  */
 const MUETS_ASSUMES = new Map<string, string>([
   [
+    "passerelle/LireUneCommande.ts",
+    "Lecture des commandes de passerelle (n°44-45), écrite avant le premier adaptateur complet. Aucun message n'arrive encore d'une plateforme tierce.",
+  ],
+  [
     "passerelle/CibleMorte.ts",
     "Décision de livraison fiable (n°39), écrite avant le premier adaptateur — comme l'autorisation et le débit. Aucune livraison ne part encore vers une plateforme tierce.",
   ],
