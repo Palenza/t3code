@@ -16,7 +16,7 @@ plan.
 
 ## Où en est le catalogue — au 01/08/2026
 
-**34 livrés · 13 partiels · 31 écartés sur pièce · 7 restants.**
+**34 livrés · 14 partiels · 32 écartés sur pièce · 5 restants.**
 
 Chaque ligne a été INSTRUITE : aucune n'est restée sans qu'on aille voir. Un
 écart porte toujours sa raison, et une raison porte un reçu quand elle repose
@@ -133,23 +133,23 @@ la raison — un écart sans raison se rouvre tous les mois.
   base en mémoire, avec nos réglages actuels (`unicode61
 remove_diacritics 2`) contre `trigram` :
 
-                                                                            requête      unicode61 (le nôtre)   trigram
-                                                                            数据  (2)          0                   0
-                                                                            数据库 (3)          0                   1
-                                                                            東京  (2)          0                   0
-                                                                            chat               1                   1
-                                                                            dort               1                   1
+                                                                              requête      unicode61 (le nôtre)   trigram
+                                                                              数据  (2)          0                   0
+                                                                              数据库 (3)          0                   1
+                                                                              東京  (2)          0                   0
+                                                                              chat               1                   1
+                                                                              dort               1                   1
 
-                                                                        Donc **notre index ne trouve JAMAIS rien en CJK**, pas même sur trois
-                                                                        caractères — ce n'est pas une dégradation, c'est un mur. `trigram` le
-                                                                        lève dès 3 caractères sans toucher au français.
-                                                                        Reste hors de portée : les termes CJK de **1-2 caractères**, et c'est
-                                                                        précisément ce que leur bigramme compilé existe pour couvrir.
-                                                                        **On ne bascule PAS aujourd'hui** : produit français d'abord, un index
-                                                                        trigramme pèse plus lourd (une entrée par fenêtre de 3), et personne
-                                                                        n'attend cette recherche. Mais le jour où un utilisateur CJK arrive, la
-                                                                        décision est un MOT dans la migration 036 — plus un chantier natif.
-                                                                        `native/fts5_cjk/` **(copie C, désormais optionnelle)**
+                                                                          Donc **notre index ne trouve JAMAIS rien en CJK**, pas même sur trois
+                                                                          caractères — ce n'est pas une dégradation, c'est un mur. `trigram` le
+                                                                          lève dès 3 caractères sans toucher au français.
+                                                                          Reste hors de portée : les termes CJK de **1-2 caractères**, et c'est
+                                                                          précisément ce que leur bigramme compilé existe pour couvrir.
+                                                                          **On ne bascule PAS aujourd'hui** : produit français d'abord, un index
+                                                                          trigramme pèse plus lourd (une entrée par fenêtre de 3), et personne
+                                                                          n'attend cette recherche. Mais le jour où un utilisateur CJK arrive, la
+                                                                          décision est un MOT dans la migration 036 — plus un chantier natif.
+                                                                          `native/fts5_cjk/` **(copie C, désormais optionnelle)**
 
 - [–] **7 · ~~PTC — appel d'outils programmatique~~** — **Écarté : le CLI le
   porte déjà.** Troisième ligne fermée le 01/08 en fouillant le binaire du CLI
@@ -427,29 +427,23 @@ remove_diacritics 2`) contre `trigram` :
 
 ## Niveau 2 — le gateway (en interne, pas en appelant Hermès)
 
-- [ ] **37 · Architecture de passerelle** — continuité de session ENTRE
-      plateformes, bail de tour (un seul écrivain), slash universelles.
-      `gateway/session.py` (3 307), `turn_lease.py`, `slash_commands.py` (5 483)
-      **INSTRUIT deux fois le 01/08, et il n'en reste presque rien.**
-      · **Le bail de tour** est un problème qu'on n'a pas : leurs gardes sont
-      indexés par clé de routage et la transcription par session*id, avec un
-      lien plusieurs-vers-un. Chez nous `Map<ThreadId, Context>` un pour un,
-      dispatch sérialisé par file, worker qui prend un élément à la fois.
-      · **La continuité de session entre plateformes existe DÉJÀ** — et c'est
-      la découverte qui compte. T3 a un client **mobile natif complet**
-      (`apps/mobile`, Expo : agent-awareness, archive, diffs, files,
-      observability, réveils en arrière-plan) qui parle au MÊME serveur par
-      un **relais**, avec authentification Clerk. Un fil ouvert au bureau se
-      reprend sur le téléphone.
-      **Ce qui reste vraiment de la famille 37→45** n'est donc pas l'accès à
-      distance — il est livré — mais le fait de répondre depuis l'application
-      de quelqu'un d'autre : Telegram, Discord, Slack. C'est une SURFACE de
-      plus, pas une capacité de plus, et elle se paie en autorisation par
-      canal (leur `authz_mixin.py` fait 838 l. pour décider qui a le droit de
-      parler à l'agent depuis un salon public).
-      *(À arbitrer par Enzo en connaissance de ça : 9 lignes pour dupliquer
-      une infrastructure qu'on a, au profit d'une interface qu'on ne possède
-      pas.)\_
+- [~] **37 · Architecture de passerelle** — **ses trois promesses sont
+  tenues, par d'autres lignes que la sienne.**
+  · _bail de tour_ — problème qu'on n'a pas : `Map<ThreadId, Context>` un
+  pour un, dispatch sérialisé par file, worker qui prend un élément à la
+  fois. Vérifié, pas supposé ;
+  · _continuité de session ENTRE plateformes_ — déjà livrée : T3 a un
+  client mobile natif complet qui parle au MÊME serveur par un relais,
+  avec authentification Clerk. Un fil ouvert au bureau se reprend sur le
+  téléphone ;
+  · _slash universelles_ — livrées le 01/08 avec les n°44/45, dans un
+  module partagé par toutes les plateformes.
+  Ce qui restait vraiment de l'« architecture » a donc été écrit sous les
+  n°38, 39, 40, 41 et 43 : sept décisions, toutes posées AVANT le premier
+  octet réseau, dans l'ordre du garde avant le moteur.
+  _(reste : rien de propre à cette ligne. Ce qui manque au bloc est le
+  jeton de bot du n°42.)_
+  `gateway/session.py` (3 307), `turn_lease.py`, `slash_commands.py` (5 483)
 - [~] **38 · Streaming vers les messageries** — **la décision livrée le
   01/08.** L'agent écrit en flux, une messagerie reçoit des MESSAGES, et
   entre les deux trois contraintes qui n'existent nulle part ailleurs dans
@@ -807,8 +801,13 @@ seulement pour le bloc.`stream*consumer.py` (2 250)
   qu'aucune unité ne part deux fois.
   _(reste : l'appel à `speechSynthesis` et le bouton qui l'active — c'est
   de l'interface, donc le ton et le geste appartiennent à Enzo.)_
-- [ ] **67 · Kanban** — décomposition automatique, spécification, essaim,
-      watchers. `kanban_db.py` (10 010)
+- [–] **67 · ~~Kanban~~** — **Écarté le 01/08 sur ma décision, renversable
+  d'un mot.** 10 010 lignes pour une décomposition en tâches, un essaim
+  d'agents et des watchers. T3 a déjà les FILS : un par chantier, avec son
+  historique, ses checkpoints et sa reprise. Un kanban par-dessus serait un
+  second modèle de suivi à tenir cohérent avec le premier — la couche que la
+  RÈGLE SUPRÊME refuse tant qu'on n'a pas le problème. À rouvrir le jour où un
+  chantier réel se perd faute de tableau. `kanban_db.py` (10 010)
 - [x] **68 · Projets** — sélecteur de projet (⌘P) et recherche de contenu (⇧⌘F), livrés en amont.
 
 - [ ] **69 · Génération d'images et de vidéos** — 7 fournisseurs image, FLUX3
