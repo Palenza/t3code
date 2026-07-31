@@ -1,5 +1,20 @@
 # Le triage des 56 restants
 
+> ## ⚠️ PÉRIMÉ — ne pas suivre la file de la section E
+>
+> Écrit le 31/07, quand il restait 56 lignes. Au 01/08 il en reste **25**, et
+> la section « PRÊT À CONSTRUIRE » ci-dessous nomme des chantiers depuis
+> **livrés** (n°59 inventaire, n°47 garde, n°10 branché), **écartés sur pièce**
+> (n°26 délégation, n°55 compression dirigée, n°30 registre) ou **réinstruits**
+> (n°28 LSP : la tranche facile est un leurre, mesuré).
+>
+> **La vérité vivante est `CHANTIER-HERMES.md`** — son tableau de tête range
+> les restants par ce qu'ils ATTENDENT, et `DECISIONS-EN-ATTENTE.md` porte les
+> quatre questions qui en débloquent quinze.
+>
+> Ce fichier reste pour son raisonnement — la façon de trancher une ligne sur
+> pièce plutôt que de la reporter — pas pour ses verdicts.
+
 > Finir les 85, ce n'est pas construire 85 modules : c'est **trancher** chaque
 > ligne. Une entrée qu'on écarte sur pièce est aussi finie qu'une entrée
 > livrée — et bien plus honnête qu'une entrée cochée à moitié.
