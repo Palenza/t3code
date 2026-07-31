@@ -25,6 +25,9 @@ import {
 import { PreuveToolkitHandlersLive } from "./toolkits/preuve/handlers.ts";
 import { PreuveToolkit } from "./toolkits/preuve/tools.ts";
 import { PreuveStoreLive } from "../preuve/PreuveStore.ts";
+import { UsageSkillsToolkitHandlersLive } from "./toolkits/skills/handlers.ts";
+import { UsageSkillsToolkit } from "./toolkits/skills/tools.ts";
+import { UsageStoreLive } from "../skills/UsageStore.ts";
 import { RappelToolkitHandlersLive } from "./toolkits/rappel/handlers.ts";
 import { RappelToolkit } from "./toolkits/rappel/tools.ts";
 import { RappelStoreLive } from "../rappel/RappelStore.ts";
@@ -250,6 +253,16 @@ const PreuveToolkitRegistrationLive = McpServer.toolkit(PreuveToolkit).pipe(
   Layer.provide(PreuveStoreLive),
 );
 
+/**
+ * L'usage des skills (chantier n°2) : lecture seule, elle aussi. Elle ne
+ * touche jamais aux dossiers de skills — y écrire déclencherait un
+ * `reloadSkills()` à chaque appel.
+ */
+const UsageSkillsToolkitRegistrationLive = McpServer.toolkit(UsageSkillsToolkit).pipe(
+  Layer.provide(UsageSkillsToolkitHandlersLive),
+  Layer.provide(UsageStoreLive),
+);
+
 const McpTransportLive = McpServer.layerHttp({
   name: "T3 Code",
   version: packageJson.version,
@@ -261,4 +274,5 @@ export const layer = Layer.mergeAll(
   RepoToolkitRegistrationLive,
   RappelToolkitRegistrationLive,
   PreuveToolkitRegistrationLive,
+  UsageSkillsToolkitRegistrationLive,
 ).pipe(Layer.provideMerge(McpTransportLive));

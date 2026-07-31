@@ -26,9 +26,12 @@ la raison — un écart sans raison se rouvre tous les mois.
       épinglées échappent à tout. Ne touche que ce que l'agent a créé.
       `agent/curator.py` (2 018), `curator_backup.py`, `hermes_cli/curator.py`
       — _dépend du n°2 : sans télémétrie, le curateur juge à l'aveugle._
-- [ ] **2 · Télémétrie de skills** — sidecar `.usage.json`, jamais le
-      frontmatter. Un sidecar cassé ne casse jamais l'outil. 3 états + `pinned`
-      orthogonal. `tools/skill_usage.py` (1 145)
+- [x] **2 · Télémétrie de skills** — 3 états + `pinned` orthogonal. Deux
+      écarts assumés avec Hermès : **aucun sidecar** (il déclencherait un
+      `reloadSkills()` par tour via `signatureDesSkills`) et **aucune
+      instrumentation** (T3 persiste déjà chaque appel). Le verdict porte sa
+      FENÊTRE : sur les 7,1 j observés, 0 archivable sur 17.
+      `tools/skill_usage.py` (1 145)
 - [ ] **3 · Graphe d'apprentissage** — mutations tracées, rendu visuel, frise
       `/journey`. `agent/learning_graph.py`, `learning_graph_render.py`,
       `learning_mutations.py`, `hermes_cli/journey.py`
