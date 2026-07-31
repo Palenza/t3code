@@ -274,8 +274,17 @@ la raison — un écart sans raison se rouvre tous les mois.
 - [ ] **53 · Compatibilité agentskills.io + index Anthropic/OpenAI/LobeHub**
 - [ ] **54 · Conduite fine de session** — `/steer` (injecter après le prochain
       outil, sans interrompre), `/queue`, `/busy` avec politique par commande
-- [ ] **55 · Compression dirigée** — `/compress here`, `focus <sujet>`,
-      `--preview`, retour utilisateur
+- [–] **55 · ~~Compression dirigée~~** — **Bloqué en amont, vérifié le
+  01/08.** Le compactage n'est pas à nous : c'est Claude Code qui le déclenche
+  et le conduit. J'ai énuméré TOUS les sous-types de commande du SDK
+  (`sdk.d.ts`) — `interrupt`, `set_model`, `mcp_toggle`, `reload_skills`,
+  `stop_task`, une quarantaine d'autres — et **aucun ne demande un
+  compactage**. Le SDK expose le compactage en ÉVÉNEMENT (`compact_boundary`,
+  `compact_summary`, statut `compacting`), jamais en action.
+  Écrire `/compress here` chez nous produirait donc une commande qui n'a
+  personne à qui parler. À rouvrir le jour où le SDK ouvre ce contrôle — pas
+  avant. (C'est le même mur que le seuil automatique, écarté plus tôt : on ne
+  contrôle pas la cible.)
 - [x] **56 · Export de session** — une conversation pouvait vivre dans la base
       ou nulle part. `session_export_md.py` → `51d8e1c07`
       _(reste : l'export HTML, les filtres, le listing)_
@@ -359,7 +368,21 @@ la raison — un écart sans raison se rouvre tous les mois.
 
 - [ ] **71 · Hooks de plugin** — 7 événements agent + **3 hooks de
       transformation** (`transform_tool_result`, `transform_terminal_output`)
-- [ ] **72 · Toolsets composables** — héritage, activation à chaud
+- [–] **72 · ~~Toolsets composables~~** — **Écarté sur mesure, 01/08.** Deux
+  raisons, dans cet ordre.
+  D'abord la primitive existe DÉJÀ, et pas chez nous : le SDK porte un
+  sous-type `mcp_toggle` (« enables or disables an MCP server »). L'activation
+  à chaud ne demande pas un système de composition, elle demande de relayer un
+  message qui existe.
+  Ensuite le gain ne le justifie pas. Mesuré sur nos huit toolkits : **23
+  outils, ~7 300 caractères de description** au total, dont `preview` en pèse
+  39 % à lui seul. Face aux résultats d'outils, mesurés à **54 % de la
+  fenêtre** et déjà bornés à 40 000 caractères par la porte de sortie, les
+  DÉFINITIONS ne sont pas le problème. Construire une composition d'outils
+  pour récupérer quelques milliers de caractères, ce serait soigner ce qui ne
+  saigne pas.
+  _(À rouvrir si un serveur MCP tiers fait exploser le compte d'outils : le
+  relais de `mcp_toggle` sera alors une petite tranche, pas un chantier.)_
 - [–] **73 · Conscience de batterie** — leur correctif répond à un démon qui sonde en boucle. À rouvrir si une MESURE montre que T3 vide la batterie.
 
 - [x] **74 · Générateur de titre + indices de sous-répertoire** — régénération de titre depuis la barre latérale, livrée en amont.
