@@ -16,7 +16,7 @@ plan.
 
 ## Où en est le catalogue — au 01/08/2026
 
-**34 livrés · 5 partiels · 28 écartés sur pièce · 18 restants.**
+**34 livrés · 4 partiels · 31 écartés sur pièce · 16 restants.**
 
 Chaque ligne a été INSTRUITE : aucune n'est restée sans qu'on aille voir. Un
 écart porte toujours sa raison, et une raison porte un reçu quand elle repose
@@ -46,7 +46,7 @@ La leçon, écrite ici pour qu'elle serve : **« ce que le CLI contient » est u
 ÉTAT, pas une déduction** — A1 s'y applique. Deux des cinq lignes tombées
 étaient classées « chantier à part entière » au niveau le plus fort.
 
-Ce que les 18 restants attendent vraiment — c'est la seule question utile :
+Ce que les 16 restants attendent vraiment — c'est la seule question utile :
 
 |       | quoi                                                               | qui décide                                                                                                                         |
 | ----- | ------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
@@ -133,23 +133,23 @@ la raison — un écart sans raison se rouvre tous les mois.
   base en mémoire, avec nos réglages actuels (`unicode61
 remove_diacritics 2`) contre `trigram` :
 
-                                                        requête      unicode61 (le nôtre)   trigram
-                                                        数据  (2)          0                   0
-                                                        数据库 (3)          0                   1
-                                                        東京  (2)          0                   0
-                                                        chat               1                   1
-                                                        dort               1                   1
+                                                          requête      unicode61 (le nôtre)   trigram
+                                                          数据  (2)          0                   0
+                                                          数据库 (3)          0                   1
+                                                          東京  (2)          0                   0
+                                                          chat               1                   1
+                                                          dort               1                   1
 
-                                                    Donc **notre index ne trouve JAMAIS rien en CJK**, pas même sur trois
-                                                    caractères — ce n'est pas une dégradation, c'est un mur. `trigram` le
-                                                    lève dès 3 caractères sans toucher au français.
-                                                    Reste hors de portée : les termes CJK de **1-2 caractères**, et c'est
-                                                    précisément ce que leur bigramme compilé existe pour couvrir.
-                                                    **On ne bascule PAS aujourd'hui** : produit français d'abord, un index
-                                                    trigramme pèse plus lourd (une entrée par fenêtre de 3), et personne
-                                                    n'attend cette recherche. Mais le jour où un utilisateur CJK arrive, la
-                                                    décision est un MOT dans la migration 036 — plus un chantier natif.
-                                                    `native/fts5_cjk/` **(copie C, désormais optionnelle)**
+                                                      Donc **notre index ne trouve JAMAIS rien en CJK**, pas même sur trois
+                                                      caractères — ce n'est pas une dégradation, c'est un mur. `trigram` le
+                                                      lève dès 3 caractères sans toucher au français.
+                                                      Reste hors de portée : les termes CJK de **1-2 caractères**, et c'est
+                                                      précisément ce que leur bigramme compilé existe pour couvrir.
+                                                      **On ne bascule PAS aujourd'hui** : produit français d'abord, un index
+                                                      trigramme pèse plus lourd (une entrée par fenêtre de 3), et personne
+                                                      n'attend cette recherche. Mais le jour où un utilisateur CJK arrive, la
+                                                      décision est un MOT dans la migration 036 — plus un chantier natif.
+                                                      `native/fts5_cjk/` **(copie C, désormais optionnelle)**
 
 - [–] **7 · ~~PTC — appel d'outils programmatique~~** — **Écarté : le CLI le
   porte déjà.** Troisième ligne fermée le 01/08 en fouillant le binaire du CLI
@@ -499,18 +499,28 @@ remove_diacritics 2`) contre `trigram` :
       de cron brut. `cron/blueprint_catalog.py` (713) → `6e63a4ef9`
 - [x] **49 · Suggestions d'automatisation** — l'agent propose, l'humain
       dispose, et le refus TIENT. `cron/suggestions.py` → `6fe5512f1`
-- [~] **50 · Hub de skills** — **la moitié LECTURE livrée le 01/08**, et
-  c'est elle qui débloquait le n°10 : `inspecter-skill` lit un dossier
-  candidat et le passe au scanner. Lecture en LARGEUR d'abord — si le
-  plafond tombe, on veut avoir vu `SKILL.md` plutôt qu'un `node_modules`
-  rencontré en premier — et UN fichier de plus que la limite du scanner,
-  pour qu'il puisse constater le dépassement au lieu de voir un dossier
-  pile conforme.
-  _(reste : l'INSTALLATION — recherche, copie, synchro par hash d'origine.
-  Elle écrit dans le home Claude de l'humain, c'est-à-dire l'endroit que
-  notre désinstalleur classe « ne se touche JAMAIS » (n°58). Ça se décide,
-  ça ne se glisse pas dans un outil de lecture : palier D2.)_
+- [–] **50 · ~~Hub de skills~~** — **Écarté : le CLI porte déjà tout le hub.**
+  Sixième famille fermée par la fouille du binaire, et celle-ci emporte trois
+  lignes d'un coup (50, 52, 53). Les chaînes :
+
+      agentskills.io
+      marketplace manifest entries for commands/agents/skills/hooks/
+        outputStyles/themes/syntaxHighlighting
+      strictKnownMarketplaces
+      Policy-list sentinel for the ~/.claude/skills/ auto-load
+
+  Tout y est : le registre que le n°53 nomme explicitement
+  (**agentskills.io**), l'installation depuis un marketplace, la politique
+  d'allowlist des sources (`strictKnownMarketplaces`), et le chargement
+  automatique depuis `~/.claude/skills/`.
+  **Conséquence pour la question qui attendait Enzo** : elle n'a plus lieu
+  d'être. T3 n'a pas besoin d'une permission d'installer des skills dans son
+  home — Claude Code le fait déjà, avec sa propre politique de sources. Ce que
+  T3 ajoute reste l'INSPECTION avant de prendre (`inspecter-skill`, n°10), et
+  c'est bien la moitié qui manquait : le marketplace installe, il ne scanne
+  pas le contenu contre 121 motifs de menace.
   `tools/skills_hub.py` (4 151)
+
 - [~] **51 · Les skills d'Hermès** — **TRIÉES le 01/08**, le travail de
   regarder est fait ; reste la décision de prendre.
   D'abord un fait : elles sont **69**, pas 182, et il n'y a **pas de
@@ -534,17 +544,8 @@ remove_diacritics 2`) contre `trigram` :
   appelle une API HTTP est refusée d'une source communautaire. C'est le
   bon défaut pour une installation automatique ; c'est peut-être trop
   strict pour un choix humain éclairé.)_
-- [ ] **52 · Bundles de skills** — un alias `/<nom>` déclenche plusieurs
-      skills. `hermes_cli/bundles.py`
-      **Instruit le 01/08 : pas constructible à notre niveau.** T3 LIT les
-      commandes slash depuis la poignée de main d'initialisation du CLI
-      (`parseClaudeInitializationCommands`) ; il n'en ajoute aucune, et le SDK
-      n'expose aucun moyen de le faire. L'espace des commandes appartient à
-      Claude Code.
-      La seule voie serait d'ÉCRIRE un fichier de commande dans le dossier
-      Claude de l'humain — la même famille de décision que l'installation de
-      skills (n°51-53). Elle remonte à Enzo, pas au code.
-- [ ] **53 · Compatibilité agentskills.io + index Anthropic/OpenAI/LobeHub**
+- [–] **52 · ~~Bundles de skills~~** — **Écarté : le CLI porte un marketplace complet.** Vérifié le 01/08 dans son binaire — voir le n°50.
+- [–] **53 · ~~Compatibilité agentskills.io~~** — **Écarté : le CLI porte un marketplace complet.** Vérifié le 01/08 dans son binaire — voir le n°50.
 - [–] **54 · ~~Conduite fine de session~~** — **Écarté : les trois
   comportements existent DÉJÀ sous nous.** Vérifié le 01/08 dans le binaire du
   CLI que T3 lance, la même fouille qui a fermé le n°8 :
