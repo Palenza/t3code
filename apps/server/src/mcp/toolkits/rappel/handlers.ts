@@ -1,12 +1,19 @@
 import * as Effect from "effect/Effect";
 
 import {
+  bornerCharge,
   bornesDeFil,
   expressionMatch,
   fenetreAutour,
   meilleurParFil,
   modeDeRappel,
   FILS_PAR_DECOUVERTE,
+  tronquerMessage,
+  type MessageDeFil,
+  PLAFOND_ANCRE,
+  PLAFOND_BORNE,
+  PLAFOND_CHARGE,
+  PLAFOND_VOISIN,
   RAYON_FENETRE,
   TAILLE_BORNES,
 } from "../../../rappel/RappelRequete.ts";
@@ -24,6 +31,22 @@ import { RappelError, RappelToolkit } from "./tools.ts";
 const TROUVAILLES_BRUTES = 120;
 
 const FILS_RECENTS = 20;
+
+/** Le poids d'un message dans le budget de charge : son texte, rien d'autre. */
+const poidsDe = (message: MessageDeFil) => message.texte.length;
+
+/**
+ * La FENÊTRE : le message trouvé arrive entier, ses voisins écourtés. Couper
+ * tout à la même longueur reviendrait à traiter la preuve comme du décor.
+ */
+const couperFenetre = (messages: ReadonlyArray<MessageDeFil>, ancre: string): MessageDeFil[] =>
+  messages.map((message) =>
+    tronquerMessage(message, message.messageId === ancre ? PLAFOND_ANCRE : PLAFOND_VOISIN),
+  );
+
+/** Les BORNES : on s'oriente, on ne relit pas. */
+const couperBornes = (messages: ReadonlyArray<MessageDeFil>): MessageDeFil[] =>
+  messages.map((message) => tronquerMessage(message, PLAFOND_BORNE));
 
 /**
  * Une panne d'index ne remonte JAMAIS telle quelle.
@@ -68,7 +91,10 @@ const handlers = {
             message: `Aucun message dans le fil « ${filId} ». Vérifie l'identifiant, ou appelle \`rappel\` sans argument pour lister les fils.`,
           });
         }
-        const fenetre = fenetreAutour(messages, ancre, RAYON_FENETRE);
+        const fenetreBrute = fenetreAutour(messages, ancre, RAYON_FENETRE);
+        // En défilement, il n'y a pas de « trouvaille » : l'ancre EST ce qu'on
+        // vient lire, elle arrive entière, le reste écourté.
+        const fenetre = couperFenetre(fenetreBrute, ancre);
         if (fenetre.length === 0) {
           return yield* new RappelError({
             message: `Le message « ${ancre} » n'est pas dans le fil « ${filId} » (${messages.length} messages). Réancre-toi sur un identifiant rendu par un appel précédent.`,
@@ -113,7 +139,7 @@ const handlers = {
         .pipe(Effect.mapError(erreurDIndex));
       const titres = new Map(recents.map((fil) => [fil.filId, fil.titre]));
 
-      const fils = yield* Effect.forEach(retenues, (trouvaille) =>
+      const filsComplets = yield* Effect.forEach(retenues, (trouvaille) =>
         Effect.gen(function* () {
           const messages = yield* store
             .messagesDuFil(trouvaille.filId)
@@ -124,19 +150,40 @@ const handlers = {
             titre: titres.get(trouvaille.filId) ?? "(sans titre)",
             archive: trouvaille.filArchive,
             ancre: trouvaille.messageId,
-            fenetre: fenetreAutour(messages, trouvaille.messageId, RAYON_FENETRE),
-            debutDuFil: bornes.debut,
-            finDuFil: bornes.fin,
+            fenetre: couperFenetre(
+              fenetreAutour(messages, trouvaille.messageId, RAYON_FENETRE),
+              trouvaille.messageId,
+            ),
+            debutDuFil: couperBornes(bornes.debut),
+            finDuFil: couperBornes(bornes.fin),
           };
         }),
       );
+
+      // LE BUDGET GLOBAL. Sans lui, huit fils bavards rendaient 258 000
+      // jetons — un quart de la fenêtre, avalé par un outil censé en FAIRE
+      // GAGNER (mesuré sur la base réelle avant de poser la limite). Les fils
+      // arrivent déjà du meilleur au pire : couper par la fin retire les moins
+      // pertinents.
+      const bornee = bornerCharge(
+        filsComplets,
+        (fil) =>
+          [...fil.fenetre, ...fil.debutDuFil, ...fil.finDuFil].reduce(
+            (somme, message) => somme + poidsDe(message),
+            0,
+          ),
+        PLAFOND_CHARGE,
+      );
+      const fils = bornee.retenus;
 
       return {
         mode,
         fils,
         fenetre: [],
         recents: [],
-        note: `${fils.length} fils touchés par « ${question} » (sur ${brutes.length} messages trouvés). Pour lire plus loin dans un fil, rappelle avec son \`filId\` et un \`autourDe\`.`,
+        // Aucun plafond en silence (A7) : ce qui a été écarté se dit, avec
+        // sa raison et le geste pour aller le chercher.
+        note: `${fils.length} fils touchés par « ${question} » (sur ${brutes.length} messages trouvés).${bornee.ecartes > 0 ? ` ${bornee.ecartes} fils écartés faute de place (budget ${PLAFOND_CHARGE} caractères) — affine la question pour les voir.` : ""} Pour lire plus loin dans un fil, rappelle avec son \`filId\` et un \`autourDe\`.`,
       };
     }),
 } satisfies Parameters<typeof RappelToolkit.toLayer>[0];

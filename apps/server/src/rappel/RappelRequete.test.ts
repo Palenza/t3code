@@ -6,7 +6,13 @@ import {
   fenetreAutour,
   meilleurParFil,
   modeDeRappel,
+  bornerCharge,
+  tronquerMessage,
   PENALITE_FIL_ARCHIVE,
+  PLAFOND_ANCRE,
+  PLAFOND_BORNE,
+  PLAFOND_CHARGE,
+  PLAFOND_VOISIN,
   type MessageDeFil,
   type TrouvailleBrute,
 } from "./RappelRequete.ts";
@@ -184,5 +190,84 @@ describe("bornesDeFil", () => {
   it("supporte zéro et le vide", () => {
     assert.deepEqual(bornesDeFil([msg("a")], 0), { debut: [], fin: [] });
     assert.deepEqual(bornesDeFil([], 3), { debut: [], fin: [] });
+  });
+});
+
+describe("bornes de charge", () => {
+  it("laisse tranquille un message ordinaire", () => {
+    // p50 = 180 caractères sur la base réelle : le sain ne doit jamais sentir
+    // que la limite existe.
+    const ordinaire = msg("m1", "x".repeat(180));
+    assert.equal(tronquerMessage(ordinaire, PLAFOND_ANCRE), ordinaire);
+    assert.equal(
+      tronquerMessage(msg("m2", "x".repeat(PLAFOND_ANCRE)), PLAFOND_ANCRE).texte.length,
+      PLAFOND_ANCRE,
+    );
+  });
+
+  it("coupe l'énorme en DISANT ce qui a été retiré", () => {
+    // Le vrai cas : un message de 416 190 caractères existe dans la base.
+    const enorme = msg("m1", "x".repeat(20_000));
+    const coupe = tronquerMessage(enorme, PLAFOND_ANCRE);
+    assert.isTrue(coupe.texte.startsWith("x".repeat(100)));
+    assert.include(coupe.texte, "12000 caractères de plus");
+    assert.include(coupe.texte, `plafond ${PLAFOND_ANCRE}`);
+  });
+
+  it("garde TOUJOURS le premier, même s'il dépasse à lui seul", () => {
+    // Rendre zéro parce que le meilleur résultat est trop gros serait la pire
+    // réponse : l'agent conclurait « rien trouvé » alors qu'on a trouvé.
+    const borne = bornerCharge([500, 10, 10], (n) => n, 100);
+    assert.deepEqual(borne.retenus, [500]);
+    assert.equal(borne.ecartes, 2);
+  });
+
+  it("compte ce qu'il écarte plutôt que de le taire", () => {
+    const borne = bornerCharge([30, 30, 30, 30], (n) => n, 70);
+    assert.deepEqual(borne.retenus, [30, 30]);
+    assert.equal(borne.ecartes, 2);
+  });
+
+  it("ne coupe rien quand tout tient", () => {
+    const borne = bornerCharge([10, 10, 10], (n) => n, 1000);
+    assert.deepEqual(borne.retenus, [10, 10, 10]);
+    assert.equal(borne.ecartes, 0);
+  });
+
+  it("supporte le vide", () => {
+    const borne = bornerCharge([], (n: number) => n, 100);
+    assert.deepEqual(borne.retenus, []);
+    assert.equal(borne.ecartes, 0);
+  });
+
+  it("le plafond par message reste au-dessus du p99 mesuré", () => {
+    // p99 = 4 568 caractères sur 3 851 messages réels. Si un jour le plafond
+    // descend sous cette valeur, il mordrait des messages SAINS — et c'est
+    // alors la limite qui aurait tort.
+    assert.isAtLeast(PLAFOND_ANCRE, 4_568);
+  });
+});
+
+describe("les trois tiers de troncature", () => {
+  it("l'ancre est plus généreuse que le voisin, le voisin que la borne", () => {
+    // L'ordre EST la conception : la preuve arrive entière, le contexte
+    // écourté, l'orientation courte. Si quelqu'un les égalise un jour, il
+    // aura effacé la distinction sans le vouloir — ce test l'arrêtera.
+    assert.isAbove(PLAFOND_ANCRE, PLAFOND_VOISIN);
+    assert.isAbove(PLAFOND_VOISIN, PLAFOND_BORNE);
+  });
+
+  it("chaque plafond reste calé sur un percentile mesuré", () => {
+    // p99 = 4 568 : l'ancre ne doit mordre que l'énorme.
+    assert.isAtLeast(PLAFOND_ANCRE, 4_568);
+    // p90 = 1 210 : neuf voisins sur dix doivent passer entiers.
+    assert.isAtLeast(PLAFOND_VOISIN, 1_200);
+  });
+
+  it("le fil-piège global reste au-dessus du pire cas RÉEL mesuré", () => {
+    // 73 960 caractères, mesurés en rejouant les vraies questions du
+    // fondateur. Si la limite descend sous cette valeur, elle mordra des
+    // recherches saines — et c'est alors la limite qui aura tort.
+    assert.isAbove(PLAFOND_CHARGE, 73_960);
   });
 });

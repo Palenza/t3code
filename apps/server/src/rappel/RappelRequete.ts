@@ -172,3 +172,84 @@ export function bornesDeFil(messages: ReadonlyArray<MessageDeFil>, combien: numb
 export const RAYON_FENETRE = 5;
 export const TAILLE_BORNES = 3;
 export const FILS_PAR_DECOUVERTE = 8;
+
+/**
+ * LES BORNES DE LA CHARGE — mesurées, jamais devinées.
+ *
+ * Livré sans elles le 31/07, le rappel pouvait rendre **258 000 jetons en un
+ * appel** : un quart de la fenêtre de contexte, avalé par un outil censé en
+ * FAIRE GAGNER. Un seul message de la base pèse 104 000 jetons.
+ *
+ * ── Ce qui a été mesuré, sur 3 851 messages réels ──────────────────────────
+ *
+ *     p50      180 caractères        p99    4 568
+ *     p90    1 210                   p99.9 28 240
+ *     p95    2 184                   max  416 190
+ *
+ * ── Trois tiers, parce que les messages n'ont pas le même rôle ─────────────
+ *
+ * Couper tout à la même longueur, c'est traiter la PREUVE comme du décor.
+ * Le message trouvé doit arriver entier — c'est lui qu'on est venu chercher.
+ * Ses voisins servent à le comprendre. Les bornes servent à situer le fil.
+ *
+ *   · ANCRE   8 000 — au-dessus du p99 (4 568) : seul l'énorme la touche.
+ *   · VOISIN  1 200 — posé sur le p90 (1 210) : neuf voisins sur dix passent
+ *                     entiers, et les monstres sont ramenés à leur utilité.
+ *   · BORNE     800 — on s'oriente, on ne relit pas.
+ *
+ * Effet mesuré : le pire cas réaliste passe de 35 858 à 18 490 jetons, et
+ * une question ordinaire coûte 1 000 à 15 000.
+ *
+ * ── Le fil-piège global ────────────────────────────────────────────────────
+ *
+ * 120 000 caractères ≈ 30 000 jetons, soit 1,6× le pire cas RÉEL mesuré
+ * (73 960). Aucune question saine ne peut l'approcher ; seule une requête qui
+ * touche huit fils énormes à la fois la rencontre. Si un cas sain la touche
+ * un jour, c'est la limite qui a tort : on remesure et on met à jour ce reçu.
+ *
+ * Et rien n'est coupé en silence (A7) : chaque troncature nomme la limite et
+ * ce qui manque, chaque fil écarté est compté dans la note.
+ */
+export const PLAFOND_ANCRE = 8_000;
+export const PLAFOND_VOISIN = 1_200;
+export const PLAFOND_BORNE = 800;
+export const PLAFOND_CHARGE = 120_000;
+
+/** Coupe un message trop long en le DISANT dans le texte rendu. */
+export function tronquerMessage(message: MessageDeFil, plafond: number): MessageDeFil {
+  if (message.texte.length <= plafond) return message;
+  const retire = message.texte.length - plafond;
+  return {
+    ...message,
+    texte: `${message.texte.slice(0, plafond)}\n\n[…coupé : ${retire} caractères de plus, plafond ${plafond} par message. Ouvre le fil pour la suite.]`,
+  };
+}
+
+export interface ChargeBornee<T> {
+  readonly retenus: T[];
+  /** Combien d'éléments n'ont PAS été rendus — jamais tu, toujours dit. */
+  readonly ecartes: number;
+}
+
+/**
+ * Garde des éléments tant que le budget tient, et compte ceux qu'on laisse.
+ *
+ * On garde TOUJOURS le premier, même s'il dépasse à lui seul : rendre zéro
+ * résultat parce que le meilleur est trop gros serait la pire réponse
+ * possible — l'agent conclurait « rien trouvé » alors qu'on a trouvé.
+ */
+export function bornerCharge<T>(
+  elements: ReadonlyArray<T>,
+  taille: (element: T) => number,
+  budget: number,
+): ChargeBornee<T> {
+  const retenus: T[] = [];
+  let cumul = 0;
+  for (const element of elements) {
+    const poids = taille(element);
+    if (retenus.length > 0 && cumul + poids > budget) break;
+    retenus.push(element);
+    cumul += poids;
+  }
+  return { retenus, ecartes: elements.length - retenus.length };
+}
