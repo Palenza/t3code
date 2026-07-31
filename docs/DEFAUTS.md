@@ -64,10 +64,14 @@ l'application est en arrière-plan »_.
 
 ## Ce qui reste à mesurer
 
-- Le seuil de déclenchement d'un `/compact` volontaire. Les trois pièces
-  existent (`isAutoCompactEnabled`, le remplissage en direct, le prompt
-  verbatim) mais on n'a aucune mesure de ce que gagnerait un compactage à
-  60 % plutôt qu'à 100 %. **On ne pose pas ce nombre avant de l'avoir vu.**
+- ~~Le seuil d'un `/compact` volontaire.~~ **Idée TUÉE en la déroulant, et
+  c'était la mienne.** Elle ne marche que si on contrôle la CIBLE. Hermès
+  compresse de 60 % vers 20 % : chaque passage coûte peu et il en faut peu.
+  Chez nous la cible est imposée à ~1,7 % quel que soit le déclencheur.
+  Déclencher à 600 k au lieu de 1 M ne changerait donc pas ce qu'on retrouve
+  après — mais multiplierait par 1,67 le NOMBRE de compactages, donc le gel
+  de 2 à 3 minutes qui va avec. On paierait plus cher pour le même résultat.
+  À rouvrir seulement si le SDK expose un jour la cible.
 - ~~Le plafond des images.~~ **Écarté par la mesure, le soir même.** J'avais
   compté les images en OCTETS de transcript ; une image se tokenise à la
   SURFACE (≈ surface/750). Surestimation d'un facteur **46** : les 17 captures

@@ -234,8 +234,12 @@ la raison — un écart sans raison se rouvre tous les mois.
 - [ ] **72 · Toolsets composables** — héritage, activation à chaud
 - [ ] **73 · Conscience de batterie** `agent/battery.py`
 - [ ] **74 · Générateur de titre + indices de sous-répertoire**
-- [ ] **75 · Timeouts de raisonnement + guidance** quand le modèle pense trop
-      longtemps
+- [–] **75 · ~~Timeouts de raisonnement~~** — **Écarté, mesuré.** Leurs
+  modules visent un timeout de TRANSPORT : un proxy cloud qui tue un flux
+  de pensée avant le premier jeton. T3 passe par le CLI, qui possède le
+  transport. Et la panne équivalente chez nous n'existe pas : sur 579
+  tours, 13 dépassent 30 minutes et **aucun** n'a moins de 10 activités —
+  les tours longs travaillent, ils ne sont pas bloqués.
 
 ## Niveau 4 — moins fort, mais toujours bon
 
