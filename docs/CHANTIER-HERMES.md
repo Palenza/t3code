@@ -102,23 +102,23 @@ la raison — un écart sans raison se rouvre tous les mois.
       base en mémoire, avec nos réglages actuels (`unicode61
 remove_diacritics 2`) contre `trigram` :
 
-                  requête      unicode61 (le nôtre)   trigram
-                  数据  (2)          0                   0
-                  数据库 (3)          0                   1
-                  東京  (2)          0                   0
-                  chat               1                   1
-                  dort               1                   1
+                    requête      unicode61 (le nôtre)   trigram
+                    数据  (2)          0                   0
+                    数据库 (3)          0                   1
+                    東京  (2)          0                   0
+                    chat               1                   1
+                    dort               1                   1
 
-              Donc **notre index ne trouve JAMAIS rien en CJK**, pas même sur trois
-              caractères — ce n'est pas une dégradation, c'est un mur. `trigram` le
-              lève dès 3 caractères sans toucher au français.
-              Reste hors de portée : les termes CJK de **1-2 caractères**, et c'est
-              précisément ce que leur bigramme compilé existe pour couvrir.
-              **On ne bascule PAS aujourd'hui** : produit français d'abord, un index
-              trigramme pèse plus lourd (une entrée par fenêtre de 3), et personne
-              n'attend cette recherche. Mais le jour où un utilisateur CJK arrive, la
-              décision est un MOT dans la migration 036 — plus un chantier natif.
-              `native/fts5_cjk/` **(copie C, désormais optionnelle)**
+                Donc **notre index ne trouve JAMAIS rien en CJK**, pas même sur trois
+                caractères — ce n'est pas une dégradation, c'est un mur. `trigram` le
+                lève dès 3 caractères sans toucher au français.
+                Reste hors de portée : les termes CJK de **1-2 caractères**, et c'est
+                précisément ce que leur bigramme compilé existe pour couvrir.
+                **On ne bascule PAS aujourd'hui** : produit français d'abord, un index
+                trigramme pèse plus lourd (une entrée par fenêtre de 3), et personne
+                n'attend cette recherche. Mais le jour où un utilisateur CJK arrive, la
+                décision est un MOT dans la migration 036 — plus un chantier natif.
+                `native/fts5_cjk/` **(copie C, désormais optionnelle)**
 
 - [ ] **7 · PTC — appel d'outils programmatique** — le modèle écrit un script
       qui appelle nos outils, N tours → 1. Seul le `stdout` revient. Chez nous il
@@ -515,27 +515,37 @@ remove_diacritics 2`) contre `trigram` :
 - [ ] **69 · Génération d'images et de vidéos** — 7 fournisseurs image, FLUX3
 - [x] **70 · Vision** — 11 commits sur les images du composeur ; le modèle voit déjà.
 
-- [ ] **71 · Hooks de plugin** — 7 événements agent + **3 hooks de
-      transformation** (`transform_tool_result`, `transform_terminal_output`)
-      **INSTRUIT le 01/08, et ça ouvre un trou chez nous.** Le SDK expose 30
-      événements de hook (`HOOK_EVENTS`) et, sur `PostToolUse`, un champ
-      `updatedToolOutput` — « replaces the tool output before it is sent to
-      the model », avec la précision qui compte : _works for all tools_
-      (l'autre champ, `updatedMCPToolOutput`, ne couvre que le MCP).
-      **T3 n'enregistre AUCUN hook** (`hooks:` absent de `ClaudeAdapter.ts`).
-      Conséquence, et c'est le trou : notre porte de sortie — caviardage des
-      secrets, scan de menaces, plafond à 40 000, débordement sur disque — ne
-      s'applique QU'À nos 23 outils MCP. Chaque résultat de `Bash`, `Read`,
-      `Grep`, `WebFetch` du SDK part au modèle **non caviardé et non scanné**,
-      alors que ce sont eux qui produisent le plus de contenu tiers.
-      Point de câblage exact : `queryOptions` dans `ClaudeAdapter.ts`,
-      `hooks: { PostToolUse: [{ hooks: [...] }] }`.
-      **Tranche à part entière, et palier D2** : `updatedToolOutput` remplace
-      la sortie de TOUS les outils — un mauvais branchement les casse tous.
-      Premier périmètre à ne pas dépasser : caviardage + scan SEULEMENT, pas
-      le plafond. Nos 40 000 sont mesurés sur des sorties MCP ; les appliquer
-      à un `Read` tronquerait des fichiers. Le plafond des outils intégrés
-      demande sa propre mesure.
+- [~] **71 · Hooks de plugin** — **le hook de TRANSFORMATION livré le 01/08**,
+  et il ferme un trou béant.
+  `mcp/SortieDOutil.ts` s'appelle « PORTE OBLIGATOIRE », et un test
+  structurel vérifie que nos six toolkits la traversent. Sauf qu'elle ne
+  gardait que NOS 23 outils MCP : `Bash`, `Read`, `Grep`, `WebFetch`
+  rendaient leur sortie au modèle sans jamais la croiser — alors que ce
+  sont EUX qui rapportent le plus de contenu tiers.
+  Branché par `hooks.PostToolUse` → `updatedToolOutput` (« works for all
+  tools »). J'avais d'abord écarté le branchement en croyant que le
+  plafond de 40 000 tronquerait un `Read` : relecture faite, la porte ne
+  coupe RIEN — « couper au milieu d'un JSON rendrait une structure
+  invalide ». Elle caviarde en gardant la forme, et se contente de
+  signaler un dépassement.
+  Trois décisions du branchement :
+  · il rend `null` quand il n'y a rien à faire, et le SDK garde alors la
+  sortie originale à l'octet près — un rappel qui renvoie toujours un
+  objet recopierait chaque sortie du produit pour rien ;
+  · l'avertissement de contenu tiers part par `additionalContext`, À CÔTÉ
+  du résultat. Le glisser dedans ferait rendre à un `Read` un fichier
+  qui ne ressemble plus à ce qu'il y a sur le disque ;
+  · la note de dépassement de plafond, elle, est FILTRÉE : 40 000 est
+  notre budget de sortie MCP, une règle qu'on s'est donnée pour des
+  outils qu'on écrit. La servir sur un `Read` apprendrait au modèle à
+  ignorer nos avertissements.
+  _(reste : les 6 autres événements d'agent, et
+  `transform_terminal_output`. Trouvé au passage et NON traité :
+  `Caviarder` connaît `AKIA…` — l'identifiant AWS — mais pas
+  `AWS_SECRET_ACCESS_KEY=…`, c'est-à-dire la moitié qui compte.)_
+  **Palier D2** : le rappel est prouvé par 8 tests sur la fonction pure,
+  mais il transforme la sortie de TOUS les outils. À montrer sur un vrai
+  tour avant de déployer.
 - [–] **72 · ~~Toolsets composables~~** — **Écarté sur mesure, 01/08.** Deux
   raisons, dans cet ordre.
   D'abord la primitive existe DÉJÀ, et pas chez nous : le SDK porte un

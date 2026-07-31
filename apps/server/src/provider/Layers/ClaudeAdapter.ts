@@ -71,6 +71,7 @@ import * as Stream from "effect/Stream";
 import { resolveAttachmentPath } from "../../attachmentStore.ts";
 import { ServerConfig } from "../../config.ts";
 import * as McpProviderSession from "../../mcp/McpProviderSession.ts";
+import { garderLaSortie } from "../gardeDeSortieDOutil.ts";
 import { resolveClaudeSdkExecutablePath } from "../Drivers/ClaudeExecutable.ts";
 import { makeClaudeEnvironment } from "../Drivers/ClaudeHome.ts";
 import {
@@ -3653,6 +3654,22 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
         includePartialMessages: true,
         canUseTool,
         env: claudeEnvironment,
+        // La PORTE DE SORTIE, étendue aux outils du SDK (n°71). Elle ne gardait
+        // que nos 23 outils MCP : `Bash`, `Read`, `Grep`, `WebFetch` rendaient
+        // leur sortie au modèle sans jamais la croiser — alors que ce sont eux
+        // qui rapportent le plus de contenu tiers. Le rappel ne tronque rien et
+        // ne change pas la forme ; il rend `undefined` quand il n'y a rien à
+        // faire, et le SDK garde alors la sortie originale à l'octet près.
+        hooks: {
+          PostToolUse: [
+            {
+              hooks: [
+                (entree: { readonly tool_response?: unknown }) =>
+                  Promise.resolve(garderLaSortie(entree.tool_response) ?? { continue: true }),
+              ],
+            },
+          ],
+        } as unknown as NonNullable<ClaudeQueryOptions["hooks"]>,
         ...(input.cwd ? { additionalDirectories: [input.cwd] } : {}),
         ...(Object.keys(extraArgs).length > 0 ? { extraArgs } : {}),
         ...(mcpSession
