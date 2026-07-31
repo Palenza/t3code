@@ -67,6 +67,15 @@ la raison — un écart sans raison se rouvre tous les mois.
 - [ ] **8 · `/goal` — la boucle Ralph** — juge après chaque tour, continuation
       = message normal (cache intact), juge fail-OPEN, message utilisateur
       préempte, survit au `/resume`. `hermes_cli/goals.py` (1 807)
+      **Instruit le 01/08**, comme le triage le demandait, et le résultat
+      ouvre la voie plutôt que de la fermer : T3 n'a AUCUN `/goal` à lui
+      (recherche dédiée), et le SDK n'en expose pas non plus — ni option, ni
+      sous-type de commande. La boucle qu'on utilise aujourd'hui est celle du
+      CLI Claude Code, hors du chemin que T3 pilote.
+      Donc un `/goal` de T3 ne doublerait rien. Il reste à vérifier une chose
+      qui ne se voit pas d'ici : si le CLI que le SDK lance expose déjà la
+      commande à ses utilisateurs. **À demander à Enzo** — invérifiable depuis
+      le dépôt (A1).
 - [x] **9 · Nudges de persistance** — la DETTE DE PERSISTANCE : combien de
       tours et d'outils depuis la dernière écriture de fichier. Fil-piège
       MESURÉ (p95 = 9 tours, p99 = 22 → seuil 12 tours ET 40 outils : 2 séries
@@ -191,8 +200,21 @@ la raison — un écart sans raison se rouvre tous les mois.
 - [–] **25 · Édition de fichiers de qualité** — correspondance floue, parseur
   de patch. **Écarté** : l'édition appartient à Claude Code, pas à T3. La
   reprendre serait doubler un moteur qu'on ne possède pas.
-- [ ] **26 · Délégation** — sous-agents isolés, cycle de vie, log en direct,
-      revue en arrière-plan. `tools/delegate_tool.py` (3 974)
+- [–] **26 · ~~Délégation~~** — **Écarté sur enquête, 01/08.** Leurs 3 974
+  lignes sont une GOUVERNANCE de la délégation : outils interdits au fils,
+  profondeur max (1, plat par défaut), 3 enfants concurrents, pause,
+  interruption par identifiant, délai de l'enfant.
+  L'essentiel est déjà dans le SDK, qu'on ne possède pas mais qu'on utilise :
+  `AgentDefinition` porte `tools`, `disallowedTools`, `maxTurns`, `background`,
+  `model`, `skills`, `mcpServers`. Ce sont leurs `DELEGATE_BLOCKED_TOOLS` et
+  leur délai, écrits par quelqu'un d'autre.
+  Ce qui manque — plafond de profondeur et de concurrence — ne peut pas venir
+  de nous : c'est le SDK qui LANCE le sous-agent (même mur que n°25 et n°30).
+  Et le gaspillage réel qu'on a mesuré (une veille qui dépensait jusqu'à
+  **48 agents**, un par dépôt) est déjà traité, par la skill que T3 dépose
+  lui-même dans chaque home — `ClaudeOutillage.ts`.
+  _(À rouvrir si le SDK ouvre un point de passage sur le lancement de
+  sous-agents. Le jour venu, le plafond de profondeur est une petite tranche.)_
 - [x] **27 · Lecture du contexte** — « il te reste 3 tours » au lieu de
       « 83 % ». `agent/iteration_budget.py` → `b0a4cf0d0`
       _(reste : répartition par catégorie, références)_
@@ -368,6 +390,25 @@ la raison — un écart sans raison se rouvre tous les mois.
 
 - [ ] **71 · Hooks de plugin** — 7 événements agent + **3 hooks de
       transformation** (`transform_tool_result`, `transform_terminal_output`)
+      **INSTRUIT le 01/08, et ça ouvre un trou chez nous.** Le SDK expose 30
+      événements de hook (`HOOK_EVENTS`) et, sur `PostToolUse`, un champ
+      `updatedToolOutput` — « replaces the tool output before it is sent to
+      the model », avec la précision qui compte : _works for all tools_
+      (l'autre champ, `updatedMCPToolOutput`, ne couvre que le MCP).
+      **T3 n'enregistre AUCUN hook** (`hooks:` absent de `ClaudeAdapter.ts`).
+      Conséquence, et c'est le trou : notre porte de sortie — caviardage des
+      secrets, scan de menaces, plafond à 40 000, débordement sur disque — ne
+      s'applique QU'À nos 23 outils MCP. Chaque résultat de `Bash`, `Read`,
+      `Grep`, `WebFetch` du SDK part au modèle **non caviardé et non scanné**,
+      alors que ce sont eux qui produisent le plus de contenu tiers.
+      Point de câblage exact : `queryOptions` dans `ClaudeAdapter.ts`,
+      `hooks: { PostToolUse: [{ hooks: [...] }] }`.
+      **Tranche à part entière, et palier D2** : `updatedToolOutput` remplace
+      la sortie de TOUS les outils — un mauvais branchement les casse tous.
+      Premier périmètre à ne pas dépasser : caviardage + scan SEULEMENT, pas
+      le plafond. Nos 40 000 sont mesurés sur des sorties MCP ; les appliquer
+      à un `Read` tronquerait des fichiers. Le plafond des outils intégrés
+      demande sa propre mesure.
 - [–] **72 · ~~Toolsets composables~~** — **Écarté sur mesure, 01/08.** Deux
   raisons, dans cet ordre.
   D'abord la primitive existe DÉJÀ, et pas chez nous : le SDK porte un
