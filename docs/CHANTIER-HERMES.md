@@ -96,23 +96,23 @@ la raison — un écart sans raison se rouvre tous les mois.
       base en mémoire, avec nos réglages actuels (`unicode61
 remove_diacritics 2`) contre `trigram` :
 
-                            requête      unicode61 (le nôtre)   trigram
-                            数据  (2)          0                   0
-                            数据库 (3)          0                   1
-                            東京  (2)          0                   0
-                            chat               1                   1
-                            dort               1                   1
+                              requête      unicode61 (le nôtre)   trigram
+                              数据  (2)          0                   0
+                              数据库 (3)          0                   1
+                              東京  (2)          0                   0
+                              chat               1                   1
+                              dort               1                   1
 
-                        Donc **notre index ne trouve JAMAIS rien en CJK**, pas même sur trois
-                        caractères — ce n'est pas une dégradation, c'est un mur. `trigram` le
-                        lève dès 3 caractères sans toucher au français.
-                        Reste hors de portée : les termes CJK de **1-2 caractères**, et c'est
-                        précisément ce que leur bigramme compilé existe pour couvrir.
-                        **On ne bascule PAS aujourd'hui** : produit français d'abord, un index
-                        trigramme pèse plus lourd (une entrée par fenêtre de 3), et personne
-                        n'attend cette recherche. Mais le jour où un utilisateur CJK arrive, la
-                        décision est un MOT dans la migration 036 — plus un chantier natif.
-                        `native/fts5_cjk/` **(copie C, désormais optionnelle)**
+                          Donc **notre index ne trouve JAMAIS rien en CJK**, pas même sur trois
+                          caractères — ce n'est pas une dégradation, c'est un mur. `trigram` le
+                          lève dès 3 caractères sans toucher au français.
+                          Reste hors de portée : les termes CJK de **1-2 caractères**, et c'est
+                          précisément ce que leur bigramme compilé existe pour couvrir.
+                          **On ne bascule PAS aujourd'hui** : produit français d'abord, un index
+                          trigramme pèse plus lourd (une entrée par fenêtre de 3), et personne
+                          n'attend cette recherche. Mais le jour où un utilisateur CJK arrive, la
+                          décision est un MOT dans la migration 036 — plus un chantier natif.
+                          `native/fts5_cjk/` **(copie C, désormais optionnelle)**
 
 - [ ] **7 · PTC — appel d'outils programmatique** — le modèle écrit un script
       qui appelle nos outils, N tours → 1. Seul le `stdout` revient. Chez nous il
@@ -281,6 +281,26 @@ remove_diacritics 2`) contre `trigram` :
       _(reste : répartition par catégorie, références)_
 - [ ] **28 · Client LSP** — l'agent voit le code comme un IDE. Chez nous :
       exposé en outil MCP. `agent/lsp/`
+      **Instruit le 01/08 — et la tranche facile est un LEURRE.** J'ai voulu
+      livrer un morceau bon marché : un outil « où ce symbole est-il défini ? »
+      bâti sur les définitions que `repoMapCore` extrait déjà. Mesuré d'abord :
+
+          scannerSkill        28 mentions →  1 définition
+          transformerSortie   23 mentions →  1 définition
+          caviarder           33 mentions →  1 définition
+
+      Le bruit est réel (≈ 28 pour 1). Sauf qu'un motif précis —
+      `export (function|const|class|interface|type) X` — la trouve du PREMIER
+      coup, et l'agent a `Grep`. Un outil n'encoderait donc qu'un raccourci
+      pour quelque chose de déjà possible : un problème qu'on n'a pas.
+      Ce qu'un vrai LSP ajoute et que `Grep` ne peut PAS faire : trancher
+      entre plusieurs symboles homonymes depuis un site d'appel, suivre les
+      références à travers les ré-exports et les alias, renommer sans casser.
+      C'est réel — et c'est exactement la partie qui coûte 4 400 lignes et un
+      cycle de vie de serveur de langage. Il n'y a pas de demi-mesure utile.
+      Chantier à part entière, non bloqué : il attend un créneau, pas une
+      décision.
+
 - [–] **29 · ~~Environnements d'exécution~~** — **Écarté sur inventaire,
   01/08.** Leur dossier porte huit environnements : local, ssh, docker,
   modal, managed_modal, daytona, + la synchro de fichiers.
