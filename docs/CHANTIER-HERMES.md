@@ -16,7 +16,7 @@ plan.
 
 ## Où en est le catalogue — au 01/08/2026
 
-**34 livrés · 15 partiels · 32 écartés sur pièce · 4 restants.**
+**34 livrés · 16 partiels · 32 écartés sur pièce · 3 restants.**
 
 Chaque ligne a été INSTRUITE : aucune n'est restée sans qu'on aille voir. Un
 écart porte toujours sa raison, et une raison porte un reçu quand elle repose
@@ -133,23 +133,23 @@ la raison — un écart sans raison se rouvre tous les mois.
   base en mémoire, avec nos réglages actuels (`unicode61
 remove_diacritics 2`) contre `trigram` :
 
-                                                                                requête      unicode61 (le nôtre)   trigram
-                                                                                数据  (2)          0                   0
-                                                                                数据库 (3)          0                   1
-                                                                                東京  (2)          0                   0
-                                                                                chat               1                   1
-                                                                                dort               1                   1
+                                                                                  requête      unicode61 (le nôtre)   trigram
+                                                                                  数据  (2)          0                   0
+                                                                                  数据库 (3)          0                   1
+                                                                                  東京  (2)          0                   0
+                                                                                  chat               1                   1
+                                                                                  dort               1                   1
 
-                                                                            Donc **notre index ne trouve JAMAIS rien en CJK**, pas même sur trois
-                                                                            caractères — ce n'est pas une dégradation, c'est un mur. `trigram` le
-                                                                            lève dès 3 caractères sans toucher au français.
-                                                                            Reste hors de portée : les termes CJK de **1-2 caractères**, et c'est
-                                                                            précisément ce que leur bigramme compilé existe pour couvrir.
-                                                                            **On ne bascule PAS aujourd'hui** : produit français d'abord, un index
-                                                                            trigramme pèse plus lourd (une entrée par fenêtre de 3), et personne
-                                                                            n'attend cette recherche. Mais le jour où un utilisateur CJK arrive, la
-                                                                            décision est un MOT dans la migration 036 — plus un chantier natif.
-                                                                            `native/fts5_cjk/` **(copie C, désormais optionnelle)**
+                                                                              Donc **notre index ne trouve JAMAIS rien en CJK**, pas même sur trois
+                                                                              caractères — ce n'est pas une dégradation, c'est un mur. `trigram` le
+                                                                              lève dès 3 caractères sans toucher au français.
+                                                                              Reste hors de portée : les termes CJK de **1-2 caractères**, et c'est
+                                                                              précisément ce que leur bigramme compilé existe pour couvrir.
+                                                                              **On ne bascule PAS aujourd'hui** : produit français d'abord, un index
+                                                                              trigramme pèse plus lourd (une entrée par fenêtre de 3), et personne
+                                                                              n'attend cette recherche. Mais le jour où un utilisateur CJK arrive, la
+                                                                              décision est un MOT dans la migration 036 — plus un chantier natif.
+                                                                              `native/fts5_cjk/` **(copie C, désormais optionnelle)**
 
 - [–] **7 · ~~PTC — appel d'outils programmatique~~** — **Écarté : le CLI le
   porte déjà.** Troisième ligne fermée le 01/08 en fouillant le binaire du CLI
@@ -902,7 +902,25 @@ seulement pour le bloc.`stream*consumer.py` (2 250)
 
 - [–] **78 · Vue focus, moteur console, UI curses de repli, presse-papier** — T3 est Electron : une UI terminal de repli répond à un produit qui vit dans un terminal.
 
-- [ ] **79 · Bannière, onboarding, tips**
+- [~] **79 · Bannière, onboarding, tips** — **la DÉCISION livrée le 01/08 ;
+  le texte reste à Enzo.** Ce qui n'est pas du goût : choisir QUELLE
+  astuce montrer.
+  Un tirage au sort répète — sur six astuces, on revoit la même avant d'en
+  découvrir la moitié, et une astuce déjà lue apprend à ne plus les lire.
+  L'ordre fixe ne vaut pas mieux : il montre la première à quelqu'un qui
+  la connaît par cœur et enterre la dernière.
+  **La règle : parler de ce qu'on N'A PAS FAIT.** Chaque astuce nomme une
+  capacité ; on montre celle dont la capacité n'a jamais servi, mesurée sur
+  l'usage réel. C'est la seule qui puisse apprendre quelque chose — les
+  autres décrivent ce que l'humain fait déjà.
+  **Et quand tout a servi, on se TAIT.** Une bannière qui parle encore une
+  fois la découverte finie devient du bruit, et le jour où on aura vraiment
+  quelque chose à dire, personne ne regardera plus cet endroit. Un second
+  export existe pour que l'interface n'affiche RIEN — pas de cadre vide.
+  Un test rejoue un parcours complet : les six astuces sortent, sans un
+  doublon. C'est ce qu'un tirage au sort rate.
+  _(reste : le TEXTE. Les six astuces livrées sont des brouillons de
+  FAITS vérifiables sur T3 ; le ton et la voix appartiennent à Enzo.)_
 - [–] **80 · ~~Achievements + Petdex~~** — **Écarté le 01/08 sur MA décision, renversable d'un mot.** Ce n'est pas une question de
   faisabilité, c'est une question de TON. Les badges et le petdex fêtent
   l'usage de l'outil ; T3 sert à finir un travail, et l'humain qui le
