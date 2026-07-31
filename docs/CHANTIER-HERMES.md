@@ -61,9 +61,13 @@ la raison — un écart sans raison se rouvre tous les mois.
 
 ## Niveau 2 — très bon · sécurité et secrets
 
-- [ ] **10 · Scanner de skills importées** — exfiltration, injection de
-      prompt, commandes destructrices, persistance + politique par niveau de
-      confiance. `tools/skills_guard.py` (1 153), `skills_ast_audit.py`
+- [x] **10 · Scanner de skills importées** — la FORME (binaire embarqué,
+      50 fichiers, caractères invisibles) autant que le contenu, plus la
+      MATRICE de politique : le même danger décide autrement selon la source.
+      Réutilise la bibliothèque du n°13 en portée `strict`.
+      `tools/skills_guard.py` (1 153, 121 motifs)
+      _(reste : le branchement sur un vrai chemin d'import — il n'y en a pas
+      encore, c'est le n°50.)_
 - [x] **11 · Cibles sensibles** — la table de `approval.py` aspirée : ce qui
       est DANS l'espace de travail n'est pas ordinaire pour autant. `.git/`
       refusé (un hook s'exécute au commit, `core.pager` est une commande) ;
