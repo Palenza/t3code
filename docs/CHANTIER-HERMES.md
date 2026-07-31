@@ -22,6 +22,30 @@ Chaque ligne a été INSTRUITE : aucune n'est restée sans qu'on aille voir. Un
 écart porte toujours sa raison, et une raison porte un reçu quand elle repose
 sur une mesure.
 
+### La fouille du binaire — faite le 01/08, ne pas la refaire
+
+Cinq verdicts sont tombés en lisant le binaire du CLI que T3 lance
+(`~/.local/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe`, 257 Mo,
+477 114 chaînes) au lieu de raisonner sur ce qu'il devrait contenir :
+
+| ce que je croyais                   | ce que le binaire dit                                                                                     |
+| ----------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| **n°8** à construire                | `name:"goal"`, `supportsNonInteractive`, `/goal clear`                                                    |
+| **n°54** à construire               | `queuedCommands`, « Message queued for the main conversation's next turn. »                               |
+| **n°7** chantier à part (2 014 l.)  | « execute JavaScript with programmatic tool access », « Names of tools registered during this execution » |
+| **n°28** chantier à part (4 400 l.) | `goToDefinition`, `findReferences`, `workspaceSymbol`, `documentSymbol`, `hover`, `diagnostics`, `rename` |
+| **n°12** « 0 ligne »                | 13 `tool.denied` — le blocage est double, et l'autre est le volume                                        |
+
+**Et ce que la même fouille N'A PAS trouvé**, donc qui reste vraiment à nous :
+aucune passerelle (`Telegram` n'apparaît que comme exemple dans un libellé de
+config MCP, `Discord` comme lien de bun), aucun mot d'éveil, aucune synthèse
+vocale, aucune génération d'images. Les `onboarding` sont ceux du CLI, pas
+ceux de T3.
+
+La leçon, écrite ici pour qu'elle serve : **« ce que le CLI contient » est un
+ÉTAT, pas une déduction** — A1 s'y applique. Deux des cinq lignes tombées
+étaient classées « chantier à part entière » au niveau le plus fort.
+
 Ce que les 18 restants attendent vraiment — c'est la seule question utile :
 
 |       | quoi                                                               | qui décide                                                                                                                         |
@@ -104,23 +128,23 @@ la raison — un écart sans raison se rouvre tous les mois.
   base en mémoire, avec nos réglages actuels (`unicode61
 remove_diacritics 2`) contre `trigram` :
 
-                                                  requête      unicode61 (le nôtre)   trigram
-                                                  数据  (2)          0                   0
-                                                  数据库 (3)          0                   1
-                                                  東京  (2)          0                   0
-                                                  chat               1                   1
-                                                  dort               1                   1
+                                                    requête      unicode61 (le nôtre)   trigram
+                                                    数据  (2)          0                   0
+                                                    数据库 (3)          0                   1
+                                                    東京  (2)          0                   0
+                                                    chat               1                   1
+                                                    dort               1                   1
 
-                                              Donc **notre index ne trouve JAMAIS rien en CJK**, pas même sur trois
-                                              caractères — ce n'est pas une dégradation, c'est un mur. `trigram` le
-                                              lève dès 3 caractères sans toucher au français.
-                                              Reste hors de portée : les termes CJK de **1-2 caractères**, et c'est
-                                              précisément ce que leur bigramme compilé existe pour couvrir.
-                                              **On ne bascule PAS aujourd'hui** : produit français d'abord, un index
-                                              trigramme pèse plus lourd (une entrée par fenêtre de 3), et personne
-                                              n'attend cette recherche. Mais le jour où un utilisateur CJK arrive, la
-                                              décision est un MOT dans la migration 036 — plus un chantier natif.
-                                              `native/fts5_cjk/` **(copie C, désormais optionnelle)**
+                                                Donc **notre index ne trouve JAMAIS rien en CJK**, pas même sur trois
+                                                caractères — ce n'est pas une dégradation, c'est un mur. `trigram` le
+                                                lève dès 3 caractères sans toucher au français.
+                                                Reste hors de portée : les termes CJK de **1-2 caractères**, et c'est
+                                                précisément ce que leur bigramme compilé existe pour couvrir.
+                                                **On ne bascule PAS aujourd'hui** : produit français d'abord, un index
+                                                trigramme pèse plus lourd (une entrée par fenêtre de 3), et personne
+                                                n'attend cette recherche. Mais le jour où un utilisateur CJK arrive, la
+                                                décision est un MOT dans la migration 036 — plus un chantier natif.
+                                                `native/fts5_cjk/` **(copie C, désormais optionnelle)**
 
 - [–] **7 · ~~PTC — appel d'outils programmatique~~** — **Écarté : le CLI le
   porte déjà.** Troisième ligne fermée le 01/08 en fouillant le binaire du CLI
