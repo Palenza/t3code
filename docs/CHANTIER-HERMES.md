@@ -53,6 +53,12 @@ la raison — un écart sans raison se rouvre tous les mois.
       préempte, survit au `/resume`. `hermes_cli/goals.py` (1 807)
 - [ ] **9 · Nudges de persistance** — l'agent se rappelle d'écrire ce qu'il
       apprend. `agent/memory_manager.py` (1 241), `memory_provider.py`
+      _(deux pièces posées en chemin, pas le chantier : le hook `PreCompact`
+      côté Palenza grave une balise au moment où le contexte tombe, et
+      `contexte/Compactage.ts` fait DIRE au compactage ce qu'il jette —
+      97,5 à 98,6 % de la fenêtre, 9 fois en 7 jours, `b7eb20b9e`. T3 ne
+      capture toujours que ce que l'HUMAIN dit, jamais ce que l'agent
+      établit : c'est ça, le n°9.)_
 
 ## Niveau 2 — très bon · sécurité et secrets
 
