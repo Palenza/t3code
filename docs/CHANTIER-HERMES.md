@@ -106,8 +106,21 @@ la raison — un écart sans raison se rouvre tous les mois.
       privé restent permis (voir son serveur de dev est le produit). Branché
       sur `preview_navigate` et `preview_open`. `tools/url_safety.py` (862)
       _(reste : `website_policy.py`, la liste de sites par configuration)_
-- [ ] **15 · Vérification CVE/OSV comme OUTIL** (pas seulement en CI)
-      `tools/osv_check.py`
+- [x] **15 · Contrôle anti-malware sur les paquets** — le catalogue disait
+      « vérification CVE/OSV ». En lisant le code, ce n'en est PAS une : ils
+      ignorent délibérément les CVE et ne regardent que les avis `MAL-*`. Une
+      CVE dans une dépendance est un risque qu'on arbitre ; un paquet
+      malveillant est du code hostile qu'on exécute. Confondre les deux donne
+      une alerte qui crie sur la moitié de npm, donc une alerte qu'on éteint.
+      Outil MCP `paquet-malveillant`, moitié pure séparée (`PaquetALancer.ts`).
+      Ajouté à leur liste de lanceurs : **`bunx` et `pnpm dlx`** — les nôtres.
+      Un contrôle qui ne connaît pas les commandes qu'on tape ne contrôle rien.
+      Golden pris sur l'API RÉELLE (`noblox.js-proxy` → `MAL-2022-4874`).
+      `tools/osv_check.py` (169)
+      _(reste : la porte automatique. Ce qui lance `npx` est le `Bash` du SDK,
+      un moteur qu'on ne possède pas — cf. n°25 et n°30. Le jour où T3 tient
+      un point de passage sur l'exécution, la moitié pure s'y branche sans
+      changer une ligne : c'est pour ça qu'elle est séparée.)_
 - [ ] **16 · Sources de secrets externes** — 1Password, Bitwarden, commande.
       `agent/secret_sources/`
 - [x] **17 · Rédaction des secrets** — 985 lignes rien que pour caviarder

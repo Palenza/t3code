@@ -9,7 +9,12 @@ import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
 import type * as Types from "effect/Types";
 import { McpSchema, McpServer, Tool } from "effect/unstable/ai";
-import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
+import {
+  FetchHttpClient,
+  HttpRouter,
+  HttpServerRequest,
+  HttpServerResponse,
+} from "effect/unstable/http";
 
 import packageJson from "../../package.json" with { type: "json" };
 import * as McpInvocationContext from "./McpInvocationContext.ts";
@@ -24,6 +29,8 @@ import {
   PreviewSnapshotToolkit,
   PreviewStandardToolkit,
 } from "./toolkits/preview/tools.ts";
+import { PaquetToolkitHandlersLive } from "./toolkits/paquet/handlers.ts";
+import { PaquetToolkit } from "./toolkits/paquet/tools.ts";
 import { PreuveToolkitHandlersLive } from "./toolkits/preuve/handlers.ts";
 import { PreuveToolkit } from "./toolkits/preuve/tools.ts";
 import { SanteToolkitHandlersLive } from "./toolkits/sante/handlers.ts";
@@ -298,6 +305,16 @@ const SanteToolkitRegistrationLive = McpServer.toolkit(SanteToolkit).pipe(
   Layer.provide(SanteToolkitHandlersLive),
 );
 
+/**
+ * Le contrôle anti-malware sur les paquets (chantier n°15). Lecture seule,
+ * réseau sortant vers OSV uniquement, fail-open BRUYANT : une absence de
+ * réponse ne se rend jamais comme un « rien trouvé ».
+ */
+const PaquetToolkitRegistrationLive = McpServer.toolkit(PaquetToolkit).pipe(
+  Layer.provide(PaquetToolkitHandlersLive),
+  Layer.provide(FetchHttpClient.layer),
+);
+
 const McpTransportLive = McpServer.layerHttp({
   name: "T3 Code",
   version: packageJson.version,
@@ -312,4 +329,5 @@ export const layer = Layer.mergeAll(
   UsageSkillsToolkitRegistrationLive,
   DetteToolkitRegistrationLive,
   SanteToolkitRegistrationLive,
+  PaquetToolkitRegistrationLive,
 ).pipe(Layer.provideMerge(McpTransportLive));
