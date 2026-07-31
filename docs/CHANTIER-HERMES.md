@@ -14,7 +14,7 @@ dans une conversation, donc dans quelque chose qui se compacte. A6 : l'écrit
 survit, le retenu meurt. Un plan qu'on ne peut pas relire demain n'est pas un
 plan.
 
-Légende : `[x]` livré (avec son commit) · `[ ]` à faire · `[–]` écarté, avec
+Légende : `[x]` livré (avec son commit) · `[~]` partiellement livré · `[ ]` à faire · `[–]` écarté, avec
 la raison — un écart sans raison se rouvre tous les mois.
 
 ---
@@ -58,8 +58,30 @@ la raison — un écart sans raison se rouvre tous les mois.
       des arguments, coût LLM zéro, fenêtre ±5, bornes de fil, un résultat par
       fil. `tools/session_search_tool.py` (1 142)
       → `5dcdc8647`, plafonds mesurés dans `71c1d7b38`
-- [ ] **6 · Tokenizer CJK compilé** — bigrammes, sinon les termes de 1-2
-      caractères tombent en scan complet. `native/fts5_cjk/` **(copie C)**
+- [ ] **6 · Tokenizer CJK** — **MESURÉ le 01/08, et le chantier a changé de
+      taille.** Il n'y a pas de C à écrire pour l'essentiel : le SQLite
+      embarqué de Node porte déjà le tokenizer `trigram`. Relevé sur la vraie
+      base en mémoire, avec nos réglages actuels (`unicode61
+    remove_diacritics 2`) contre `trigram` :
+
+          requête      unicode61 (le nôtre)   trigram
+          数据  (2)          0                   0
+          数据库 (3)          0                   1
+          東京  (2)          0                   0
+          chat               1                   1
+          dort               1                   1
+
+      Donc **notre index ne trouve JAMAIS rien en CJK**, pas même sur trois
+      caractères — ce n'est pas une dégradation, c'est un mur. `trigram` le
+      lève dès 3 caractères sans toucher au français.
+      Reste hors de portée : les termes CJK de **1-2 caractères**, et c'est
+      précisément ce que leur bigramme compilé existe pour couvrir.
+      **On ne bascule PAS aujourd'hui** : produit français d'abord, un index
+      trigramme pèse plus lourd (une entrée par fenêtre de 3), et personne
+      n'attend cette recherche. Mais le jour où un utilisateur CJK arrive, la
+      décision est un MOT dans la migration 036 — plus un chantier natif.
+      `native/fts5_cjk/` **(copie C, désormais optionnelle)**
+
 - [ ] **7 · PTC — appel d'outils programmatique** — le modèle écrit un script
       qui appelle nos outils, N tours → 1. Seul le `stdout` revient. Chez nous il
       passe par notre serveur MCP, pas par un socket Unix.
@@ -281,8 +303,26 @@ la raison — un écart sans raison se rouvre tous les mois.
       déjà quelque chose de vrai à dire : `thread_messages_fts` (migration 036)
       manquait aux DEUX bases de la machine.
       → `973b47aac`
-- [ ] **47 · Cron intégré** — scheduler, jobs, exécutions, garde anti-zombie.
-      `cron/scheduler.py` (4 364), `jobs.py` (2 609), `lifecycle_guard.py`
+- [~] **47 · Cron intégré** — le **garde anti-zombie livré le 01/08**, avant
+  l'ordonnanceur et pas après : c'est lui qui rend le reste sûr.
+  Leur piège : un job qui redémarre son propre exécuteur ne s'arrête
+  jamais. Le superviseur relance, la reprise ramasse la session fautive,
+  le tour rejoue la même logique — toutes les dix secondes, jusqu'à ce
+  qu'un humain casse la boucle. La forme existe chez nous, et c'est notre
+  propre code qui l'écrit : « tuer le backend de bureau est futile, l'app
+  le supervise et le respawne » (`DesktopUpdates.ts`).
+  Repris tel quel, leur choix décisif : le motif s'ancre sur une FORME DE
+  COMMANDE, jamais sur de la prose — une consigne part vers un modèle, pas
+  vers un shell. C'est la leçon que le garde de ce dépôt avait payée le
+  31/07 en lisant une LIGNE comme une COMMANDE.
+  Ajouté à leur liste : la MISE À JOUR par RPC. Elle ne ressemble pas à un
+  redémarrage, et c'est exactement le même piège.
+  Branché dans `remplir` (chaîne n°48 → n°49 → ici), APRÈS substitution :
+  sur le gabarit on ne verrait que des accolades.
+  _(reste : l'ordonnanceur lui-même et le registre des exécutions —
+  `scheduler.py` 4 364, `jobs.py` 2 609. Ils font tourner des tours
+  d'agent sans surveillance, donc ils dépensent du quota tout seuls :
+  palier D2, à montrer avant de lancer.)_
 - [x] **48 · Blueprints d'automatisation à slots typés** — on ne tape jamais
       de cron brut. `cron/blueprint_catalog.py` (713) → `6e63a4ef9`
 - [x] **49 · Suggestions d'automatisation** — l'agent propose, l'humain

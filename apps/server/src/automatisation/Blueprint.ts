@@ -20,6 +20,8 @@
  * Module PUR.
  */
 
+import { refusDeCycleDeVie } from "./GardeDeCycleDeVie.ts";
+
 export type TypeEmplacement = "heure" | "jours" | "texte" | "nombre";
 
 export interface Emplacement {
@@ -128,11 +130,20 @@ export function remplir(
   const substituer = (gabarit: string) =>
     gabarit.replaceAll(/\{(\w+)\}/gu, (entier, nom: string) => retenues.get(nom) ?? entier);
 
-  return {
-    ok: true,
-    recurrence: substituer(blueprint.recurrence),
-    consigne: substituer(blueprint.consigne),
-  };
+  const consigne = substituer(blueprint.consigne);
+
+  // Le garde de cycle de vie s'applique APRÈS substitution : c'est la consigne
+  // FINALE qui partira, et un emplacement libre peut y avoir glissé la
+  // commande. Le contrôler sur le gabarit ne verrait que des accolades.
+  const cycleDeVie = refusDeCycleDeVie(consigne);
+  if (cycleDeVie !== null) {
+    return {
+      ok: false,
+      refus: [{ emplacement: "consigne", pourquoi: cycleDeVie.pourquoi }],
+    };
+  }
+
+  return { ok: true, recurrence: substituer(blueprint.recurrence), consigne };
 }
 
 /** Le rendu FORMULAIRE : un champ par emplacement. */
