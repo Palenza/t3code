@@ -4,6 +4,29 @@
 > travailler. L'état de chaque chantier vit dans `CHANTIER-HERMES.md` ; ici on
 > ne dit qu'une chose : **qui parle à qui, et dans quel ordre ça se pose.**
 
+## Le code d'Hermès est SUR DISQUE — on le lit, on ne le devine pas
+
+    ~/.hermes/hermes-agent
+
+`agent/` 165 fichiers · `tools/` 119 · `hermes_cli/` 224 · `gateway/` 80 ·
+`cron/` 11 · `plugins/` 188 · `skills/` 68.
+
+**Avant d'écrire un maillon, on ouvre le fichier d'Hermès qui le porte.** Pas
+pour le porter ligne à ligne — leur moteur n'est pas le nôtre — mais parce que
+leurs 2 000 lignes contiennent les cas limites qu'ils ont payés et qu'on
+paierait à nouveau. Le n°2 en est l'exemple : leur sidecar `.usage.json` est la
+bonne réponse chez eux et un défaut ACTIF chez nous, et c'est en lisant leur
+fichier qu'on l'a vu.
+
+Les quatre prochains, avec leur taille réelle :
+
+| chantier                | fichier                                           | lignes |
+| ----------------------- | ------------------------------------------------- | ------ |
+| n°13 patterns de menace | `tools/threat_patterns.py` + `tirith_security.py` | 871    |
+| n°11 approbation        | `tools/approval.py`                               | 4 161  |
+| n°10 scanner de skills  | `tools/skills_guard.py`                           | 1 153  |
+| n°1 curateur            | `agent/curator.py`                                | 2 019  |
+
 ## Le problème que ce fichier existe pour résoudre
 
 Le 31/07 au matin j'ai écrit `SortieDOutil.ts` — la porte par laquelle tout ce

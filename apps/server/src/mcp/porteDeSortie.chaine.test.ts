@@ -73,7 +73,7 @@ it.layer(NodeServices.layer, { excludeTestServices: true })("porte de sortie", (
       }),
     );
 
-    it.effect("la porte elle-même caviarde ET borne — les deux, pas l'une", () =>
+    it.effect("la porte elle-même caviarde, borne, déborde ET scanne — les quatre", () =>
       Effect.gen(function* () {
         // Si quelqu'un retire une des deux moitiés, le test de câblage
         // resterait vert : le nom serait toujours là, la protection non.
@@ -84,6 +84,7 @@ it.layer(NodeServices.layer, { excludeTestServices: true })("porte de sortie", (
           .pipe(Effect.orDie);
         assert.include(source, "caviarder", "la porte ne caviarde plus");
         assert.include(source, "alleger", "la porte ne fait plus déborder sur disque");
+        assert.include(source, "scannerMenaces", "la porte ne scanne plus le contenu tiers");
         assert.include(source, "PLAFOND_SORTIE", "la porte ne borne plus le poids");
       }),
     );

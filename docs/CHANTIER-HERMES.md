@@ -69,8 +69,13 @@ la raison — un écart sans raison se rouvre tous les mois.
       `tools/approval.py` (4 161), `write_approval.py`
 - [ ] **12 · Suggestions d'allowlist** — l'agent propose ce qu'il faudrait
       autoriser. `hermes_cli/approvals_suggest.py`
-- [ ] **13 · Scan pré-exécution + patterns de menace**
-      `tools/tirith_security.py` (871), `threat_patterns.py`
+- [x] **13 · Patterns de menace** — les 36 motifs d'Hermès portés en DONNÉE,
+      par classe d'attaque, avec leurs trois PORTÉES (partout / contexte /
+      strict) : détecter large partout, ne bloquer que là où l'humain peut
+      intervenir. Branché sur la porte de sortie (I2). Testé que notre propre
+      LOI ne les déclenche pas. `threat_patterns.py` (284)
+      _(reste : le scan PRÉ-EXÉCUTION de `tirith_security.py` (871), qui
+      appartient au n°11)_
 - [ ] **14 · Sûreté d'URL + politique de site** `tools/url_safety.py` (874)
 - [ ] **15 · Vérification CVE/OSV comme OUTIL** (pas seulement en CI)
       `tools/osv_check.py`

@@ -25,6 +25,7 @@
  * Module PUR.
  */
 import { caviarder } from "../secrets/Caviarder.ts";
+import { avertissementDeMenace, scannerMenaces } from "../securite/MotifsDeMenace.ts";
 
 /**
  * Le plafond d'une sortie d'outil, en caractères.
@@ -75,6 +76,21 @@ export function transformerSortie<T>(valeur: T): Transformee<T> {
   if (caviarde > 0) {
     notes.push(`${caviarde} champ(s) caviardé(s) avant de sortir vers le modèle.`);
   }
+
+  // I2 — CONTENU TIERS = HOSTILE. `preview` rend des pages web, `repo_map` des
+  // fichiers qu'on n'a pas écrits, `rappel` des messages d'un autre fil. Rien
+  // de tout ça n'a été rédigé par nous, et tout entre dans le contexte du
+  // modèle. La porte est le seul endroit où ça passe TOUT — le scan y a donc
+  // sa place, et nulle part ailleurs.
+  //
+  // On CONSTATE, on ne bloque pas : un résultat d'outil n'est pas un chemin où
+  // l'humain peut intervenir, et bloquer y ferait perdre des sorties
+  // légitimes — un billet de sécurité parle d'injections, une issue GitHub
+  // cite une CVE. L'avertissement, lui, rappelle au modèle que ce contenu est
+  // de la DONNÉE.
+  const menaces = scannerMenaces(serialiser(transforme), "contexte");
+  const alerte = avertissementDeMenace(menaces);
+  if (alerte !== null) notes.push(alerte);
 
   // Le poids se mesure sur la sérialisation, parce que c'est ELLE qui part
   // dans le contexte — pas la structure en mémoire.
