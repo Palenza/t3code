@@ -133,23 +133,23 @@ la raison — un écart sans raison se rouvre tous les mois.
   base en mémoire, avec nos réglages actuels (`unicode61
 remove_diacritics 2`) contre `trigram` :
 
-                                                            requête      unicode61 (le nôtre)   trigram
-                                                            数据  (2)          0                   0
-                                                            数据库 (3)          0                   1
-                                                            東京  (2)          0                   0
-                                                            chat               1                   1
-                                                            dort               1                   1
+                                                              requête      unicode61 (le nôtre)   trigram
+                                                              数据  (2)          0                   0
+                                                              数据库 (3)          0                   1
+                                                              東京  (2)          0                   0
+                                                              chat               1                   1
+                                                              dort               1                   1
 
-                                                        Donc **notre index ne trouve JAMAIS rien en CJK**, pas même sur trois
-                                                        caractères — ce n'est pas une dégradation, c'est un mur. `trigram` le
-                                                        lève dès 3 caractères sans toucher au français.
-                                                        Reste hors de portée : les termes CJK de **1-2 caractères**, et c'est
-                                                        précisément ce que leur bigramme compilé existe pour couvrir.
-                                                        **On ne bascule PAS aujourd'hui** : produit français d'abord, un index
-                                                        trigramme pèse plus lourd (une entrée par fenêtre de 3), et personne
-                                                        n'attend cette recherche. Mais le jour où un utilisateur CJK arrive, la
-                                                        décision est un MOT dans la migration 036 — plus un chantier natif.
-                                                        `native/fts5_cjk/` **(copie C, désormais optionnelle)**
+                                                          Donc **notre index ne trouve JAMAIS rien en CJK**, pas même sur trois
+                                                          caractères — ce n'est pas une dégradation, c'est un mur. `trigram` le
+                                                          lève dès 3 caractères sans toucher au français.
+                                                          Reste hors de portée : les termes CJK de **1-2 caractères**, et c'est
+                                                          précisément ce que leur bigramme compilé existe pour couvrir.
+                                                          **On ne bascule PAS aujourd'hui** : produit français d'abord, un index
+                                                          trigramme pèse plus lourd (une entrée par fenêtre de 3), et personne
+                                                          n'attend cette recherche. Mais le jour où un utilisateur CJK arrive, la
+                                                          décision est un MOT dans la migration 036 — plus un chantier natif.
+                                                          `native/fts5_cjk/` **(copie C, désormais optionnelle)**
 
 - [–] **7 · ~~PTC — appel d'outils programmatique~~** — **Écarté : le CLI le
   porte déjà.** Troisième ligne fermée le 01/08 en fouillant le binaire du CLI
@@ -658,7 +658,28 @@ remove_diacritics 2`) contre `trigram` :
   défendable et réversible — je ne bloque pas sur un avis.)
 - [ ] **65 · Mot d'éveil 100 % local** — 3 moteurs ONNX embarqués, aucun audio
       ne sort. `tools/wake_word.py` (1 267)
-- [ ] **66 · TTS en streaming** — l'agent parle pendant qu'il génère
+- [~] **66 · TTS en streaming** — **le découpage livré le 01/08**, et il est
+  toute la difficulté. On ne reprend PAS leur pile : T3 est Electron, donc
+  Chromium, donc `speechSynthesis` est déjà là — zéro dépendance, zéro
+  modèle à télécharger, et les voix système de macOS sont excellentes. Ce
+  qu'il fallait écrire n'est pas le moteur, c'est ce qu'on lui donne.
+  Attendre la fin du message ferait perdre l'intérêt du flux : on
+  entendrait la réponse une fois qu'on a fini de la lire. Parler à chaque
+  fragment donnerait un hachis, parce que le moteur redémarre sa prosodie
+  à chaque appel. Il faut rendre une unité DÈS qu'elle est complète et
+  jamais avant — tout est là.
+  Ce qui casse une détection naïve, et que le module traite : les
+  abréviations (« M. Dupont », « etc. »), les nombres (`0.0.51`), les noms
+  de fichiers (`config.ts`), et à l'inverse les paragraphes SANS
+  ponctuation — un titre n'a pas de point, et attendre le sien laisserait
+  la voix muette.
+  Ce qui ne se prononce pas devient ce qu'une oreille peut en faire : un
+  bloc de code devient « un bloc de 12 lignes », une URL devient « un
+  lien ».
+  14 tests, dont celui qui rejoue de VRAIS fragments successifs et vérifie
+  qu'aucune unité ne part deux fois.
+  _(reste : l'appel à `speechSynthesis` et le bouton qui l'active — c'est
+  de l'interface, donc le ton et le geste appartiennent à Enzo.)_
 - [ ] **67 · Kanban** — décomposition automatique, spécification, essaim,
       watchers. `kanban_db.py` (10 010)
 - [x] **68 · Projets** — sélecteur de projet (⌘P) et recherche de contenu (⇧⌘F), livrés en amont.
