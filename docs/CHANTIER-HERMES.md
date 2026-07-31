@@ -16,13 +16,13 @@ plan.
 
 ## Où en est le catalogue — au 01/08/2026
 
-**34 livrés · 5 partiels · 24 écartés sur pièce · 22 restants.**
+**34 livrés · 5 partiels · 25 écartés sur pièce · 21 restants.**
 
 Chaque ligne a été INSTRUITE : aucune n'est restée sans qu'on aille voir. Un
 écart porte toujours sa raison, et une raison porte un reçu quand elle repose
 sur une mesure.
 
-Ce que les 22 restants attendent vraiment — c'est la seule question utile :
+Ce que les 21 restants attendent vraiment — c'est la seule question utile :
 
 |       | quoi                                                               | qui décide                                                                                                                         |
 | ----- | ------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
@@ -104,40 +104,44 @@ la raison — un écart sans raison se rouvre tous les mois.
   base en mémoire, avec nos réglages actuels (`unicode61
 remove_diacritics 2`) contre `trigram` :
 
-                                      requête      unicode61 (le nôtre)   trigram
-                                      数据  (2)          0                   0
-                                      数据库 (3)          0                   1
-                                      東京  (2)          0                   0
-                                      chat               1                   1
-                                      dort               1                   1
+                                          requête      unicode61 (le nôtre)   trigram
+                                          数据  (2)          0                   0
+                                          数据库 (3)          0                   1
+                                          東京  (2)          0                   0
+                                          chat               1                   1
+                                          dort               1                   1
 
-                                  Donc **notre index ne trouve JAMAIS rien en CJK**, pas même sur trois
-                                  caractères — ce n'est pas une dégradation, c'est un mur. `trigram` le
-                                  lève dès 3 caractères sans toucher au français.
-                                  Reste hors de portée : les termes CJK de **1-2 caractères**, et c'est
-                                  précisément ce que leur bigramme compilé existe pour couvrir.
-                                  **On ne bascule PAS aujourd'hui** : produit français d'abord, un index
-                                  trigramme pèse plus lourd (une entrée par fenêtre de 3), et personne
-                                  n'attend cette recherche. Mais le jour où un utilisateur CJK arrive, la
-                                  décision est un MOT dans la migration 036 — plus un chantier natif.
-                                  `native/fts5_cjk/` **(copie C, désormais optionnelle)**
+                                      Donc **notre index ne trouve JAMAIS rien en CJK**, pas même sur trois
+                                      caractères — ce n'est pas une dégradation, c'est un mur. `trigram` le
+                                      lève dès 3 caractères sans toucher au français.
+                                      Reste hors de portée : les termes CJK de **1-2 caractères**, et c'est
+                                      précisément ce que leur bigramme compilé existe pour couvrir.
+                                      **On ne bascule PAS aujourd'hui** : produit français d'abord, un index
+                                      trigramme pèse plus lourd (une entrée par fenêtre de 3), et personne
+                                      n'attend cette recherche. Mais le jour où un utilisateur CJK arrive, la
+                                      décision est un MOT dans la migration 036 — plus un chantier natif.
+                                      `native/fts5_cjk/` **(copie C, désormais optionnelle)**
 
 - [ ] **7 · PTC — appel d'outils programmatique** — le modèle écrit un script
       qui appelle nos outils, N tours → 1. Seul le `stdout` revient. Chez nous il
       passe par notre serveur MCP, pas par un socket Unix.
       `tools/code_execution_tool.py` (2 014)
-- [ ] **8 · `/goal` — la boucle Ralph** — juge après chaque tour, continuation
-      = message normal (cache intact), juge fail-OPEN, message utilisateur
-      préempte, survit au `/resume`. `hermes_cli/goals.py` (1 807)
-      **Instruit le 01/08**, comme le triage le demandait, et le résultat
-      ouvre la voie plutôt que de la fermer : T3 n'a AUCUN `/goal` à lui
-      (recherche dédiée), et le SDK n'en expose pas non plus — ni option, ni
-      sous-type de commande. La boucle qu'on utilise aujourd'hui est celle du
-      CLI Claude Code, hors du chemin que T3 pilote.
-      Donc un `/goal` de T3 ne doublerait rien. Il reste à vérifier une chose
-      qui ne se voit pas d'ici : si le CLI que le SDK lance expose déjà la
-      commande à ses utilisateurs. **À demander à Enzo** — invérifiable depuis
-      le dépôt (A1).
+- [–] **8 · ~~`/goal` — la boucle Ralph~~** — **Écarté : on l'a déjà, et
+  c'est celui qu'on utilise.** La question était ouverte parce que je ne
+  trouvais pas le bundle du CLI. Trouvé le 01/08 dans
+  `~/.local/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe` :
+
+      name:"goal", description:"Set a goal Claude checks before stopping"
+      name:"goal", supportsNonInteractive:!0, thinClientDispatch:"post-text"
+      "/goal clear to stop early"
+
+  `supportsNonInteractive: true` avec `thinClientDispatch: "post-text"`
+  signifie qu'il passe par le chemin stream-json du SDK — **donc les
+  utilisateurs de T3 en disposent déjà**, sans une ligne de notre part.
+  Écrire le nôtre doublerait un mécanisme qui tourne, et qui a piloté cette
+  session entière. `hermes_cli/goals.py` (1 807)
+  _(Bon à savoir : `/goal clear` l'arrête.)_
+
 - [x] **9 · Nudges de persistance** — la DETTE DE PERSISTANCE : combien de
       tours et d'outils depuis la dernière écriture de fichier. Fil-piège
       MESURÉ (p95 = 9 tours, p99 = 22 → seuil 12 tours ET 40 outils : 2 séries

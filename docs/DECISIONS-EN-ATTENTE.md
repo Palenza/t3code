@@ -1,7 +1,8 @@
 # Décisions en attente — chantier Hermès
 
-> Quatre questions. Elles débloquent **14 des 22 lignes restantes** du
-> catalogue (`CHANTIER-HERMES.md`).
+> Trois questions — la quatrième s'est répondue toute seule. Elles
+> débloquent **14 des 21 lignes restantes** du catalogue
+> (`CHANTIER-HERMES.md`).
 >
 > Chacune porte : ce qui est déjà fait, ce que ta réponse déclenche, et **une**
 > reco — jamais un menu (M2). Réponds en marquant la case ; je pars de là.
@@ -89,24 +90,21 @@ Les quatre qui restent touchent ce que T3 EST, donc c'est ton terrain.
 
 ---
 
-## 4 · Le CLI que T3 lance expose-t-il déjà `/goal` ?
+## 4 · ~~Le CLI expose-t-il déjà `/goal` ?~~ — RÉPONDU, plus rien à décider
 
-**Débloque 1 ligne** (n°8, la boucle Ralph — juge après chaque tour,
-continuation à cache intact, juge fail-open).
+**Oui.** Trouvé le 01/08 dans le binaire lui-même
+(`~/.local/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe`) :
 
-**Ce qui est vérifié.** T3 n'a aucun `/goal` à lui, et le SDK n'en expose
-aucun — ni option, ni sous-type de commande. La boucle qu'on utilise
-aujourd'hui est celle du CLI Claude Code.
+    name:"goal", description:"Set a goal Claude checks before stopping"
+    name:"goal", supportsNonInteractive:!0, thinClientDispatch:"post-text"
+    "/goal clear to stop early"
 
-**Ce qui est invérifiable d'ici (A1).** Je n'ai pas trouvé le bundle du CLI
-sur cette machine pour regarder sa liste de commandes. Si le CLI que le SDK
-lance expose `/goal` à tes utilisateurs, la ligne se ferme ; sinon elle vaut
-la peine, parce que le juge-après-chaque-tour est ce qui fait tenir une
-session autonome.
+`supportsNonInteractive: true` avec `thinClientDispatch: "post-text"` : la
+commande passe par le chemin stream-json du SDK, **donc les utilisateurs de T3
+en disposent déjà**. Le n°8 est écarté — écrire le nôtre doublerait un
+mécanisme qui tourne, et qui a piloté cette session entière.
 
-- [ ] oui, il l'expose → j'écarte le n°8
-- [ ] non → je le construis
-- [ ] je ne sais pas → je vais vérifier autrement
+Et l'information pratique : **`/goal clear` l'arrête.**
 
 ---
 
