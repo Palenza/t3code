@@ -6,14 +6,17 @@
  * pur, donc testable sur des modes de fichiers qu'on n'a pas sur cette
  * machine, y compris ceux qu'on espère ne jamais voir.
  *
- * ── Pourquoi il journalise et ne RÉPARE pas ───────────────────────────────
+ * ── Il resserre ET il dit — les deux, décidé par Enzo le 01/08 ────────────
  *
  * Le fichier qui a motivé le contrôle, `clerk-tokens.json`, n'est pas écrit
  * par nous : `@clerk/electron/storage` le pose en 0666. Un `chmod` au
- * démarrage serait défait à la prochaine écriture de la dépendance — et entre
- * les deux, on aurait le confort d'avoir « corrigé ». Un audit qui répare mal
- * est pire qu'un audit qui dit. Resserrer ces modes touche l'authentification :
- * ça se décide, ça ne se glisse pas dans un branchement.
+ * démarrage sera donc défait à la prochaine écriture de la dépendance.
+ *
+ * D'où la forme retenue, et elle tient en une phrase : **le chmod ferme la
+ * fenêtre la plupart du temps, l'avertissement empêche de croire que c'est
+ * réglé.** Réparer sans le dire aurait été le piège — on se serait cru
+ * protégé jusqu'à la prochaine écriture de la dépendance. Dire sans réparer
+ * laissait le trou ouvert entre deux lectures du journal.
  *
  * ── Et pourquoi il ne bloque jamais ───────────────────────────────────────
  *
@@ -29,7 +32,9 @@ import * as Path from "effect/Path";
 
 import * as ServerConfig from "../config.ts";
 import {
+  aReparer,
   auditer,
+  MODE_ATTENDU,
   resumeDAudit,
   type FichierObserve,
   type Sensibilite,
@@ -88,6 +93,34 @@ export const auditerAuDemarrage = Effect.gen(function* () {
   }
 
   const constats = auditer({ estRoot: estRoot(), fichiers });
+
+  // ── RESSERRER ce qu'on peut, et le DIRE quand même ──────────────────────
+  //
+  // Décidé par Enzo le 01/08. Le fichier qui a motivé le contrôle
+  // (`clerk-tokens.json`, 0666) n'est pas écrit par nous : `@clerk/electron`
+  // le pose ainsi. Un `chmod` au démarrage sera donc défait à la prochaine
+  // écriture de la dépendance — c'est exactement pour ça que l'avertissement
+  // RESTE. Le chmod ferme la fenêtre la plupart du temps ; l'avertissement
+  // empêche de croire que c'est réglé.
+  //
+  // On ne resserre QUE ce qu'on a constaté trop ouvert, et jamais au-delà de
+  // `MODE_ATTENDU` : ce n'est pas un durcissement général du disque, c'est la
+  // réparation nommée d'un constat nommé.
+  for (const chemin of aReparer(constats)) {
+    yield* fs.chmod(chemin, MODE_ATTENDU).pipe(
+      Effect.tap(() => Effect.logInfo("Permissions resserrées au démarrage.", { chemin })),
+      // Un échec de chmod ne bloque RIEN : le fichier appartient peut-être à
+      // un autre utilisateur, ou le disque est en lecture seule. L'audit a
+      // déjà dit le problème ; échouer ici le répéterait sans rien ajouter.
+      Effect.catchCause((cause) =>
+        Effect.logWarning("Permissions non resserrées — le constat reste valable.", {
+          chemin,
+          cause,
+        }),
+      ),
+    );
+  }
+
   const resume = resumeDAudit(constats);
   // Silencieux quand tout va bien : un audit qui parle à chaque démarrage
   // devient un bruit qu'on filtre, et c'est le jour où il a raison qu'on ne

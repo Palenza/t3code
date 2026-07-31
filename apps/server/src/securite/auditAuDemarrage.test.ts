@@ -53,6 +53,54 @@ it.layer(NodeServices.layer)("audit de démarrage, branché", (it) => {
     }).pipe(Effect.scoped),
   );
 
+  it.effect("RESSERRE le mode à 0600 — et le constat reste quand même", () =>
+    Effect.gen(function* () {
+      // Les deux, et c'est le point. Réparer sans le dire ferait croire que
+      // c'est réglé jusqu'à la prochaine écriture de `@clerk/electron`, qui
+      // repose le fichier en 0666. Dire sans réparer laisserait le trou
+      // ouvert entre deux lectures du journal.
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const { home, baseDir } = yield* installation([
+        { relatif: "userdata/clerk-tokens.json", mode: 0o666 },
+      ]);
+
+      const constats = yield* auditerAuDemarrage.pipe(
+        Effect.provide(ServerConfig.layerTest(home, baseDir)),
+      );
+
+      // Le constat est là — l'audit n'a pas avalé le problème en le réparant.
+      assert.isDefined(constats.find((c) => c.chemin?.includes("clerk-tokens.json")));
+
+      // Et le fichier est resserré.
+      const apres = yield* fs.stat(path.join(baseDir, "userdata/clerk-tokens.json"));
+      assert.equal(Number(apres.mode) & 0o777, 0o600);
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("ne resserre QUE ce qui a été constaté trop ouvert", () =>
+    Effect.gen(function* () {
+      // Ce n'est pas un durcissement général du disque : un fichier sain ne
+      // doit pas voir son mode changer, sinon l'audit devient un outil qui
+      // touche à des choses dont il n'a pas parlé.
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const { home, baseDir } = yield* installation([
+        { relatif: "userdata/clerk-tokens.json", mode: 0o600 },
+        { relatif: "userdata/settings.json", mode: 0o644 },
+      ]);
+
+      yield* auditerAuDemarrage.pipe(Effect.provide(ServerConfig.layerTest(home, baseDir)));
+
+      // `settings.json` était en 0644 : constaté, donc resserré.
+      const carte = yield* fs.stat(path.join(baseDir, "userdata/settings.json"));
+      assert.equal(Number(carte.mode) & 0o777, 0o600);
+      // `clerk-tokens.json` était déjà sain : aucun constat, donc pas touché.
+      const jeton = yield* fs.stat(path.join(baseDir, "userdata/clerk-tokens.json"));
+      assert.equal(Number(jeton.mode) & 0o777, 0o600);
+    }).pipe(Effect.scoped),
+  );
+
   it.effect("se tait quand les modes sont sains", () =>
     Effect.gen(function* () {
       // Un audit qui parle à chaque démarrage devient un bruit qu'on filtre —
