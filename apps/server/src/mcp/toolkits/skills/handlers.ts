@@ -1,8 +1,10 @@
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 
+import { scannerSkill } from "../../../securite/ScanDeSkill.ts";
 import { controlerSkill, resumeDeControle } from "../../../skills/NormesDeSkill.ts";
 import { porteDeSortie } from "../../DebordementSurDisque.ts";
+import { inspecterDossier } from "./inspection.ts";
 import { skillsSurDisque } from "../../../skills/SurDisque.ts";
 import { UsageStore } from "../../../skills/UsageStore.ts";
 import { classerLesSkills, isoDe, resumeDUsage } from "../../../skills/UsageDesSkills.ts";
@@ -137,6 +139,37 @@ const handlers = {
           // forme peut être fausse sur le fond, et il n'a aucun moyen de le
           // savoir. Le dire évite qu'un « 0 manquement » se lise « bonne skill ».
           note: `${String(surDisque.length)} skill(s) contrôlée(s), ${String(aCorriger.length)} à reprendre (${String(erreurs)} erreur(s)). Ce contrôle ne regarde que la FORME : une skill sans manquement peut être fausse sur le fond, et rien ici ne le verrait.`,
+        };
+      }),
+      porteDeSortie,
+    ),
+  "inspecter-skill": (input) =>
+    Effect.flatMap(
+      Effect.gen(function* () {
+        const inspection = yield* inspecterDossier(input.chemin);
+
+        if (inspection.fichiers.length === 0) {
+          // Rien lu n'est PAS « rien à signaler ». Un dossier vide, un chemin
+          // faux, un dossier illisible : trois situations, un même silence —
+          // et rendre « sain » sur ce silence serait un feu vert inventé (H4).
+          return {
+            verdict: "prudence" as const,
+            decision: "demander" as const,
+            fichiersLus: 0,
+            trouvailles: [],
+            resume: `Aucun fichier lu sous « ${input.chemin} ». Ce n'est pas un verdict « sain » : c'est une absence de matière. Vérifie le chemin, et qu'il s'agit bien du dossier de la skill.`,
+            ...(inspection.notes.length > 0 ? { note: inspection.notes.join(" · ") } : {}),
+          };
+        }
+
+        const rapport = scannerSkill(inspection.fichiers, input.confiance ?? "communaute");
+        return {
+          verdict: rapport.verdict,
+          decision: rapport.decision,
+          fichiersLus: inspection.fichiers.length,
+          trouvailles: rapport.trouvailles,
+          resume: rapport.resume,
+          ...(inspection.notes.length > 0 ? { note: inspection.notes.join(" · ") } : {}),
         };
       }),
       porteDeSortie,

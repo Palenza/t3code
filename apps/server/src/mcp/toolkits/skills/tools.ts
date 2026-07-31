@@ -149,4 +149,60 @@ export const NormesSkillsTool = Tool.make("normes-skills", {
   .annotate(Tool.Destructive, false)
   .annotate(Tool.Idempotent, true);
 
-export const UsageSkillsToolkit = Toolkit.make(UsageSkillsTool, NormesSkillsTool);
+/**
+ * L'outil `inspecter-skill` — la porte que le scanner du n°10 gardait à vide.
+ *
+ * Le scanner était complet et testé, et rien ne lui apportait jamais de
+ * fichiers : un garde sans porte. Cet outil est la porte, et il ne fait que
+ * REGARDER. Installer écrirait dans le home Claude de l'humain — l'endroit
+ * que notre désinstalleur classe « ne se touche jamais » — et ça se décide,
+ * ça ne se glisse pas dans un outil de lecture.
+ */
+export const InspecterSkillInput = Schema.Struct({
+  chemin: Schema.String.annotate({
+    description: "Dossier de la skill candidate. Rien n'y est écrit ni copié.",
+  }),
+  confiance: Schema.optional(
+    Schema.Literals(["interne", "de-confiance", "communaute", "faite-par-l-agent"]).annotate({
+      description:
+        "D'où elle vient. C'est ce qui croise le verdict : la même trouvaille bloque une skill venue d'internet et passe sur une skill interne. Omis : « communaute », le plus prudent des quatre.",
+    }),
+  ),
+});
+
+export const InspecterSkillResultat = Schema.Struct({
+  verdict: Schema.Literals(["sain", "prudence", "dangereux"]),
+  /** Ce qui SERAIT fait à l'installation, croisé avec la confiance. */
+  decision: Schema.Literals(["installer", "demander", "refuser"]),
+  fichiersLus: Schema.Number,
+  trouvailles: Schema.Array(
+    Schema.Struct({
+      id: Schema.String,
+      gravite: Schema.Literals(["critique", "haute", "moyenne"]),
+      categorie: Schema.String,
+      ou: Schema.String,
+      quoi: Schema.String,
+    }),
+  ),
+  resume: Schema.String,
+  note: Schema.optional(Schema.String),
+});
+
+export const InspecterSkillTool = Tool.make("inspecter-skill", {
+  description:
+    "Que contient cette skill, et est-ce qu'on peut la prendre ? Lit un dossier candidat, contrôle sa FORME (binaire embarqué, trop de fichiers, caractères invisibles que l'humain ne voit pas et que le modèle lit) autant que son contenu, puis croise le verdict avec la confiance dans la source. N'installe RIEN et n'écrit nulle part. À appeler avant de copier une skill reçue de quelqu'un.",
+  parameters: InspecterSkillInput,
+  success: InspecterSkillResultat,
+  failure: UsageSkillsError,
+  dependencies: [FileSystem.FileSystem, Path.Path],
+})
+  .annotate(Tool.Title, "Inspecter une skill")
+  .annotate(Tool.Readonly, true)
+  .annotate(Tool.Destructive, false)
+  .annotate(Tool.Idempotent, true);
+
+export const UsageSkillsToolkit = Toolkit.make(
+  UsageSkillsTool,
+  NormesSkillsTool,
+  InspecterSkillTool,
+);

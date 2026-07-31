@@ -64,23 +64,23 @@ la raison — un écart sans raison se rouvre tous les mois.
       base en mémoire, avec nos réglages actuels (`unicode61
 remove_diacritics 2`) contre `trigram` :
 
-          requête      unicode61 (le nôtre)   trigram
-          数据  (2)          0                   0
-          数据库 (3)          0                   1
-          東京  (2)          0                   0
-          chat               1                   1
-          dort               1                   1
+            requête      unicode61 (le nôtre)   trigram
+            数据  (2)          0                   0
+            数据库 (3)          0                   1
+            東京  (2)          0                   0
+            chat               1                   1
+            dort               1                   1
 
-      Donc **notre index ne trouve JAMAIS rien en CJK**, pas même sur trois
-      caractères — ce n'est pas une dégradation, c'est un mur. `trigram` le
-      lève dès 3 caractères sans toucher au français.
-      Reste hors de portée : les termes CJK de **1-2 caractères**, et c'est
-      précisément ce que leur bigramme compilé existe pour couvrir.
-      **On ne bascule PAS aujourd'hui** : produit français d'abord, un index
-      trigramme pèse plus lourd (une entrée par fenêtre de 3), et personne
-      n'attend cette recherche. Mais le jour où un utilisateur CJK arrive, la
-      décision est un MOT dans la migration 036 — plus un chantier natif.
-      `native/fts5_cjk/` **(copie C, désormais optionnelle)**
+        Donc **notre index ne trouve JAMAIS rien en CJK**, pas même sur trois
+        caractères — ce n'est pas une dégradation, c'est un mur. `trigram` le
+        lève dès 3 caractères sans toucher au français.
+        Reste hors de portée : les termes CJK de **1-2 caractères**, et c'est
+        précisément ce que leur bigramme compilé existe pour couvrir.
+        **On ne bascule PAS aujourd'hui** : produit français d'abord, un index
+        trigramme pèse plus lourd (une entrée par fenêtre de 3), et personne
+        n'attend cette recherche. Mais le jour où un utilisateur CJK arrive, la
+        décision est un MOT dans la migration 036 — plus un chantier natif.
+        `native/fts5_cjk/` **(copie C, désormais optionnelle)**
 
 - [ ] **7 · PTC — appel d'outils programmatique** — le modèle écrit un script
       qui appelle nos outils, N tours → 1. Seul le `stdout` revient. Chez nous il
@@ -113,8 +113,9 @@ remove_diacritics 2`) contre `trigram` :
       MATRICE de politique : le même danger décide autrement selon la source.
       Réutilise la bibliothèque du n°13 en portée `strict`.
       `tools/skills_guard.py` (1 153, 121 motifs)
-      _(reste : le branchement sur un vrai chemin d'import — il n'y en a pas
-      encore, c'est le n°50.)_
+      **Branché le 01/08** : outil MCP `inspecter-skill`. Le scanner était
+      complet, testé, et n'avait jamais vu un seul fichier — un garde sans
+      porte à garder.
 - [x] **11 · Cibles sensibles** — la table de `approval.py` aspirée : ce qui
       est DANS l'espace de travail n'est pas ordinaire pour autant. `.git/`
       refusé (un hook s'exécute au commit, `core.pager` est une commande) ;
@@ -333,8 +334,18 @@ remove_diacritics 2`) contre `trigram` :
       de cron brut. `cron/blueprint_catalog.py` (713) → `6e63a4ef9`
 - [x] **49 · Suggestions d'automatisation** — l'agent propose, l'humain
       dispose, et le refus TIENT. `cron/suggestions.py` → `6fe5512f1`
-- [ ] **50 · Hub de skills** — recherche, installation, synchro avec hash
-      d'origine. `tools/skills_hub.py` (4 151)
+- [~] **50 · Hub de skills** — **la moitié LECTURE livrée le 01/08**, et
+  c'est elle qui débloquait le n°10 : `inspecter-skill` lit un dossier
+  candidat et le passe au scanner. Lecture en LARGEUR d'abord — si le
+  plafond tombe, on veut avoir vu `SKILL.md` plutôt qu'un `node_modules`
+  rencontré en premier — et UN fichier de plus que la limite du scanner,
+  pour qu'il puisse constater le dépassement au lieu de voir un dossier
+  pile conforme.
+  _(reste : l'INSTALLATION — recherche, copie, synchro par hash d'origine.
+  Elle écrit dans le home Claude de l'humain, c'est-à-dire l'endroit que
+  notre désinstalleur classe « ne se touche JAMAIS » (n°58). Ça se décide,
+  ça ne se glisse pas dans un outil de lecture : palier D2.)_
+  `tools/skills_hub.py` (4 151)
 - [ ] **51 · Les 182 skills** — `software-development`, `github`, `research`,
       `autonomous-ai-agents`, `mlops`, `security` en priorité **(copie markdown)**
 - [ ] **52 · Bundles de skills** — un alias `/<nom>` déclenche plusieurs

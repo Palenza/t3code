@@ -57,10 +57,6 @@ const MUETS_ASSUMES = new Map<string, string>([
     "Mesuré le 01/08 : la projection ne couvre que 7,3 jours (élaguée). Le curateur répondrait « indécidable » sur toute skill plus vieille, c'est-à-dire presque toutes. Lui donner une bouche maintenant livrerait un outil incapable de rien dire. Il attend une fenêtre d'observation, pas du code.",
   ],
   [
-    "securite/ScanDeSkill.ts",
-    "Le scanner garde un chemin d'IMPORT de skills tierces. Ce chemin n'existe pas encore chez nous (cf. n°50-53, le hub) : il n'y a rien à garder. Le brancher sur du vide donnerait l'illusion d'une protection.",
-  ],
-  [
     "sauvegarde/QuoiSauver.ts",
     "Module de décision d'une sauvegarde dont l'EXÉCUTEUR n'existe pas encore. Écrit et assumé comme tel dans son en-tête.",
   ],
