@@ -644,6 +644,12 @@ export const ServerSelfUpdateInput = Schema.Struct({
   /** Exact npm version of the `t3` package to install (never a dist-tag, so
       the server and the acknowledging client agree on what was requested). */
   targetVersion: TrimmedNonEmptyString,
+  /** Restart even though agent turns are still running. Absent means no: a
+      restart ends every in-flight turn as `interrupted`, which is terminal —
+      the work stops where it was, half-written files included — and nobody is
+      at this machine to be asked. Opt in only when the caller has been told
+      what it costs. */
+  malgreLeTravailEnCours: Schema.optional(Schema.Boolean),
 });
 export type ServerSelfUpdateInput = typeof ServerSelfUpdateInput.Type;
 

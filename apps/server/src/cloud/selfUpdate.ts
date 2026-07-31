@@ -17,6 +17,7 @@ import {
 } from "@t3tools/shared/hostProcess";
 import * as NodeChildProcess from "node:child_process";
 import * as Context from "effect/Context";
+import * as DateTime from "effect/DateTime";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -26,7 +27,9 @@ import * as Ref from "effect/Ref";
 
 import * as ServerConfig from "../config.ts";
 import { writeFileStringAtomically } from "../atomicWrite.ts";
+import { depuisQuand, ToursEnVolRepository } from "../persistence/ToursEnVol.ts";
 import * as ProcessRunner from "../processRunner.ts";
+import { avantDeCouper } from "../sauvegarde/AvantDeCouper.ts";
 import {
   BOOT_SERVICE_UNIT_ENV,
   BOOT_SERVICE_UNIT_FILE,
@@ -160,6 +163,7 @@ export const make = Effect.fn("cloud.server_self_update.make")(function* (option
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const runner = yield* ProcessRunner.ProcessRunner;
+  const toursEnVol = yield* ToursEnVolRepository;
   const env = yield* HostProcessEnvironment;
   const hostExecPath = yield* HostProcessExecutablePath;
   const hostArguments = yield* HostProcessArguments;
@@ -213,6 +217,46 @@ export const make = Effect.fn("cloud.server_self_update.make")(function* (option
       ? new ServerSelfUpdateError({ reason })
       : new ServerSelfUpdateError({ reason, cause });
 
+  /**
+   * Refuser plutôt que courser — chantier n°57.
+   *
+   * L'origine est toujours `a-distance` : cette mise à jour arrive par RPC,
+   * typiquement d'un téléphone contre un serveur maison. Personne n'est devant
+   * cette machine, donc la question « on coupe quand même ? » n'apparaîtrait
+   * sur aucun écran ; il faut trancher ici, et par défaut ne pas tuer.
+   *
+   * Si la projection est ILLISIBLE, on ne conclut pas « rien en vol » : une
+   * panne de lecture ne doit jamais devenir une autorisation de couper. Mais
+   * on ne condamne pas non plus le serveur à ne plus jamais se mettre à jour —
+   * refuser à vie une machine cassée est un piège. On refuse, on dit pourquoi,
+   * et le forçage explicite reste la porte.
+   */
+  const verdictSurLeTravailEnVol = (malgreLeTravailEnCours: boolean) =>
+    Effect.gen(function* () {
+      const maintenant = yield* DateTime.now;
+      const nonClos = yield* toursEnVol.lister.pipe(
+        Effect.tapError((cause) =>
+          Effect.logError("Server self-update could not read in-flight turns.", { cause }),
+        ),
+        Effect.catch(() => Effect.succeed(null)),
+      );
+      if (nonClos === null) {
+        return malgreLeTravailEnCours
+          ? ({ decision: "couper", phrase: "", victimes: [], fantomes: [] } as const)
+          : ({
+              decision: "refuser",
+              phrase:
+                "Redémarrage refusé : impossible de lire les tours en cours, donc impossible de savoir si du travail serait tué. Une panne de lecture ne vaut pas autorisation. Redemander en forçant explicitement si le serveur doit être remplacé quand même.",
+              victimes: [],
+              fantomes: [],
+            } as const);
+      }
+      return avantDeCouper(depuisQuand(nonClos, maintenant), {
+        origine: "a-distance",
+        malgreLeTravailEnCours,
+      });
+    });
+
   /** Deferred so the RPC acknowledgement flushes before the process dies.
       Detached from the request scope: the triggering connection is exactly
       what the restart tears down. */
@@ -244,6 +288,14 @@ export const make = Effect.fn("cloud.server_self_update.make")(function* (option
     const targetVersion = input.targetVersion.trim();
     if (!EXACT_VERSION_PATTERN.test(targetVersion)) {
       return yield* failWith(`'${targetVersion}' is not an exact t3 version.`);
+    }
+    const malgreLeTravailEnCours = input.malgreLeTravailEnCours ?? false;
+
+    // Refuser plutôt que courser. Une première fois ICI pour échouer vite —
+    // rien ne sert de télécharger une version qu'on ne pourra pas activer.
+    const premierRegard = yield* verdictSurLeTravailEnVol(malgreLeTravailEnCours);
+    if (premierRegard.decision !== "couper") {
+      return yield* failWith(premierRegard.phrase);
     }
 
     const alreadyRunning = yield* Ref.getAndSet(inFlight, true);
@@ -299,6 +351,24 @@ export const make = Effect.fn("cloud.server_self_update.make")(function* (option
             ? `The installed t3@${targetVersion} failed its version check (exit code ${String(preflight.code)}).`
             : `The installed runtime did not report the requested t3@${targetVersion} version.`,
         );
+      }
+
+      // Second regard, et c'est LUI qui protège vraiment. Le téléchargement
+      // et le préflight prennent des minutes ; un tour peut avoir démarré
+      // depuis le premier. Ici, refuser ne coûte rien : la version est
+      // installée À CÔTÉ et reste inerte tant qu'on ne bascule pas. Rien
+      // n'est encore muté — l'unité systemd est réécrite juste après.
+      const dernierRegard = yield* verdictSurLeTravailEnVol(malgreLeTravailEnCours);
+      if (dernierRegard.decision !== "couper") {
+        return yield* failWith(
+          `${dernierRegard.phrase} La version t3@${targetVersion} est déjà installée et vérifiée : redemander plus tard n'aura rien à retélécharger.`,
+        );
+      }
+      if (dernierRegard.victimes.length > 0) {
+        yield* Effect.logWarning("Server self-update is ending in-flight turns on request.", {
+          targetVersion,
+          detail: dernierRegard.phrase,
+        });
       }
 
       if (activeMethod === "boot-service") {

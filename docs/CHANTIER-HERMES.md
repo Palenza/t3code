@@ -208,8 +208,25 @@ la raison — un écart sans raison se rouvre tous les mois.
 - [x] **56 · Export de session** — une conversation pouvait vivre dans la base
       ou nulle part. `session_export_md.py` → `51d8e1c07`
       _(reste : l'export HTML, les filtres, le listing)_
-- [ ] **57 · Mise à jour propre** — verrou, rollback de commit épinglé,
-      récupération d'autostash, relance, migration. `update_cmd.py` (5 086)
+- [x] **57 · Mise à jour propre** — l'essentiel de leur liste était DÉJÀ chez
+      nous, et mieux : le verrou existe (`inFlight`), et notre rollback est
+      structurel — une version s'installe À CÔTÉ, se vérifie en préflight
+      pendant que le serveur courant tourne, et ne devient courante qu'après ;
+      un échec laisse le serveur en vie. Leur autostash / détection de fork /
+      repli ZIP sont des artefacts d'un produit qui EST une copie git : sans
+      objet ici.
+      Il manquait une chose, la bonne : **refuser plutôt que courser**. Le
+      redémarrage tuait tout tour en vol sans regarder — et un tour coupé
+      passe à `interrupted`, état terminal, il ne reprend pas. Consultation
+      DEUX fois (avant de télécharger, puis juste avant de basculer, parce que
+      le préflight dure des minutes), refus par défaut quand personne n'est
+      devant la machine, forçage explicite comme porte. Fil-piège fantôme à
+      240 min = 2,8× le plus long tour jamais mesuré (85,2 min sur 583), pour
+      qu'un tour bloqué ne condamne pas le serveur à ne plus jamais se mettre
+      à jour. `update_cmd.py` (5 086)
+      _(reste : le même garde côté app de bureau — `DesktopUpdates.install`
+      coupe encore sans demander ; il lui manque le fait, qui vit dans le
+      serveur, pas dans le processus Electron)_
 - [x] **58 · Désinstallation propre** — leurs trois granularités (l'app seule,
       l'app + l'agent en gardant les données, tout), mais la décision ne se
       prend PAS sur la granularité : elle se prend sur l'APPARTENANCE du

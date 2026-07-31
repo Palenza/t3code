@@ -100,6 +100,7 @@ import * as CloudManagedEndpointRuntime from "./cloud/ManagedEndpointRuntime.ts"
 import * as CloudCliTokenManager from "./cloud/CliTokenManager.ts";
 import * as CloudCliState from "./cloud/CliState.ts";
 import * as ServerSelfUpdate from "./cloud/selfUpdate.ts";
+import * as ToursEnVol from "./persistence/ToursEnVol.ts";
 import * as ProcessDiagnostics from "./diagnostics/ProcessDiagnostics.ts";
 import * as ProcessResourceMonitor from "./diagnostics/ProcessResourceMonitor.ts";
 import * as TraceDiagnostics from "./diagnostics/TraceDiagnostics.ts";
@@ -466,7 +467,15 @@ export const makeRoutesLayer = Layer.mergeAll(
   ),
 ).pipe(
   Layer.provide(PreviewAutomationBroker.layer),
-  Layer.provide(ServerSelfUpdate.layer),
+  // La mise à jour consulte les tours en vol avant de remplacer ce processus
+  // (n°57). Même remarque qu'au-dessus : Effect mémoïse par référence, donc
+  // `PersistenceLayerLive` est la MÊME connexion, pas une seconde.
+  Layer.provide(
+    ServerSelfUpdate.layer.pipe(
+      Layer.provide(ToursEnVol.layer),
+      Layer.provide(PersistenceLayerLive),
+    ),
+  ),
   Layer.provide(browserApiCorsLayer),
   Layer.provide(httpCompressionLayer),
 );
