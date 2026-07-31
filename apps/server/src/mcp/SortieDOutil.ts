@@ -30,12 +30,34 @@ import { avertissementDeMenace, scannerMenaces } from "../securite/MotifsDeMenac
 /**
  * Le plafond d'une sortie d'outil, en caractères.
  *
- * Aligné sur le fil-piège du rappel (120 000 ≈ 30 000 jetons), pour la même
- * raison mesurée : au-delà, un seul appel d'outil mange une part sérieuse de
- * la fenêtre. C'est un fil-piège, pas un budget — les outils dimensionnent
- * déjà leur charge en amont, celui-ci n'attrape que ce qui a dérapé.
+ * ── Il a CHANGÉ de nature le 31/07, et il a donc baissé ───────────────────
+ *
+ * Tant qu'un dépassement TRONQUAIT, ce plafond était un fil-piège : il
+ * fallait le poser au-delà du sain, parce que le toucher faisait perdre de la
+ * donnée. Hermès, qui tronque, met le sien à 150 000 pour cette raison.
+ *
+ * Depuis que la sortie DÉBORDE sur disque (`DebordementSurDisque.ts`), le
+ * toucher ne perd plus rien : ça remplace une queue par un pointeur. Le
+ * plafond cesse d'être un garde-fou et devient un BUDGET — et un budget se
+ * serre.
+ *
+ * ── Le reçu (31/07, `/tmp/plafond.mjs` sur 7 329 sorties réelles) ─────────
+ *
+ *   p50 = 342   p90 = 1 969   p99 = 158 789   max = 675 320
+ *
+ *   plafond    sorties touchées   volume économisé
+ *   150 000        1,0 %              78 %      ← le leur
+ *   120 000        1,1 %              80 %      ← le nôtre d'avant
+ *    40 000        1,3 %              83 %      ← ici
+ *    10 000        2,1 %              85 %
+ *
+ * 40 000 est le GENOU : en dessous, on embête 60 % de sorties en plus pour
+ * deux points de volume. Au-dessus, on laisse passer du gras pour rien.
+ *
+ * Neuf dixièmes des sorties font moins de 2 000 caractères ; tout le volume
+ * vit dans une queue de 1,3 %. C'est elle qu'on borne, et elle seule.
  */
-export const PLAFOND_SORTIE = 120_000;
+export const PLAFOND_SORTIE = 40_000;
 
 export interface Transformee<T> {
   readonly valeur: T;
