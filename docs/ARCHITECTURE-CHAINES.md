@@ -1,0 +1,239 @@
+# Les chaînes — comment on construit sans casser ce qu'on a construit
+
+> Carte de couplage des 85 chantiers. Se lit AVANT de choisir sur quoi
+> travailler. L'état de chaque chantier vit dans `CHANTIER-HERMES.md` ; ici on
+> ne dit qu'une chose : **qui parle à qui, et dans quel ordre ça se pose.**
+
+## Le problème que ce fichier existe pour résoudre
+
+Le 31/07 au matin j'ai écrit `SortieDOutil.ts` — la porte par laquelle tout ce
+que nos outils rendent au modèle doit passer. Son en-tête la déclarait
+« PORTE OBLIGATOIRE », avec cette phrase : _« une transformation qu'on peut
+oublier de brancher finit par être oubliée »_.
+
+Le soir même, en comptant : **deux toolkits sur six ne la traversaient pas.**
+Écrite le matin, déjà trouée le soir, par moi.
+
+Le trou n'était pas dans la porte. Il était dans le fait que **rien ne
+vérifiait qu'elle était branchée partout**. Une règle dans un commentaire n'a
+jamais arrêté personne — pas même son auteur, huit heures plus tard.
+
+D'où les deux lois de ce fichier.
+
+## Loi 1 — un lien qui n'est pas testé n'existe pas
+
+Un module qui en appelle un autre, c'est un fait vérifiable par le compilateur.
+Un module qui **doit** en appeler un autre — « tout ce qui sort passe par la
+porte », « aucune skill n'entre sans le scanner » — n'est vérifié par rien. Ce
+sont ces liens-là qui cassent, et ils cassent en silence.
+
+**Chaque chaîne porte donc un INVARIANT, et l'invariant est un test
+structurel** : il énumère les fichiers sur disque et échoue quand un nouveau
+membre esquive le passage obligé. Pas une convention. Pas une revue. Un rouge.
+
+Modèle à recopier : `apps/server/src/mcp/porteDeSortie.chaine.test.ts`.
+
+## Loi 2 — l'invariant se pose au DEUXIÈME maillon, jamais au dixième
+
+Au premier maillon, l'invariant est évident et inutile. Au dixième, il est
+faux depuis longtemps et personne ne sait quand ça a lâché. Le bon moment est
+le deuxième : c'est là que « il faudra que les autres fassent pareil » devient
+une phrase qu'on prononce — et une phrase prononcée doit devenir un test dans
+la même heure.
+
+---
+
+## Étage 0 — le socle
+
+Ce qui porte tout le reste. On n'y touche pas sans dérouler ce que ça casse
+au-dessus (A5b).
+
+| pièce                          | rôle                                                                                                       |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------------- |
+| `projection_thread_activities` | le flux d'activité que T3 enregistre déjà — lu par `preuve`, `usage-skills`, `dette`, sans instrumentation |
+| `SortieDOutil` + `Caviarder`   | la porte de sortie : caviardage et borne de poids                                                          |
+| `comptePool` + SDK Claude Code | le moteur. On ne le réécrit pas                                                                            |
+| `node:sqlite` + migrations     | l'état. FTS5 et `backup()` prouvés disponibles                                                             |
+
+**Invariant** — tout ce qui sort vers le modèle traverse la porte.
+**Test** — `porteDeSortie.chaine.test.ts` ✅ _(posé le 31/07, après la panne)_
+
+---
+
+## Chaîne A · LE CONTEXTE — ce qui occupe la fenêtre
+
+La chaîne la plus chère aujourd'hui, et c'est mesuré : 9 compactages en 7
+jours, chacun jetant 97,5 à 98,6 % de la fenêtre, 22 minutes d'attente morte
+sur la semaine. 79 % de ce qui remplit la fenêtre est de l'image et de la
+lecture de fichier.
+
+```
+n°5 rappel ✅ ──┬── n°6 tokenizer CJK        (étend le même index FTS)
+                └── n°56 export ✅(moitié)   (lit les mêmes messages)
+
+n°24 hygiène ✅(moitié) ── n°24b DÉBORDEMENT SUR DISQUE  ← le prochain
+n°27 lecture ✅(moitié) ── n°55 compression dirigée
+n°9 dette ✅ ─────────────  n°85 backends de mémoire
+Compactage ✅
+```
+
+**Ordre forcé** : mesurer avant de borner, borner avant de faire déborder. Le
+plafond existe déjà (`PLAFOND_SORTIE`) mais il **avertit sans agir** — la
+sortie complète part quand même. Le débordement sur disque est donc le
+maillon qui rend le plafond vrai.
+
+**Invariant** — aucune sortie au-dessus du plafond n'atteint le modèle sans
+qu'un fichier porte l'intégralité (H6 : rien ne se jette).
+**Test** — à écrire avec n°24b.
+
+---
+
+## Chaîne B · LES SKILLS — le savoir de l'agent
+
+```
+n°2 télémétrie ✅ ── n°1 curateur ── n°3 graphe ── n°4 /learn
+                          ▲                            │
+                          └────── révise ce que ───────┘
+
+n°10 scanner ── n°50 hub ── n°51 les 182 skills ── n°52 bundles ── n°53 index
+```
+
+**Ordre strictement forcé, deux fois** :
+
+- le curateur ARCHIVE : sans télémétrie il juge à l'aveugle. C'est pour ça que
+  le n°2 est passé avant, et qu'il répond `indécidable` tant que la fenêtre
+  d'observation ne couvre pas la vie de la skill ;
+- le scanner PRÉCÈDE le hub. Importer 182 skills tierces avant de savoir les
+  valider, c'est importer du code hostile en connaissance de cause (I2).
+
+**Invariant** — aucune skill n'entre sans passer le scanner ; aucune n'est
+archivée sans un verdict d'usage décidable.
+**Piège connu** — écrire dans un dossier de skill change l'empreinte que
+`signatureDesSkills` surveille : tout compteur déposé là déclenche un
+`reloadSkills()` par tour. La télémétrie lit la projection, jamais le disque.
+
+---
+
+## Chaîne C · LE DROIT D'AGIR — ce que l'agent peut faire
+
+```
+n°21 chemins ✅   n°17 rédaction ✅   n°23 garde-fous ✅
+        │
+        └── n°13 patterns de menace ── n°11 approbation ── n°12 allowlist suggérée
+                                              │
+                                              └── n°19 hooks shell
+
+à côté, sans ordre entre eux : n°14 URL · n°15 OSV · n°16 secrets externes
+                               n°18 permissions credentials · n°20 audit démarrage
+```
+
+**Ordre forcé** : les patterns alimentent l'approbation ; l'allowlist se
+suggère à partir de ce qui a été approuvé. Construire l'approbation avant les
+patterns, c'est un juge sans code pénal.
+
+**Cette chaîne précède l'import de la chaîne B.**
+
+**Invariant** — toute action à effet passe par un point de décision unique. Le
+garde de Palenza a prouvé le mode de panne inverse : une règle par cas, et la
+cinquième morsure vient d'un cas qu'aucune règle ne couvrait.
+
+---
+
+## Chaîne D · LA BOUCLE — comment un tour se déroule
+
+```
+n°22 preuve ✅ ── n°23 ✅ ── n°75 timeouts de raisonnement
+
+n°8 /goal (la boucle Ralph) ── n°54 conduite fine (/steer, /queue, /busy)
+                                        └── n°45 /clarify (bloque et attend)
+
+n°7 PTC ── n°26 délégation ── n°30 registre de processus
+```
+
+**Invariant, et c'est le plus fragile de tous** : la continuation est un
+message NORMAL. Une boucle qui réinjecte un préambule casse le cache de
+prompt à chaque tour — le coût explose sans que rien ne rougisse.
+
+**Ordre forcé** : `/goal` avant `/steer` (on ne pilote pas une boucle qui
+n'existe pas), PTC avant la délégation (déléguer, c'est appeler nos outils
+depuis ailleurs).
+
+---
+
+## Chaîne E · LA PASSERELLE — T3 hors de la machine
+
+```
+n°37 socle ── n°38 streaming ── n°39 livraison ── n°40 authz
+                                                      └── n°41 SDK plateforme
+                                                              └── n°42 Telegram, puis les autres
+                                                                      └── n°43 cycle de vie
+                                                                              └── n°44 /handoff, /sethome
+```
+
+La seule chaîne **strictement linéaire** : rien ne marche sans le n°37 (bail
+de tour — un seul écrivain). C'est aussi la plus grosse. Elle ne se commence
+pas en fin de journée.
+
+---
+
+## Chaîne F · L'EXPLOITATION — savoir ce qui se passe
+
+```
+n°46 doctor ✅ ── n°61 classification d'erreurs ── n°59 inventaire ── n°60 observabilité
+n°33 sauvegarde ✅ ── n°35 récupération de session ── n°57 mise à jour ── n°58 désinstallation
+n°48 blueprints ✅ ── n°49 suggestions ✅ ── n°47 cron intégré
+```
+
+**Note honnête sur le n°35** : vérifié le 31/07, T3 copie les transcripts
+OCTET PAR OCTET sans les analyser — il n'y a pas là la panne qu'Hermès répare.
+À rouvrir seulement si une corruption réelle apparaît (RÈGLE SUPRÊME).
+
+**Le n°47 vient APRÈS le n°49** : proposer une automatisation qu'on ne sait
+pas encore exécuter est une promesse, pas une fonctionnalité.
+
+---
+
+## Chaîne G · LES SURFACES — ce que l'humain voit et entend
+
+n°63 navigateur · n°64 computer use · n°65 mot d'éveil · n°66 TTS ·
+n°69 image/vidéo · n°70 vision · n°76 skins · n°77 i18n · n°78 vue focus ·
+n°79 bannière · n°80 achievements · n°81 tableaux · n°82 migration
+
+**Aucune ne bloque une autre.** C'est la réserve : ce qu'on prend quand une
+chaîne est bloquée par une décision qui appartient au fondateur.
+
+## Chaîne H · LE TRAVAIL ORGANISÉ
+
+n°67 kanban ── n°68 projets ── n°83 trajectoires. Se pose sur D (la
+délégation) : un kanban qui ne peut pas déléguer est un fichier texte.
+
+---
+
+## L'ordre entre les chaînes
+
+La règle : **on construit d'abord la chaîne dont l'invariant protège le plus
+de travail futur.**
+
+1. **Finir A** — le débordement sur disque. La mesure du jour le désigne : le
+   plafond avertit sans agir, et c'est le premier poste de dépense de la
+   fenêtre.
+2. **C jusqu'au n°11** — avant que B n'importe du code tiers.
+3. **B** — curateur d'abord (il n'attend plus rien), hub ensuite.
+4. **D** — la boucle. Grosse, mais elle change comment tout le reste tourne.
+5. **F** — l'exploitation.
+6. **E** — la passerelle. Un chantier à part entière, pas une fin de journée.
+7. **G / H** — à la demande, ou quand une chaîne est bloquée.
+
+## Ce que je changerais dans cette carte (v1, à challenger)
+
+Trois choses que je n'ai pas tranchées et qu'il faut regarder à la relecture :
+
+- **A et D se disputent le n°55** (compression dirigée). Je l'ai mis dans A
+  parce qu'il touche la fenêtre, mais il pilote la boucle. Si `/goal` arrive
+  avant, il devrait migrer.
+- **La chaîne C n'a pas encore d'invariant testé.** C'est la plus dangereuse
+  du lot et c'est celle qui repose encore sur des règles écrites. À poser au
+  moment du n°13, pas après.
+- **La chaîne G est peut-être une fausse chaîne.** Douze chantiers sans lien
+  entre eux, ce n'est pas une chaîne, c'est un sac. À découper ou à assumer
+  comme réserve.
