@@ -92,6 +92,123 @@ export function transformerSortie<T>(valeur: T): Transformee<T> {
 }
 
 /**
+ * Une empreinte courte et STABLE d'un texte (djb2, en hexadécimal).
+ *
+ * Déterministe à dessein : deux sorties identiques donnent le même fichier de
+ * débordement, donc le même se réécrit au lieu de s'accumuler. Une collision
+ * n'a aucune conséquence — au pire deux sorties différentes partagent un nom,
+ * et la seconde écrase la première, qui n'intéressait plus personne.
+ *
+ * Pas de `Date.now()` : un nom d'horodatage rendrait chaque appel unique et
+ * ferait grossir le dossier sans fin.
+ */
+export function empreinteCourte(texte: string): string {
+  let h = 5381;
+  for (let i = 0; i < texte.length; i += 1) {
+    h = ((h << 5) + h + texte.charCodeAt(i)) | 0;
+  }
+  return (h >>> 0).toString(16).padStart(8, "0");
+}
+
+/**
+ * La sérialisation qui partira VRAIMENT dans le contexte.
+ *
+ * Vit ici et pas dans le débordement : ce module n'importe pas Effect, donc
+ * `JSON` y est permis. Dans du code Effect, le diagnostic exige un `Schema` —
+ * or on mesure une longueur, on ne décode rien.
+ */
+export function serialiser(valeur: unknown): string {
+  return JSON.stringify(valeur) ?? "";
+}
+
+/** Ce qu'un allègement a coûté, pour que la note puisse le dire. */
+export interface Allegement<T> {
+  readonly valeur: T;
+  /** `true` si au moins une chaîne a été raccourcie. */
+  readonly allege: boolean;
+  /** Caractères retirés du contexte. */
+  readonly retires: number;
+}
+
+/**
+ * Raccourcit les plus GROSSES chaînes d'une structure jusqu'à repasser sous le
+ * plafond, en laissant dans chacune un pointeur vers l'intégral.
+ *
+ * ── Pourquoi les plus grosses, et pas une troncature globale ──────────────
+ *
+ * Couper la sérialisation d'un coup rendrait un JSON invalide. Couper toutes
+ * les chaînes également sacrifierait les petites (des noms, des chemins, des
+ * verdicts — le plus dense en information) pour épargner la grosse. On coupe
+ * donc là où il y a du volume, et nulle part ailleurs : dans les faits, un
+ * dépassement vient toujours d'un ou deux champs.
+ *
+ * La FORME est conservée : mêmes clés, mêmes types. Une porte qui change la
+ * forme est une porte qu'on débranche.
+ */
+export function alleger<T>(valeur: T, plafond: number, chemin: string): Allegement<T> {
+  const poidsInitial = JSON.stringify(valeur)?.length ?? 0;
+  if (poidsInitial <= plafond) return { valeur, allege: false, retires: 0 };
+
+  // On recense les chaînes par taille décroissante, puis on rogne la plus
+  // grosse tant qu'on dépasse. Chaque passage garde un pointeur lisible.
+  const cibles: Array<{
+    readonly chemin: ReadonlyArray<string | number>;
+    readonly taille: number;
+  }> = [];
+  const recenser = (noeud: unknown, ou: ReadonlyArray<string | number>): void => {
+    if (typeof noeud === "string") {
+      cibles.push({ chemin: ou, taille: noeud.length });
+      return;
+    }
+    if (Array.isArray(noeud)) {
+      noeud.forEach((sous, i) => recenser(sous, [...ou, i]));
+      return;
+    }
+    if (typeof noeud === "object" && noeud !== null) {
+      for (const [cle, sous] of Object.entries(noeud)) recenser(sous, [...ou, cle]);
+    }
+  };
+  recenser(valeur, []);
+  cibles.sort((a, b) => b.taille - a.taille);
+
+  const copie = structuredClone(valeur) as T;
+  const lire = (
+    ou: ReadonlyArray<string | number>,
+  ): { parent: any; cle: string | number } | null => {
+    let courant: any = copie;
+    for (let i = 0; i < ou.length - 1; i += 1) {
+      courant = courant?.[ou[i] as never];
+      if (courant === undefined || courant === null) return null;
+    }
+    const cle = ou.at(-1);
+    return cle === undefined ? null : { parent: courant, cle };
+  };
+
+  let retires = 0;
+  let allege = false;
+  for (const cible of cibles) {
+    if ((JSON.stringify(copie)?.length ?? 0) <= plafond) break;
+    const place = lire(cible.chemin);
+    if (place === null) continue;
+    const texte = place.parent[place.cle];
+    if (typeof texte !== "string") continue;
+
+    const ou = cible.chemin.join(".");
+    const pointeur = `\n\n… [tronqué — intégral dans ${chemin}, champ « ${ou.length > 0 ? ou : "(racine)"} »]`;
+    // On garde une TÊTE utile : un début de sortie oriente, une chaîne vide
+    // n'apprend rien. 2 000 caractères ≈ 500 jetons, le prix d'un pointeur
+    // qui reste lisible.
+    const garde = Math.min(texte.length, 2_000);
+    if (texte.length <= garde + pointeur.length) continue;
+    place.parent[place.cle] = texte.slice(0, garde) + pointeur;
+    retires += texte.length - garde - pointeur.length;
+    allege = true;
+  }
+
+  return { valeur: copie, allege, retires };
+}
+
+/**
  * Colle les notes de la porte dans un champ `note` existant.
  *
  * Les nôtres portent déjà un champ `note` où l'outil s'explique. Y ajouter ce

@@ -1,3 +1,5 @@
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import { Tool, Toolkit } from "effect/unstable/ai";
 
@@ -50,7 +52,9 @@ export const DetteTool = Tool.make("dette", {
   parameters: DetteInput,
   success: DetteResultat,
   failure: DetteError,
-  dependencies: [DetteStore],
+  // Le disque EN PLUS : la porte de sortie fait déborder l'intégral
+  // au-dessus du plafond, au lieu de le laisser passer.
+  dependencies: [DetteStore, FileSystem.FileSystem, Path.Path],
 })
   .annotate(Tool.Title, "Dette de persistance")
   .annotate(Tool.Readonly, true)

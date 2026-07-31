@@ -2,7 +2,7 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 
-import { avecNotes, transformerSortie } from "../../SortieDOutil.ts";
+import { porteDeSortie } from "../../DebordementSurDisque.ts";
 import { construireCarteDepuisExtraits, rendreCarte } from "./repoMapCore.ts";
 import { balayerWorkspace } from "./repoMapWorkspace.ts";
 import { RepoMapError, RepoToolkit } from "./tools.ts";
@@ -19,7 +19,7 @@ const handlers = {
     // les chemins d'erreur. Ce toolkit l'esquivait depuis le 31/07 alors que
     // la porte se déclarait obligatoire — une carte de dépôt peut contenir un
     // secret aussi bien qu'un autre texte.
-    Effect.map(
+    Effect.flatMap(
       Effect.gen(function* () {
         const path = yield* Path.Path;
         const fs = yield* FileSystem.FileSystem;
@@ -53,7 +53,7 @@ const handlers = {
           note: `Carte bornée à ${input.maxChars ?? BUDGET_DEFAUT_CHARS} caractères. ${balayage.lus} fichier(s) lu(s), ${balayage.caches} écarté(s) par les règles du dépôt, ${balayage.ignoresTropGros} écarté(s) car trop gros. Un fichier absent de la carte n'est pas un fichier absent du dépôt.`,
         };
       }),
-      (rendu) => avecNotes(transformerSortie(rendu)),
+      porteDeSortie,
     ),
 } satisfies Parameters<typeof RepoToolkit.toLayer>[0];
 

@@ -1,3 +1,5 @@
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import { Tool, Toolkit } from "effect/unstable/ai";
 
@@ -90,7 +92,9 @@ export const RappelTool = Tool.make("rappel", {
   parameters: RappelInput,
   success: RappelResultat,
   failure: RappelError,
-  dependencies: [RappelStore],
+  // Le disque EN PLUS : la porte de sortie fait déborder l'intégral
+  // au-dessus du plafond, au lieu de le laisser passer.
+  dependencies: [RappelStore, FileSystem.FileSystem, Path.Path],
 })
   .annotate(Tool.Title, "Rappel de conversations")
   .annotate(Tool.Readonly, true)

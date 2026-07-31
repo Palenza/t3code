@@ -1,6 +1,8 @@
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
 
-import { transformerSortie } from "../../SortieDOutil.ts";
+import { passerLaPorte } from "../../DebordementSurDisque.ts";
 import type {
   PreviewAutomationOperation,
   PreviewAutomationOpenInput,
@@ -37,7 +39,11 @@ const invoke = Effect.fn("PreviewToolkit.invoke")(function* <A>(
 ): Effect.fn.Return<
   A,
   import("@t3tools/contracts").PreviewAutomationError,
-  McpInvocationContext.McpInvocationContext | PreviewAutomationBroker.PreviewAutomationBroker
+  | McpInvocationContext.McpInvocationContext
+  | PreviewAutomationBroker.PreviewAutomationBroker
+  // La porte de sortie écrit sur disque au-dessus du plafond.
+  | FileSystem.FileSystem
+  | Path.Path
 > {
   const scope = yield* McpInvocationContext.requireMcpCapability("preview");
   const broker = yield* PreviewAutomationBroker.PreviewAutomationBroker;
@@ -60,7 +66,7 @@ const invoke = Effect.fn("PreviewToolkit.invoke")(function* <A>(
   // poignées rendent des formes différentes (`null`, `void`, des objets à
   // schéma strict), et y greffer un champ casserait la moitié d'entre elles.
   // Le caviardage, lui, garde la forme intacte.
-  const transformee = transformerSortie(brut);
+  const transformee = yield* passerLaPorte(brut);
   if (transformee.notes.length > 0) {
     yield* Effect.logWarning(`preview:${operation} — ${transformee.notes.join(" ")}`);
   }

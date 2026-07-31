@@ -1,3 +1,5 @@
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import { Tool, Toolkit } from "effect/unstable/ai";
 
@@ -59,7 +61,9 @@ export const PreuveTool = Tool.make("preuve", {
   parameters: PreuveInput,
   success: PreuveResultat,
   failure: PreuveError,
-  dependencies: [PreuveStore],
+  // Le disque EN PLUS : la porte de sortie fait déborder l'intégral
+  // au-dessus du plafond, au lieu de le laisser passer.
+  dependencies: [PreuveStore, FileSystem.FileSystem, Path.Path],
 })
   .annotate(Tool.Title, "Registre de preuve")
   .annotate(Tool.Readonly, true)

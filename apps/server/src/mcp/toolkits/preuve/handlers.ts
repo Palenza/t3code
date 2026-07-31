@@ -1,7 +1,7 @@
 import * as Effect from "effect/Effect";
 
 import { etatDesPreuves } from "../../../preuve/PreuveCommande.ts";
-import { avecNotes, transformerSortie } from "../../SortieDOutil.ts";
+import { porteDeSortie } from "../../DebordementSurDisque.ts";
 import { PreuveStore } from "../../../preuve/PreuveStore.ts";
 import { PreuveError, PreuveToolkit } from "./tools.ts";
 
@@ -18,7 +18,7 @@ const handlers = {
   preuve: (input) =>
     // La porte est à la SORTIE du gestionnaire : tout ce que l'outil rend y
     // passe, y compris les chemins d'erreur et les modes rares.
-    Effect.map(
+    Effect.flatMap(
       Effect.gen(function* () {
         const store = yield* PreuveStore;
         const passages = yield* store.preuvesDuFil(input.filId, ACTIVITES_LUES).pipe(
@@ -45,7 +45,7 @@ const handlers = {
               : `${passages.length} passage(s) de vérification. Prouvé : ${prouves.length > 0 ? prouves.join(", ") : "rien de complet"}. Un passage CIBLÉ au vert ne dit rien du reste du dépôt.`,
         };
       }),
-      (rendu) => avecNotes(transformerSortie(rendu)),
+      porteDeSortie,
     ),
 } satisfies Parameters<typeof PreuveToolkit.toLayer>[0];
 

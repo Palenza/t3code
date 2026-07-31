@@ -59,14 +59,15 @@ it.layer(NodeServices.layer, { excludeTestServices: true })("porte de sortie", (
             .readFileString(path.join(dossier, nom, "handlers.ts"))
             .pipe(Effect.orElseSucceed(() => ""));
           if (source.length === 0) continue;
-          if (!source.includes("transformerSortie")) sansPorte.push(nom);
+          const traverse = source.includes("porteDeSortie") || source.includes("passerLaPorte");
+          if (!traverse) sansPorte.push(nom);
         }
 
         assert.deepEqual(
           sansPorte,
           [],
           `Ces toolkits rendent au modèle sans passer par la porte : ${sansPorte.join(", ")}. ` +
-            "Ajoute `transformerSortie` à la SORTIE du gestionnaire (voir preuve/handlers.ts), " +
+            "Ajoute `porteDeSortie` à la SORTIE du gestionnaire (voir preuve/handlers.ts), " +
             "ou inscris une dérogation MOTIVÉE dans DEROGATIONS.",
         );
       }),
@@ -82,6 +83,7 @@ it.layer(NodeServices.layer, { excludeTestServices: true })("porte de sortie", (
           .readFileString(path.join(process.cwd(), "src", "mcp", "SortieDOutil.ts"))
           .pipe(Effect.orDie);
         assert.include(source, "caviarder", "la porte ne caviarde plus");
+        assert.include(source, "alleger", "la porte ne fait plus déborder sur disque");
         assert.include(source, "PLAFOND_SORTIE", "la porte ne borne plus le poids");
       }),
     );

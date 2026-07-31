@@ -17,7 +17,7 @@ import {
   RAYON_FENETRE,
   TAILLE_BORNES,
 } from "../../../rappel/RappelRequete.ts";
-import { avecNotes, transformerSortie } from "../../SortieDOutil.ts";
+import { porteDeSortie } from "../../DebordementSurDisque.ts";
 import { RappelStore } from "../../../rappel/RappelStore.ts";
 import { RappelError, RappelToolkit } from "./tools.ts";
 
@@ -67,7 +67,7 @@ const handlers = {
     // Ma première version l'avait posée sur un seul des quatre retours : une
     // porte qu'on peut contourner par un chemin d'erreur ou un mode moins
     // fréquent ne protège rien. Ici, TOUT ce que l'outil rend passe par elle.
-    Effect.map(
+    Effect.flatMap(
       Effect.gen(function* () {
         const store = yield* RappelStore;
         const mode = modeDeRappel(input);
@@ -194,7 +194,7 @@ const handlers = {
           note: `${fils.length} fils touchés par « ${question} » (sur ${brutes.length} messages trouvés).${bornee.ecartes > 0 ? ` ${bornee.ecartes} fils écartés faute de place (budget ${PLAFOND_CHARGE} caractères) — affine la question pour les voir.` : ""} Pour lire plus loin dans un fil, rappelle avec son \`filId\` et un \`autourDe\`.`,
         };
       }),
-      (rendu) => avecNotes(transformerSortie(rendu)),
+      porteDeSortie,
     ),
 } satisfies Parameters<typeof RappelToolkit.toLayer>[0];
 

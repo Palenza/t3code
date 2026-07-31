@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 
-import { avecNotes, transformerSortie } from "../../SortieDOutil.ts";
+import { porteDeSortie } from "../../DebordementSurDisque.ts";
 import { skillsSurDisque } from "../../../skills/SurDisque.ts";
 import { UsageStore } from "../../../skills/UsageStore.ts";
 import { classerLesSkills, isoDe, resumeDUsage } from "../../../skills/UsageDesSkills.ts";
@@ -10,7 +10,7 @@ const handlers = {
   "usage-skills": (input) =>
     // La porte est à la SORTIE : tout ce que l'outil rend y passe, y compris
     // les chemins rares.
-    Effect.map(
+    Effect.flatMap(
       Effect.gen(function* () {
         const store = yield* UsageStore;
         const surDisque = yield* skillsSurDisque({
@@ -59,7 +59,7 @@ const handlers = {
               : "Toutes les skills ont pu être jugées sur une observation couvrant leur vie entière. La projection reste élaguée : une skill lancée hors de T3 n'y laisse aucune trace.",
         };
       }),
-      (rendu) => avecNotes(transformerSortie(rendu)),
+      porteDeSortie,
     ),
 } satisfies Parameters<typeof UsageSkillsToolkit.toLayer>[0];
 

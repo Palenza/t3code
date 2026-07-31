@@ -97,9 +97,11 @@ la raison — un écart sans raison se rouvre tous les mois.
       → `f60d9192c` (un passage ciblé ne dit plus « tout est vert »), `7cb740610`
 - [x] **23 · Garde-fous d'outils + classification de résultat**
       `agent/tool_guardrails.py` → `8bddea2fa`, `0a2dadc7c`
-- [x] **24 · Hygiène de contexte** — plafonds de sortie, redaction profonde.
-      `tools/tool_output_limits.py` → `422454103`
-      _(reste : débordement sur disque des grosses sorties)_
+- [x] **24 · Hygiène de contexte** — plafonds de sortie, redaction profonde,
+      et DÉBORDEMENT SUR DISQUE : au-dessus du plafond l'intégral part dans un
+      fichier et le contexte reçoit une tête + un pointeur. Rien n'est jeté
+      (H6). `tools/tool_output_limits.py`, `tool_result_storage.py`
+      → `422454103` puis le n°24b
 - [–] **25 · Édition de fichiers de qualité** — correspondance floue, parseur
   de patch. **Écarté** : l'édition appartient à Claude Code, pas à T3. La
   reprendre serait doubler un moteur qu'on ne possède pas.
