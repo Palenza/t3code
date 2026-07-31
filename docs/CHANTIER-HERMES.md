@@ -96,23 +96,23 @@ la raison — un écart sans raison se rouvre tous les mois.
       base en mémoire, avec nos réglages actuels (`unicode61
 remove_diacritics 2`) contre `trigram` :
 
-                      requête      unicode61 (le nôtre)   trigram
-                      数据  (2)          0                   0
-                      数据库 (3)          0                   1
-                      東京  (2)          0                   0
-                      chat               1                   1
-                      dort               1                   1
+                        requête      unicode61 (le nôtre)   trigram
+                        数据  (2)          0                   0
+                        数据库 (3)          0                   1
+                        東京  (2)          0                   0
+                        chat               1                   1
+                        dort               1                   1
 
-                  Donc **notre index ne trouve JAMAIS rien en CJK**, pas même sur trois
-                  caractères — ce n'est pas une dégradation, c'est un mur. `trigram` le
-                  lève dès 3 caractères sans toucher au français.
-                  Reste hors de portée : les termes CJK de **1-2 caractères**, et c'est
-                  précisément ce que leur bigramme compilé existe pour couvrir.
-                  **On ne bascule PAS aujourd'hui** : produit français d'abord, un index
-                  trigramme pèse plus lourd (une entrée par fenêtre de 3), et personne
-                  n'attend cette recherche. Mais le jour où un utilisateur CJK arrive, la
-                  décision est un MOT dans la migration 036 — plus un chantier natif.
-                  `native/fts5_cjk/` **(copie C, désormais optionnelle)**
+                    Donc **notre index ne trouve JAMAIS rien en CJK**, pas même sur trois
+                    caractères — ce n'est pas une dégradation, c'est un mur. `trigram` le
+                    lève dès 3 caractères sans toucher au français.
+                    Reste hors de portée : les termes CJK de **1-2 caractères**, et c'est
+                    précisément ce que leur bigramme compilé existe pour couvrir.
+                    **On ne bascule PAS aujourd'hui** : produit français d'abord, un index
+                    trigramme pèse plus lourd (une entrée par fenêtre de 3), et personne
+                    n'attend cette recherche. Mais le jour où un utilisateur CJK arrive, la
+                    décision est un MOT dans la migration 036 — plus un chantier natif.
+                    `native/fts5_cjk/` **(copie C, désormais optionnelle)**
 
 - [ ] **7 · PTC — appel d'outils programmatique** — le modèle écrit un script
       qui appelle nos outils, N tours → 1. Seul le `stdout` revient. Chez nous il
@@ -414,6 +414,14 @@ remove_diacritics 2`) contre `trigram` :
       `autonomous-ai-agents`, `mlops`, `security` en priorité **(copie markdown)**
 - [ ] **52 · Bundles de skills** — un alias `/<nom>` déclenche plusieurs
       skills. `hermes_cli/bundles.py`
+      **Instruit le 01/08 : pas constructible à notre niveau.** T3 LIT les
+      commandes slash depuis la poignée de main d'initialisation du CLI
+      (`parseClaudeInitializationCommands`) ; il n'en ajoute aucune, et le SDK
+      n'expose aucun moyen de le faire. L'espace des commandes appartient à
+      Claude Code.
+      La seule voie serait d'ÉCRIRE un fichier de commande dans le dossier
+      Claude de l'humain — la même famille de décision que l'installation de
+      skills (n°51-53). Elle remonte à Enzo, pas au code.
 - [ ] **53 · Compatibilité agentskills.io + index Anthropic/OpenAI/LobeHub**
 - [ ] **54 · Conduite fine de session** — `/steer` (injecter après le prochain
       outil, sans interrompre), `/queue`, `/busy` avec politique par commande
