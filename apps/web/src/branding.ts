@@ -29,3 +29,16 @@ export const APP_DISPLAY_NAME = formatAppDisplayName({
   stageLabel: APP_STAGE_LABEL,
 });
 export const APP_VERSION = import.meta.env.APP_VERSION || "0.0.0";
+/**
+ * Le numéro du BUILD qu'on exécute — celui du DMG, pas celui de l'app web.
+ *
+ * `APP_VERSION` sert à la détection d'écart client/serveur (`versionSkew`) et
+ * vaut la version de `apps/web`. En construction locale, seul `apps/desktop`
+ * est bumpé : la barre affichait donc 0.0.31 pendant que le DMG posé était en
+ * 0.0.73 (constaté sur une capture d'Enzo le 02/08). Un numéro faux, et
+ * crédible — exactement ce que cet affichage devait empêcher.
+ *
+ * Celui-ci est le numéro à MONTRER. Il retombe sur `APP_VERSION` quand le
+ * build ne le fournit pas, donc rien ne régresse là où les deux coïncident.
+ */
+export const APP_BUILD_VERSION = import.meta.env.APP_BUILD_VERSION || APP_VERSION;

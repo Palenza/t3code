@@ -14,6 +14,8 @@ interface ImportMetaEnv {
   readonly VITE_RELAY_OTLP_TRACES_DATASET: string;
   readonly VITE_RELAY_OTLP_TRACES_TOKEN: string;
   readonly APP_VERSION: string;
+  /** La version du BUNDLE installé (DMG). Voir `APP_BUILD_VERSION` dans branding. */
+  readonly APP_BUILD_VERSION: string;
 }
 
 interface ImportMeta {

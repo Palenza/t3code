@@ -16,9 +16,15 @@
  * montage que `hdiutil` ANNONCE (jamais celui qu'on devine), et on sort en
  * erreur si le volume obtenu n'a pas d'`Info.plist` — au lieu de deviner.
  *
- * Usage : node scripts/verifier-dmg.ts <chemin.dmg> [marqueur ...]
+ * Usage : node scripts/verifier-dmg.ts <chemin.dmg> [--ouvrir] [marqueur ...]
  * Les marqueurs sont des chaînes du travail du jour ; leur absence de
  * l'`app.asar` est un ÉCHEC, pas un détail.
+ *
+ * `--ouvrir` pose la fenêtre du DMG à l'écran une fois la vérification PASSÉE.
+ * C'est un seul geste par nécessité : la vérification démonte les volumes en
+ * partant, donc ouvrir d'abord puis vérifier referme la fenêtre sous le nez
+ * d'Enzo — ce qui vient d'arriver le 02/08. Et ouvrir sans avoir vérifié, ce
+ * serait lui livrer un artefact dont on ne sait rien.
  */
 
 import { execFileSync } from "node:child_process";
@@ -48,7 +54,9 @@ function demonter(point: string): void {
   }
 }
 
-const [dmg, ...marqueurs] = process.argv.slice(2);
+const arguments_ = process.argv.slice(2);
+const ouvrirEnsuite = arguments_.includes("--ouvrir");
+const [dmg, ...marqueurs] = arguments_.filter((valeur) => valeur !== "--ouvrir");
 if (dmg === undefined) {
   echouer(CODES.dmgIntrouvable, "usage : verifier-dmg.ts <chemin.dmg> [marqueur ...]");
 }
@@ -125,6 +133,7 @@ if (version !== versionAttendue) {
 // 3 · Les marqueurs : la seule preuve que le binaire contient ce qu'on croit y
 //     avoir mis. `strings` sur l'asar, parce que c'est ce que le binaire EMBARQUE.
 const asar = join(app, "Contents", "Resources", "app.asar");
+
 let manquants = 0;
 for (const marqueur of marqueurs) {
   let compte = 0;

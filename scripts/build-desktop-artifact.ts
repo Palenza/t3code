@@ -389,6 +389,34 @@ export class MissingDesktopBuildInputError extends Schema.TaggedErrorClass<Missi
   }
 }
 
+/**
+ * Le bundle web embarqué n'affiche pas le numéro du paquet.
+ *
+ * Le 02/08, la barre latérale d'Enzo affichait v0.0.31 pendant que son DMG
+ * était en 0.0.73 : le web se construisait avec la version d'`apps/web`, que
+ * seule la CI bumpe. Un numéro faux à l'endroit précis censé empêcher les
+ * numéros faux — et invisible, puisque le plist du paquet, lui, était juste.
+ *
+ * Le message NOMME les deux nombres et le geste : nos erreurs sont lues par un
+ * agent, qui répare « attendu X, trouvé Y » et ne peut rien faire d'un échec
+ * muet.
+ */
+export class WebBundleVersionMismatchError extends Schema.TaggedErrorClass<WebBundleVersionMismatchError>()(
+  "WebBundleVersionMismatchError",
+  {
+    expectedVersion: Schema.String,
+    assetsDirectory: Schema.String,
+  },
+) {
+  override get message(): string {
+    return (
+      `Le bundle web de ${this.assetsDirectory} n'embarque nulle part la version ${this.expectedVersion} : ` +
+      `l'app afficherait un AUTRE numéro que son paquet. ` +
+      `Vérifie que le build web reçoit APP_BUILD_VERSION (passé au spawn de 'vp run build:desktop').`
+    );
+  }
+}
+
 export class MacProvisioningProfileNotFoundError extends Schema.TaggedErrorClass<MacProvisioningProfileNotFoundError>()(
   "MacProvisioningProfileNotFoundError",
   {
@@ -2136,6 +2164,13 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
       ChildProcess.make(spawnCommand.command, spawnCommand.args, {
         cwd: repoRoot,
         shell: spawnCommand.shell,
+        // Le numéro du BUNDLE, gravé dans le web qu'on embarque. Sans lui,
+        // `apps/web/vite.config.ts` retombe sur la version d'`apps/web` — que
+        // seule la CI bumpe — et la barre latérale affiche un numéro qui n'a
+        // rien à voir avec le DMG installé (0.0.31 pour un DMG 0.0.73,
+        // constaté le 02/08). Le seul endroit qui connaît le vrai numéro est
+        // ce script : c'est donc lui qui le passe.
+        env: { ...process.env, APP_BUILD_VERSION: desktopPackageJson.version },
       }),
       { label: "vp run build:desktop", verbose: options.verbose },
     );
@@ -2162,6 +2197,43 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
       buildCommand: "vp run build:desktop",
     });
   }
+
+  /**
+   * LE NUMÉRO QUE L'INTERFACE AFFICHERA doit être celui du paquet.
+   *
+   * Le 02/08, la barre latérale d'Enzo affichait v0.0.31 pendant que son DMG
+   * était en 0.0.73 : le web embarqué se construisait avec la version
+   * d'`apps/web`, que seule la CI bumpe. Un numéro faux à l'endroit précis
+   * censé empêcher les numéros faux — et INVISIBLE, parce que le plist du
+   * paquet, lui, était juste. Aucune vérification d'artefact ne pouvait le
+   * voir.
+   *
+   * On lit donc le bundle web qui part dans l'app, et on exige d'y trouver la
+   * version du paquet. Un build qui échoue ici a produit une app qui MENT sur
+   * elle-même — mieux vaut pas de DMG qu'un DMG qui se trompe de nom.
+   */
+  const assetsDir = path.join(distDirs.serverDist, "client/assets");
+  const assets = yield* fs
+    .readDirectory(assetsDir)
+    .pipe(Effect.orElseSucceed(() => [] as string[]));
+  let versionGravee = false;
+  for (const entree of assets) {
+    if (!entree.endsWith(".js")) continue;
+    const contenu = yield* fs
+      .readFileString(path.join(assetsDir, entree))
+      .pipe(Effect.orElseSucceed(() => ""));
+    if (contenu.includes(desktopPackageJson.version)) {
+      versionGravee = true;
+      break;
+    }
+  }
+  if (!versionGravee) {
+    return yield* new WebBundleVersionMismatchError({
+      expectedVersion: desktopPackageJson.version,
+      assetsDirectory: assetsDir,
+    });
+  }
+  yield* Effect.log(`[desktop-artifact] Le bundle web affiche bien ${desktopPackageJson.version}.`);
 
   const webAssetBrand = resolveDesktopWebAssetBrand(appVersion);
   yield* applyWebBrandAssets(webAssetBrand, "apps/server/dist/client");

@@ -3,7 +3,7 @@ import { memo, useCallback, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 
 import { useEnvironmentIdentificationMode } from "../../hooks/useSettings";
-import { APP_DISPLAY_NAME, APP_VERSION } from "../../branding";
+import { APP_BUILD_VERSION, APP_DISPLAY_NAME } from "../../branding";
 import { cn } from "../../lib/utils";
 import { SidebarCarnet } from "./SidebarCarnet";
 import { SidebarModeTravail } from "./SidebarModeTravail";
@@ -292,12 +292,18 @@ export const SidebarChromeFooter = memo(function SidebarChromeFooter() {
        *
        * Discret par construction — un chiffre qu'on ne lit que lorsqu'on le
        * cherche. Mais quand on le cherche, il est là, et il change à chaque
-       * DMG (`APP_VERSION` vient de la build). */}
+       * DMG.
+       *
+       * `APP_BUILD_VERSION`, et surtout PAS `APP_VERSION` : le second est la
+       * version de l'app web, qui sert à la détection d'écart client/serveur
+       * et que seule la CI bumpe. Il affichait 0.0.31 pendant qu'Enzo faisait
+       * tourner un DMG 0.0.73 (sa capture du 02/08) — un numéro faux à
+       * l'endroit exact censé empêcher les numéros faux. */}
       <div
         className="px-2 pb-0.5 text-right text-[10px] text-sidebar-muted-foreground/45 tabular-nums"
-        title={`${APP_DISPLAY_NAME} ${APP_VERSION}`}
+        title={`${APP_DISPLAY_NAME} ${APP_BUILD_VERSION}`}
       >
-        v{APP_VERSION}
+        v{APP_BUILD_VERSION}
       </div>
     </SidebarFooter>
   );

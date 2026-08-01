@@ -37,6 +37,20 @@ const configuredRelayTracingDataset = repoEnv.VITE_RELAY_OTLP_TRACES_DATASET?.tr
 const configuredRelayTracingToken = repoEnv.VITE_RELAY_OTLP_TRACES_TOKEN?.trim() || "";
 const configuredHostedAppChannel = process.env.VITE_HOSTED_APP_CHANNEL?.trim() || "";
 const configuredAppVersion = process.env.APP_VERSION?.trim() || pkg.version;
+/**
+ * LE NUMÉRO DU BUNDLE, celui qui identifie le DMG installé.
+ *
+ * `APP_VERSION` est la version de l'app WEB, et `versionSkew` s'en sert pour
+ * comparer client et serveur : y écrire autre chose ferait clignoter un faux
+ * « version mismatch » en permanence. Mais ce n'est PAS le numéro qu'Enzo lit
+ * en bas de sa barre pour savoir quel build il exécute — en construction
+ * locale, seul `apps/desktop` est bumpé, et la barre affichait donc 0.0.31
+ * pendant que le DMG était en 0.0.73. Un numéro faux et crédible.
+ *
+ * Deux numéros, deux usages, et chacun le sien. Le repli sur `APP_VERSION`
+ * garde le comportement d'avant partout où le build ne le fournit pas.
+ */
+const configuredBuildVersion = process.env.APP_BUILD_VERSION?.trim() || configuredAppVersion;
 const configuredHostedAppUrl = (() => {
   const explicitHostedAppUrl = process.env.VITE_HOSTED_APP_URL?.trim();
   if (explicitHostedAppUrl) {
@@ -174,6 +188,7 @@ export default defineConfig(() => {
       "import.meta.env.VITE_HOSTED_APP_URL": JSON.stringify(configuredHostedAppUrl ?? ""),
       "import.meta.env.VITE_HOSTED_APP_CHANNEL": JSON.stringify(configuredHostedAppChannel),
       "import.meta.env.APP_VERSION": JSON.stringify(configuredAppVersion),
+      "import.meta.env.APP_BUILD_VERSION": JSON.stringify(configuredBuildVersion),
     },
     resolve: {
       tsconfigPaths: true,
