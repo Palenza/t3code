@@ -105,9 +105,10 @@ it.layer(NodeServices.layer, { excludeTestServices: true })("jamais exécuté", 
           "des silences sont inscrits comme assumés alors qu'ils sont désormais observés",
         );
 
-        // Le compte-rendu PARLE, il ne bloque pas — voir l'en-tête.
-        // eslint-disable-next-line no-console
-        console.log(`  [jamais-exécuté] ${raconter(lignes)}`);
+        // Le compte-rendu PARLE, il ne bloque pas — voir l'en-tête. Par le
+        // journal d'Effect, pas par la console : dans du code Effect, la
+        // console court-circuite le contexte de journalisation.
+        yield* Effect.logInfo(`[jamais-exécuté] ${raconter(lignes)}`);
       }),
     );
   });
