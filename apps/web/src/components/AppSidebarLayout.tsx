@@ -194,6 +194,12 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
    * repli reste le SILENCE — c'est lui qui rouvre le cas normal.
    */
   const spaceSwipePicRef = useRef(0);
+  /** Les deux axes CUMULÉS sur la salve en cours. On juge l'intention du geste
+   * sur eux, jamais sur une image isolée — voir le commentaire du test. Remis à
+   * zéro en même temps que l'accumulateur, sinon ils dériveraient d'un geste à
+   * l'autre et un vieux défilement vertical condamnerait un swipe neuf. */
+  const spaceSwipeVerticalRef = useRef(0);
+  const spaceSwipeHorizontalRef = useRef(0);
   // Le geste se VOIT pendant qu'il se fait. Avant, rien ne bougeait jusqu'au
   // seuil puis l'espace sautait d'un coup — « l'animation est très nulle, pas
   // fluide » (fondateur, 30/07). Désormais le contenu SUIT les doigts (offset
@@ -322,12 +328,16 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
         spaceSwipeSilenceRef.current = window.setTimeout(() => {
           spaceSwipeVerrouRef.current = false;
           spaceSwipeAccumRef.current = 0;
+          spaceSwipeVerticalRef.current = 0;
+          spaceSwipeHorizontalRef.current = 0;
           spaceSwipePicRef.current = 0;
         }, SILENCE_FIN_DE_GESTE_MS);
         return;
       }
       spaceSwipeVerrouRef.current = false;
       spaceSwipeAccumRef.current = 0;
+      spaceSwipeVerticalRef.current = 0;
+      spaceSwipeHorizontalRef.current = 0;
       if (spaceSwipeSilenceRef.current !== null) {
         window.clearTimeout(spaceSwipeSilenceRef.current);
         spaceSwipeSilenceRef.current = null;
@@ -338,9 +348,36 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
     // valeur basse en fin de geste, et la moindre ondulation de la traîne
     // repasserait pour un nouveau doigt.
     spaceSwipePicRef.current = Math.max(spaceSwipePicRef.current, ampleur);
-    if (Math.abs(event.deltaX) <= Math.abs(event.deltaY)) {
+    // UNE IMAGE VERTICALE NE TUE PLUS LE GESTE — corrigé le 01/08, et c'est LA
+    // cause des saccades.
+    //
+    // Le test était `|deltaX| <= |deltaY|` sur l'évènement SEUL : chaque image
+    // un peu verticale remettait l'accumulateur à ZÉRO et rappelait `retomber`,
+    // qui ramène la barre à sa place. Or un glissement LENT à deux doigts n'est
+    // jamais parfaitement horizontal — une image sur trois a un `deltaY`
+    // supérieur. Chacune détruisait toute l'accumulation.
+    //
+    // Résultat mesuré sur l'enregistrement du 01/08 (120 fps, 3 443 images) :
+    // avant le basculement de 13,60 s, le décalage fait +4, +3, +2, +2, puis
+    // −1, −4, −8 — il repart en sens INVERSE au milieu du même geste. C'est le
+    // tremblement : « elle bouge de gauche à droite comme si elle tremblait,
+    // sans jamais passer à l'autre espace ». En allant vite, `deltaX` domine,
+    // il y a moins de resets, et ça finit par passer — d'où « ça ne marche que
+    // si je swipe plus fort ».
+    //
+    // On juge donc l'INTENTION du geste, pas une image isolée : on compare les
+    // deux axes CUMULÉS. Un geste franchement vertical (défilement de la liste)
+    // abandonne toujours ; un geste horizontal traversé d'une image oblique
+    // continue.
+    spaceSwipeVerticalRef.current += Math.abs(event.deltaY);
+    spaceSwipeHorizontalRef.current += Math.abs(event.deltaX);
+    if (spaceSwipeVerticalRef.current > spaceSwipeHorizontalRef.current * 1.6) {
       if (spaceSwipeAccumRef.current !== 0) retomber(carte);
       spaceSwipeAccumRef.current = 0;
+      spaceSwipeVerticalRef.current = 0;
+      spaceSwipeHorizontalRef.current = 0;
+      spaceSwipeVerticalRef.current = 0;
+      spaceSwipeHorizontalRef.current = 0;
       return;
     }
     const now = Date.now();
@@ -351,6 +388,8 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
     const cible = carte;
     spaceSwipeSettleRef.current = window.setTimeout(() => {
       spaceSwipeAccumRef.current = 0;
+      spaceSwipeVerticalRef.current = 0;
+      spaceSwipeHorizontalRef.current = 0;
       retomber(cible);
     }, 140);
     if (Math.abs(spaceSwipeAccumRef.current) < seuilDuSwipe(depuisLaBarre)) {
@@ -365,6 +404,8 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
     // du geste, pas le signe brut : +1 = les doigts vont vers la droite.
     const versLaDroite = spaceSwipeAccumRef.current < 0 ? 1 : -1;
     spaceSwipeAccumRef.current = 0;
+    spaceSwipeVerticalRef.current = 0;
+    spaceSwipeHorizontalRef.current = 0;
     spaceSwipeLastFireRef.current = now;
     // Le geste a abouti : tout ce qui suit est de la traîne, pas une intention.
     // On verrouille jusqu'au silence — un seul geste, un seul espace franchi.
@@ -373,6 +414,8 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
     spaceSwipeSilenceRef.current = window.setTimeout(() => {
       spaceSwipeVerrouRef.current = false;
       spaceSwipeAccumRef.current = 0;
+      spaceSwipeVerticalRef.current = 0;
+      spaceSwipeHorizontalRef.current = 0;
     }, SILENCE_FIN_DE_GESTE_MS);
     // Deux doigts vers la DROITE ouvrent la bibliothèque — mais SEULEMENT
     // depuis la vue principale. Depuis un espace, le même geste ramène
