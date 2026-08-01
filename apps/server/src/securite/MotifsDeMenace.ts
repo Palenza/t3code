@@ -81,7 +81,7 @@ export const MOTIFS: ReadonlyArray<MotifDeMenace> = [
   m(
     "injection-prompt",
     "partout",
-    `ignore\\s+${R}(previous|all|above|prior)\\s+${R}instructions`,
+    `ignore\\s+${R}(previous|all|above|prior|earlier|current|existing|the\\s+system)\\s+${R}instructions`,
     "demande d'ignorer les instructions précédentes",
   ),
   m(
