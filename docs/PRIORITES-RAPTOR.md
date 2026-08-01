@@ -1,20 +1,28 @@
 # Priorités Raptor
 
-> **Avancement au 01/08 (session nuit).** P0 → P3 faits, tout vert.
+> **Avancement au 01/08 (matin, seconde session).** P0 → P4 faits.
 >
-> |                                        | état                  | preuve                                                                                                 |
-> | -------------------------------------- | --------------------- | ------------------------------------------------------------------------------------------------------ |
-> | **P0** test instable OTLP              | ✅                    | course event-loop, attente bornée, 4 suites vertes (`8cadfd148`)                                       |
-> | **P1** rattraper l'amont               | ✅                    | 16 commits, 4 conflits résolus main, 0 de retard (`630a204f9`)                                         |
-> | **P2** première éval                   | ✅                    | corpus injection, **a trouvé une brèche réelle**, 13 %→0 % de ratés (`7419d2fbd`)                      |
-> | **P3** détecteur de cache              | ✅ pur, ⏳ activation | module prouvé (`b924d3776`) ; câblage live dans `INFRA-ACTIVATIONS.md`, attend un GO de reconstruction |
-> | **BONUS** 3ᵉ étage de garde            | ✅                    | « livré ne veut rien dire, observé si » (`71a65e270`)                                                  |
-> | **P4** bac à sable Seatbelt            | ⏳                    | à instruire : le hook d'un dépôt cloné s'exécute-t-il ? (1 h)                                          |
-> | **P5** orchestration-v2 + subagent-obs | ⏳                    | un seul chantier à deux étages, après décision                                                         |
+> |                                        | état                  | preuve                                                                                                                       |
+> | -------------------------------------- | --------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+> | **P0** test instable OTLP              | ✅                    | course event-loop, attente bornée (`8cadfd148`)                                                                              |
+> | **P1** rattraper l'amont               | ✅                    | 16 commits + 1 (`630a204f9`, puis `0ad91b6e7`) — **0 de retard**                                                             |
+> | **P2** première éval                   | ✅                    | corpus injection, **a trouvé une brèche réelle**, 13 %→0 % (`7419d2fbd`)                                                     |
+> | **P3** détecteur de cache              | ✅ pur, ⏳ activation | module prouvé (`b924d3776`) ; câblage live dans `INFRA-ACTIVATIONS.md`                                                       |
+> | **P4** confiance de projet             | ✅ **INSTRUIT**       | **le hook d'un dépôt cloné S'EXÉCUTE, à chaque session, sans confiance** — reçu `docs/P4-CONFIANCE-LE-RECU.md` (`866896028`) |
+> | **P4bis** détecter avant d'ouvrir      | ✅                    | `CeQuiSExecuteALOuverture` + outil MCP `ce-qui-sexecute`, 15 tests (`312579df9`)                                             |
+> | **BONUS** 3ᵉ étage de garde            | ✅                    | « livré ne veut rien dire, observé si » (`71a65e270`)                                                                        |
+> | **BONUS** wasm libghostty              | ✅                    | 7 tests ne CHARGEAIENT plus depuis le rattrapage (`7b7d4605f`)                                                               |
+> | **P5** bac à sable Seatbelt            | ⏳ **décision**       | le trou est PROUVÉ ; le remède change l'exécution de tout le monde (D2)                                                      |
+> | **P6** orchestration-v2 + subagent-obs | ⏳ **décision**       | un seul chantier à deux étages                                                                                               |
 >
-> Reste au palier D2, à MONTRER (aucune preuve LIVE sans reconstruction) : la
-> barre latérale fusionnée, les deux changements de comportement de sécurité
-> (motif d'injection élargi, détecteur de cache), et l'activation P3.
+> **Ce qui reste au palier D2, à MONTRER avant de partir** : la barre latérale
+> fusionnée, les deux changements de comportement de sécurité (motif
+> d'injection élargi, détecteur de cache), l'activation P3, et le bac à sable
+> quand il existera.
+>
+> **Une zone n'est plus fiable, et c'est écrit** : `apps/mobile` porte 64
+> erreurs de types HÉRITÉES de l'amont (`docs/MOBILE-64-ERREURS-HERITEES.md`).
+> Un typecheck vert n'y prouve rien — le compte doit rester à 64, jamais 65.
 
 — ce qu'on fusionne, dans quel ordre, et pourquoi
 
