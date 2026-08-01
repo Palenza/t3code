@@ -16,7 +16,7 @@ plan.
 
 ## Où en est le catalogue — au 01/08/2026
 
-**36 livrés · 18 partiels · 35 écartés sur pièce · 1 RESTANT — 90 lignes.**
+**36 livrés · 17 partiels · 36 écartés sur pièce · 1 RESTANT — 90 lignes.**
 
 > Le total se VÉRIFIE contre les cases, il ne se retient pas :
 > `awk '/^- \[x\]/{x++} /^- \[~\]/{t++} /^- \[–\]/{e++} /^- \[ \]/{v++} END{print x,t,e,v,x+t+e+v}' docs/CHANTIER-HERMES.md`
@@ -184,23 +184,23 @@ la raison — un écart sans raison se rouvre tous les mois.
   base en mémoire, avec nos réglages actuels (`unicode61
 remove_diacritics 2`) contre `trigram` :
 
-                                                                                                  requête      unicode61 (le nôtre)   trigram
-                                                                                                  数据  (2)          0                   0
-                                                                                                  数据库 (3)          0                   1
-                                                                                                  東京  (2)          0                   0
-                                                                                                  chat               1                   1
-                                                                                                  dort               1                   1
+                                                                                                    requête      unicode61 (le nôtre)   trigram
+                                                                                                    数据  (2)          0                   0
+                                                                                                    数据库 (3)          0                   1
+                                                                                                    東京  (2)          0                   0
+                                                                                                    chat               1                   1
+                                                                                                    dort               1                   1
 
-                                                                                              Donc **notre index ne trouve JAMAIS rien en CJK**, pas même sur trois
-                                                                                              caractères — ce n'est pas une dégradation, c'est un mur. `trigram` le
-                                                                                              lève dès 3 caractères sans toucher au français.
-                                                                                              Reste hors de portée : les termes CJK de **1-2 caractères**, et c'est
-                                                                                              précisément ce que leur bigramme compilé existe pour couvrir.
-                                                                                              **On ne bascule PAS aujourd'hui** : produit français d'abord, un index
-                                                                                              trigramme pèse plus lourd (une entrée par fenêtre de 3), et personne
-                                                                                              n'attend cette recherche. Mais le jour où un utilisateur CJK arrive, la
-                                                                                              décision est un MOT dans la migration 036 — plus un chantier natif.
-                                                                                              `native/fts5_cjk/` **(copie C, désormais optionnelle)**
+                                                                                                Donc **notre index ne trouve JAMAIS rien en CJK**, pas même sur trois
+                                                                                                caractères — ce n'est pas une dégradation, c'est un mur. `trigram` le
+                                                                                                lève dès 3 caractères sans toucher au français.
+                                                                                                Reste hors de portée : les termes CJK de **1-2 caractères**, et c'est
+                                                                                                précisément ce que leur bigramme compilé existe pour couvrir.
+                                                                                                **On ne bascule PAS aujourd'hui** : produit français d'abord, un index
+                                                                                                trigramme pèse plus lourd (une entrée par fenêtre de 3), et personne
+                                                                                                n'attend cette recherche. Mais le jour où un utilisateur CJK arrive, la
+                                                                                                décision est un MOT dans la migration 036 — plus un chantier natif.
+                                                                                                `native/fts5_cjk/` **(copie C, désormais optionnelle)**
 
 - [–] **7 · ~~PTC — appel d'outils programmatique~~** — **Écarté : le CLI le
   porte déjà.** Troisième ligne fermée le 01/08 en fouillant le binaire du CLI
@@ -1215,7 +1215,7 @@ il remonte.
   **Le rouvrir demanderait un reçu** : une mesure montrant que le budget par
   défaut coûte ou bride quelque chose.
 
-- [~] **90 · Classer le menu `/` par usage réel** — deuxième prise de la VIGIE
+- [–] **90 · Classer le menu `/` par usage réel** — deuxième prise de la VIGIE
   (01/08). La moitié du problème n'existe pas chez nous ; l'autre moitié est à
   portée de main.
 
@@ -1245,3 +1245,29 @@ il remonte.
   élagage du `/` nu tant qu'on n'a pas leur problème — on a bien moins de
   skills, et élaguer ce qu'on ne voit pas encore serait résoudre un problème
   qu'on n'a pas.
+
+  **ÉCARTÉ après vérification — et c'est notre propre module qui l'a dit.**
+  `apps/server/src/skills/UsageDesSkills.ts` porte une mesure du 31/07 sur la
+  base réelle :
+
+      fenêtre d'observation .... 7,1 jours (24/07 → 31/07)
+      skills sur disque ........ 17
+      appelées dans la fenêtre .. 3
+      MUETTES .................. 14
+      la plus ancienne ......... debug-navigateur, 62 jours
+
+  Et son avertissement : « un curateur naïf archiverait 82 % des skills — dont
+  `debug-navigateur`, que la loi du projet rend OBLIGATOIRE (M12). Zéro appel
+  en 7 jours ne dit rien d'une skill qui a 62 jours. » La projection est
+  élaguée : la fenêtre RESTERA courte. Ce n'est pas un manque de données à
+  combler, c'est une contrainte permanente.
+
+  Classer par usage trierait donc par BRUIT, et enterrerait les skills rares
+  mais obligatoires. Hermès peut le faire : 230 skills, des comptes longs. Nous
+  avons 17 skills et 14 muettes sur la seule fenêtre observable.
+
+  **Ce qui reste vrai et vaut d'être gardé** : leur distinction survol/recherche
+  — « une recherche qui cache une correspondance est cassée ». Elle ne coûte
+  rien et protège d'un futur élagage trop zélé.
+
+  **Rouvrir demanderait** une fenêtre d'observation longue, pas un tri.
