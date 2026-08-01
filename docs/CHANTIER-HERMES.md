@@ -16,7 +16,7 @@ plan.
 
 ## Où en est le catalogue — au 01/08/2026
 
-**36 livrés · 17 partiels · 33 écartés sur pièce · 1 RESTANT — 87 lignes.**
+**36 livrés · 17 partiels · 35 écartés sur pièce · 1 RESTANT — 89 lignes.**
 
 > Le total se VÉRIFIE contre les cases, il ne se retient pas :
 > `awk '/^- \[x\]/{x++} /^- \[~\]/{t++} /^- \[–\]/{e++} /^- \[ \]/{v++} END{print x,t,e,v,x+t+e+v}' docs/CHANTIER-HERMES.md`
@@ -184,23 +184,23 @@ la raison — un écart sans raison se rouvre tous les mois.
   base en mémoire, avec nos réglages actuels (`unicode61
 remove_diacritics 2`) contre `trigram` :
 
-                                                                                              requête      unicode61 (le nôtre)   trigram
-                                                                                              数据  (2)          0                   0
-                                                                                              数据库 (3)          0                   1
-                                                                                              東京  (2)          0                   0
-                                                                                              chat               1                   1
-                                                                                              dort               1                   1
+                                                                                                requête      unicode61 (le nôtre)   trigram
+                                                                                                数据  (2)          0                   0
+                                                                                                数据库 (3)          0                   1
+                                                                                                東京  (2)          0                   0
+                                                                                                chat               1                   1
+                                                                                                dort               1                   1
 
-                                                                                          Donc **notre index ne trouve JAMAIS rien en CJK**, pas même sur trois
-                                                                                          caractères — ce n'est pas une dégradation, c'est un mur. `trigram` le
-                                                                                          lève dès 3 caractères sans toucher au français.
-                                                                                          Reste hors de portée : les termes CJK de **1-2 caractères**, et c'est
-                                                                                          précisément ce que leur bigramme compilé existe pour couvrir.
-                                                                                          **On ne bascule PAS aujourd'hui** : produit français d'abord, un index
-                                                                                          trigramme pèse plus lourd (une entrée par fenêtre de 3), et personne
-                                                                                          n'attend cette recherche. Mais le jour où un utilisateur CJK arrive, la
-                                                                                          décision est un MOT dans la migration 036 — plus un chantier natif.
-                                                                                          `native/fts5_cjk/` **(copie C, désormais optionnelle)**
+                                                                                            Donc **notre index ne trouve JAMAIS rien en CJK**, pas même sur trois
+                                                                                            caractères — ce n'est pas une dégradation, c'est un mur. `trigram` le
+                                                                                            lève dès 3 caractères sans toucher au français.
+                                                                                            Reste hors de portée : les termes CJK de **1-2 caractères**, et c'est
+                                                                                            précisément ce que leur bigramme compilé existe pour couvrir.
+                                                                                            **On ne bascule PAS aujourd'hui** : produit français d'abord, un index
+                                                                                            trigramme pèse plus lourd (une entrée par fenêtre de 3), et personne
+                                                                                            n'attend cette recherche. Mais le jour où un utilisateur CJK arrive, la
+                                                                                            décision est un MOT dans la migration 036 — plus un chantier natif.
+                                                                                            `native/fts5_cjk/` **(copie C, désormais optionnelle)**
 
 - [–] **7 · ~~PTC — appel d'outils programmatique~~** — **Écarté : le CLI le
   porte déjà.** Troisième ligne fermée le 01/08 en fouillant le binaire du CLI
@@ -1180,3 +1180,37 @@ abonnements, pas pour du token facturé.
 **Le périmètre grand public** — Pokémon, Minecraft, Spotify, Philips Hue,
 crypto, BCI, téléphonie, Apple Notes, Home Assistant. Si l'un devient utile,
 il remonte.
+
+- [–] **88 · Réglages de SOUS-AGENTS (effort, parallélisme, limites)** — je
+  l'avais annoncé « manque n°1 » face à Hermès le 01/08. **C'était faux, et le
+  reconnaître vaut mieux que livrer la coquille.**
+
+  Vérifié : les seules occurrences de « subagent » dans notre code
+  (`ClaudeAdapter.ts:634, 866-896`) servent à ÉTIQUETER les appels d'outils
+  dans l'interface. Aucun levier de contrôle. Hermès règle ses sous-agents
+  parce qu'il implémente sa PROPRE orchestration ; la nôtre vit dans le SDK
+  `@anthropic-ai/claude-agent-sdk`, qui ne l'expose pas.
+
+  Un panneau « Subagent effort / parallel / timeout » chez nous serait donc du
+  décor : des curseurs que rien ne lit. Exactement le « livré » qui ment, déjà
+  payé sur l'entrée 77.
+
+  **À rouvrir seulement si** le SDK expose ces réglages, ou si on reprend
+  l'orchestration des sous-agents en main.
+
+- [–] **89 · Budget de réflexion (`maxThinkingTokens`)** — levier RÉEL mais
+  écarté, et la distinction compte.
+
+  Trouvé le 01/08 : `ClaudeAdapter.ts:233` déclare
+  `setMaxThinkingTokens(number | null)`. Une seule occurrence dans tout le
+  dépôt — la déclaration. **Personne ne l'appelle.** C'est donc, contrairement
+  aux sous-agents, quelque chose qu'on POURRAIT brancher.
+
+  Écarté quand même : aucune plainte, aucun symptôme, aucun coût mesuré sur le
+  budget de réflexion. Les niveaux d'effort (Low → Max) couvrent déjà cette
+  dimension grossièrement. Le brancher résoudrait un problème qu'on n'a pas —
+  et la règle suprême dit que le plus gros gain de simplicité est de REFUSER
+  ce problème-là.
+
+  **Le rouvrir demanderait un reçu** : une mesure montrant que le budget par
+  défaut coûte ou bride quelque chose.
