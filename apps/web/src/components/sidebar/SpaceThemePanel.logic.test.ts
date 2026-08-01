@@ -7,6 +7,7 @@ import {
   poserFigure,
   RAYON_MAXI,
   RAYON_MINI,
+  RAYON_REFERME,
   recaler,
   retirerRond,
   wheelColorAt,
@@ -133,20 +134,38 @@ describe("la figure de la toile", () => {
     expect(ecarts(large)[0]!).toBeGreaterThan(ecarts(serre)[0]! * 3);
   });
 
-  it("ne s'effondre JAMAIS au centre — c'est le défaut qui avait tué le premier modèle", () => {
-    // Viser le centre pile : sans plancher de rayon, les trois ronds se
-    // superposaient (« je ne peux pas rajouter trois points »).
-    for (const cible of [
-      [0.5, 0.5],
-      [0.5001, 0.4999],
-      [0.52, 0.51],
-    ] as const) {
-      const points = deplacerFigure(poserFigure(0.7, 0.5, 3), cible[0], cible[1]);
-      memeRayon(points);
-      expect(rayon(points[0]!)).toBeCloseTo(RAYON_MINI, 6);
-      // Au plancher, deux ronds voisins restent nettement séparés.
-      expect(Math.min(...ecarts(points))).toBeGreaterThan(0.15);
+  it("se REFERME en un seul point au centre — c'est l'uni, pas un défaut", () => {
+    // « Les points se réunissent en un seul quand ils sont pile poil au
+    // centre » (Enzo, 02/08). Scan intégral d'Arc : 13 fusions près du
+    // centre, 1 840 images à un seul rond à moins de 70 px, deux ronds encore
+    // distincts à 35,6 px. Le rayon EST l'étalement du dégradé ; au centre il
+    // vaut zéro et le thème devient une couleur unie. Un plancher ici serait
+    // un mur devant le geste — c'est la faute du 01/08.
+    const points = deplacerFigure(poserFigure(0.7, 0.5, 3), 0.5, 0.5);
+    memeRayon(points);
+    // 0,004 de toile = 1,4 css : un point à l'œil. Jamais zéro — voir
+    // RAYON_REFERME, l'angle d'un rond EST sa position.
+    expect(rayon(points[0]!)).toBeCloseTo(RAYON_REFERME, 6);
+    expect(Math.max(...ecarts(points))).toBeLessThan(0.01);
+  });
+
+  it("se referme PROGRESSIVEMENT, sans marche d'escalier près du centre", () => {
+    const depart = poserFigure(0.7, 0.5, 3);
+    let precedent = Number.POSITIVE_INFINITY;
+    for (const distance of [0.3, 0.2, 0.12, 0.06, 0.03, 0.01, 0]) {
+      const points = deplacerFigure(depart, 0.5 + distance, 0.5);
+      const courant = rayon(points[0]!);
+      expect(courant).toBeCloseTo(Math.max(RAYON_REFERME, distance), 6);
+      expect(courant).toBeLessThanOrEqual(precedent);
+      precedent = courant;
     }
+  });
+
+  it("garde les ronds SÉPARÉS partout ailleurs qu'au centre", () => {
+    // Le geste peut les refermer, mais il ne doit pas les faire fusionner
+    // AVANT le centre : à mi-course ils restent comptables.
+    const points = deplacerFigure(poserFigure(0.7, 0.5, 3), 0.5 + 0.25, 0.5);
+    expect(Math.min(...ecarts(points))).toBeGreaterThan(0.1);
   });
 
   it("garde le doigt dans la toile quand il vise dehors", () => {
@@ -189,9 +208,20 @@ describe("la figure de la toile", () => {
     expect(points).toHaveLength(2);
     points = ajouterRond(points, 3);
     expect(points).toHaveLength(3);
-    tousEgaux(points);
     memeRayon(points);
-    expect(Math.min(...ecarts(points))).toBeGreaterThan(0.15);
+    expect(Math.min(...ecarts(points))).toBeGreaterThan(0.1);
+  });
+
+  it("ROUVRE l'anneau refermé quand on ajoute — le vrai « je ne peux pas rajouter trois points »", () => {
+    // Anneau replié sur le centre : ajouter doit le rouvrir juste assez pour
+    // que le nouveau se voie. C'est ICI que le défaut vivait, pas dans le
+    // glissé.
+    const referme = deplacerFigure(poserFigure(0.7, 0.5, 2), 0.5, 0.5);
+    expect(rayon(referme[0]!)).toBeCloseTo(RAYON_REFERME, 6);
+    const apres = ajouterRond(referme, 3);
+    expect(apres).toHaveLength(3);
+    memeRayon(apres);
+    expect(Math.min(...ecarts(apres))).toBeGreaterThan(0.1);
   });
 
   it("n'ajoute jamais au-delà du plafond", () => {
@@ -223,21 +253,22 @@ describe("la figure de la toile", () => {
     memeRayon(apres);
   });
 
-  it("garde l'égalité après un aller-retour ajouter/retirer/ajouter", () => {
+  it("reste lisible après un aller-retour ajouter/retirer/ajouter", () => {
     let points = poserFigure(0.72, 0.5, 1);
     points = ajouterRond(points, 3);
     points = ajouterRond(points, 3);
     points = retirerRond(points);
     points = ajouterRond(points, 3);
     expect(points).toHaveLength(3);
-    tousEgaux(points);
     memeRayon(points);
+    expect(Math.min(...ecarts(points))).toBeGreaterThan(0.1);
   });
 
-  it("recale un thème enregistré sous l'ANCIEN modèle sans perdre sa teinte", () => {
+  it("recale un thème enregistré sous l'ANCIEN modèle sans perdre ses teintes", () => {
     // Ronds à des rayons quelconques, comme les translations d'avant en
-    // laissaient : on les remet sur un cercle commun, l'orientation de la
-    // dominante survit — c'est la teinte principale du thème.
+    // laissaient : on les remet sur un cercle commun. Chaque rond garde son
+    // ANGLE, donc sa teinte — c'est le thème de l'utilisateur, on n'a pas à
+    // le repeindre pour le réparer.
     const ancien: Point[] = [
       { x: 0.8, y: 0.5 },
       { x: 0.62, y: 0.66 },
@@ -246,9 +277,10 @@ describe("la figure de la toile", () => {
     const recale = recaler(ancien);
     expect(recale).toHaveLength(3);
     memeRayon(recale);
-    tousEgaux(recale);
     dansLaToile(recale);
-    expect(orientationDe(recale)).toBeCloseTo(orientationDe(ancien), 6);
+    recale.forEach((point, index) => {
+      expect(angle(point)).toBeCloseTo(angle(ancien[index]!), 6);
+    });
   });
 
   it("rend une liste vide sur une liste vide", () => {

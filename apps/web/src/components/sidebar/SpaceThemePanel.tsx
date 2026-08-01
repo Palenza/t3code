@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { ChevronLeftIcon, ChevronRightIcon, MinusIcon, PlusIcon } from "lucide-react";
 
@@ -26,10 +26,12 @@ import {
 /**
  * L'éditeur de thème d'Arc.
  *
- * La géométrie de la toile vit dans `SpaceThemePanel.logic.ts` — elle porte
- * l'invariant « les ronds restent TOUJOURS à distance égale », et il est
- * testé. Ici on ne fait que la peau : le verre, le nuancier, la vague, la
- * molette.
+ * La géométrie de la toile vit dans `SpaceThemePanel.logic.ts`, avec les
+ * mesures qui l'ont établie : les ronds sont sur un cercle centré, le glissé
+ * fixe leur rayon commun et fait tourner l'anneau SANS toucher aux écarts
+ * angulaires, et le rayon descend jusqu'au centre — où le dégradé se referme
+ * en une couleur unie. Ici on ne fait que la peau : le verre, le nuancier, la
+ * vague, la molette.
  *
  * L'apparence claire/sombre du panneau suit le THÈME DE L'APP
  * (`useTheme().resolvedTheme`), jamais la préférence système brute. La
@@ -42,17 +44,94 @@ import {
 
 const MAX_ARC_STOPS = 3;
 
-/** Page 1 — couleurs unies, un rond = une dominante. */
-const SOLID_SWATCHES: ReadonlyArray<string> = [
-  "#f2ead9",
-  "#f2a3c0",
-  "#9b6fc3",
-  "#ef8a70",
-  "#fbd87f",
-  "#a5d977",
-  "#4fd1c5",
-  "#5b8def",
-  "#6b5b95",
+/**
+ * LES PAGES DE COULEURS UNIES — RELEVÉES sur Arc, pas choisies.
+ *
+ * On n'en avait qu'UNE, inventée à l'œil. Les captures d'Enzo du 02/08
+ * (07 h 15 → 07 h 18) montrent qu'Arc en a CINQ, et qu'il les feuillette avec
+ * les mêmes chevrons. Chaque ligne ci-dessous est la médiane du centre des
+ * neuf pastilles, échantillonnée sur la capture citée — aucune n'est devinée.
+ *
+ * La grise mérite un mot : ses neuf crans tombent sur des pourcentages ronds
+ * (100, 90, 80, 70, 50, 40, 20, 10, 0). Elle saute 60 et 30 — c'est ce que la
+ * mesure dit, on la recopie plutôt que de « corriger » leur choix.
+ */
+const PAGES_UNIES: ReadonlyArray<{ readonly nom: string; readonly tons: ReadonlyArray<string> }> = [
+  {
+    nom: "Vives",
+    // relevé 07.18.20
+    tons: [
+      "#f1eae5",
+      "#e69fba",
+      "#9e749b",
+      "#e1686f",
+      "#ef8c62",
+      "#f2d66d",
+      "#73e59c",
+      "#7fb8d6",
+      "#666786",
+    ],
+  },
+  {
+    nom: "Claires",
+    // relevé 07.15.20 → 07.16.01 (stable sur neuf captures)
+    tons: [
+      "#f1f0e7",
+      "#e9bcaf",
+      "#ac8793",
+      "#e4b87f",
+      "#f1e579",
+      "#c5f082",
+      "#87e5e2",
+      "#9195da",
+      "#8c7c97",
+    ],
+  },
+  {
+    nom: "Pastel",
+    // relevé 07.16.06
+    tons: [
+      "#fefbfa",
+      "#fbeaf3",
+      "#ecd2ea",
+      "#f7cdd2",
+      "#fae1d5",
+      "#fef9e7",
+      "#e4fcec",
+      "#e0f2fb",
+      "#c5c6e2",
+    ],
+  },
+  {
+    nom: "Profondes",
+    // relevé 07.16.36
+    tons: [
+      "#4b3b58",
+      "#623856",
+      "#854444",
+      "#a77048",
+      "#d1b46a",
+      "#cdcca8",
+      "#84a885",
+      "#34604b",
+      "#2d4468",
+    ],
+  },
+  {
+    nom: "Gris",
+    // relevé 07.17.02
+    tons: [
+      "#ffffff",
+      "#e5e5e5",
+      "#cccccc",
+      "#b3b3b3",
+      "#808080",
+      "#666666",
+      "#333333",
+      "#191919",
+      "#000000",
+    ],
+  },
 ];
 
 /**
@@ -71,6 +150,9 @@ const GRADIENT_SWATCHES: ReadonlyArray<readonly [string, string, string]> = [
   ["#7d92e8", "#7a82e0", "#8f6fd9"],
   ["#63638f", "#565683", "#4a4a70"],
 ];
+
+/** Les cinq pages unies d'Arc, plus la nôtre de dégradés préréglés. */
+const NOMBRE_DE_PAGES = PAGES_UNIES.length + 1;
 
 /** Tailles d'Arc (1 919 frames, σ 0) : dominante 34 css, satellites 20. */
 const STOP_SIZES_PX = [34, 20, 20] as const;
@@ -168,10 +250,59 @@ export function SpaceThemePanel({ spaceId }: { readonly spaceId?: string } = {})
     [apply, current],
   );
 
+  /**
+   * UNE MISE À JOUR PAR IMAGE, pas une par évènement — mesuré le 02/08.
+   *
+   * Reçu : sur 1 259 paires d'images consécutives d'un glissé filmé à 120 fps,
+   * 71,1 % des images ne bougeaient PAS, avec une médiane de 2 images figées
+   * entre deux mouvements. Cadence utile : 40 Hz. Arc, sur la même métrique et
+   * le même geste : 1 image figée, 60 Hz. On rate une image sur trois.
+   *
+   * La cause n'est pas la courbe, c'est le BUDGET : chaque `pointermove`
+   * écrivait dans le store, et le panneau est du verre liquide (filtre SVG +
+   * backdrop-filter) posé sur des cartes qui se repeignent. À 120 évènements
+   * par seconde, on demandait deux fois plus de peinture que l'écran n'en
+   * affiche, et on dépassait les 16,7 ms.
+   *
+   * On garde donc la DERNIÈRE position visée et on n'applique qu'une fois par
+   * image. Le rAF est légitime ici — contrairement à l'animation de la barre
+   * (leçon du 30/07 : une fenêtre cachée ne le tire pas) : un glissé n'existe
+   * que sous un pointeur, donc sous une fenêtre visible.
+   */
+  const cibleRef = useRef<{ x: number; y: number } | null>(null);
+  const imageRef = useRef<number | null>(null);
+  const viser = useCallback(
+    (clientX: number, clientY: number) => {
+      cibleRef.current = { x: clientX, y: clientY };
+      if (imageRef.current !== null) return;
+      imageRef.current = window.requestAnimationFrame(() => {
+        imageRef.current = null;
+        const cible = cibleRef.current;
+        // La position visée est ABSOLUE : même si `current` a une image de
+        // retard, la dominante retombe sur le doigt et les autres gardent
+        // leurs écarts. Un retard d'image ne peut donc pas dériver.
+        if (cible !== null) tournerLAnneau(cible.x, cible.y);
+      });
+    },
+    [tournerLAnneau],
+  );
+
   const finDeGlisse = useCallback(() => {
     draggingRef.current = false;
     setEnGlisse(false);
+    if (imageRef.current !== null) {
+      window.cancelAnimationFrame(imageRef.current);
+      imageRef.current = null;
+    }
+    cibleRef.current = null;
   }, []);
+
+  useEffect(
+    () => () => {
+      if (imageRef.current !== null) window.cancelAnimationFrame(imageRef.current);
+    },
+    [],
+  );
 
   const applySolid = useCallback(
     (color: string) => {
@@ -255,7 +386,7 @@ export function SpaceThemePanel({ spaceId }: { readonly spaceId?: string } = {})
             : "[--dot:color-mix(in_oklab,black_18%,transparent)]",
         )}
         onPointerMove={(event) => {
-          if (draggingRef.current) tournerLAnneau(event.clientX, event.clientY);
+          if (draggingRef.current) viser(event.clientX, event.clientY);
         }}
         onPointerUp={finDeGlisse}
       >
@@ -327,7 +458,7 @@ export function SpaceThemePanel({ spaceId }: { readonly spaceId?: string } = {})
             }
           }}
           onPointerMove={(event) => {
-            if (draggingRef.current) tournerLAnneau(event.clientX, event.clientY);
+            if (draggingRef.current) viser(event.clientX, event.clientY);
           }}
           onPointerUp={finDeGlisse}
           className="absolute -translate-x-1/2 -translate-y-1/2 cursor-grab rounded-full shadow-md ring-[3px] ring-white active:cursor-grabbing"
@@ -374,9 +505,9 @@ export function SpaceThemePanel({ spaceId }: { readonly spaceId?: string } = {})
         <div className="flex items-center gap-1 px-2.5 pt-3 pb-1.5">
           <FlecheNuancier
             direction="gauche"
-            libelle="Couleurs unies"
+            libelle="Page précédente"
             disabled={swatchPage === 0}
-            onClick={() => setSwatchPage(0)}
+            onClick={() => setSwatchPage((page) => Math.max(0, page - 1))}
             muted={mutedControl}
           />
           {/* Le rembourrage EST la correction du rognage : les pastilles
@@ -385,32 +516,44 @@ export function SpaceThemePanel({ spaceId }: { readonly spaceId?: string } = {})
               qui fait glisser les pages leur coupait les bords. */}
           <div className="relative flex-1 overflow-hidden px-1.5 py-1.5">
             <div
-              className="flex w-[200%] transition-transform duration-300 ease-[cubic-bezier(0.25,1,0.5,1)] motion-reduce:transition-none"
-              style={{ transform: swatchPage === 0 ? "translateX(0%)" : "translateX(-50%)" }}
+              className="flex transition-transform duration-300 ease-[cubic-bezier(0.25,1,0.5,1)] motion-reduce:transition-none"
+              style={{
+                width: `${NOMBRE_DE_PAGES * 100}%`,
+                transform: `translateX(-${(swatchPage * 100) / NOMBRE_DE_PAGES}%)`,
+              }}
             >
-              <div className="flex w-1/2 items-center justify-between">
-                {SOLID_SWATCHES.map((color) => (
-                  <button
-                    key={color}
-                    type="button"
-                    aria-label={`Couleur ${color}`}
-                    tabIndex={swatchPage === 0 ? 0 : -1}
-                    onClick={() => applySolid(color)}
-                    // La pastille montre la couleur qu'elle POSE — pas une
-                    // version assombrie d'elle-même : le jaune doit donner
-                    // le jaune.
-                    className="size-6 cursor-pointer rounded-full ring-1 ring-black/10 transition-transform hover:scale-110"
-                    style={{ backgroundColor: color }}
-                  />
-                ))}
-              </div>
-              <div className="flex w-1/2 items-center justify-between">
+              {PAGES_UNIES.map((page, index) => (
+                <div
+                  key={page.nom}
+                  className="flex items-center justify-between"
+                  style={{ width: `${100 / NOMBRE_DE_PAGES}%` }}
+                >
+                  {page.tons.map((color) => (
+                    <button
+                      key={color}
+                      type="button"
+                      aria-label={`${page.nom} — ${color}`}
+                      tabIndex={swatchPage === index ? 0 : -1}
+                      onClick={() => applySolid(color)}
+                      // La pastille montre la couleur qu'elle POSE — pas une
+                      // version assombrie d'elle-même : le jaune doit donner
+                      // le jaune.
+                      className="size-6 cursor-pointer rounded-full ring-1 ring-black/10 transition-transform hover:scale-110"
+                      style={{ backgroundColor: color }}
+                    />
+                  ))}
+                </div>
+              ))}
+              <div
+                className="flex items-center justify-between"
+                style={{ width: `${100 / NOMBRE_DE_PAGES}%` }}
+              >
                 {GRADIENT_SWATCHES.map((trio) => (
                   <button
                     key={trio.join("-")}
                     type="button"
-                    aria-label={`Gradient ${trio.join(", ")}`}
-                    tabIndex={swatchPage === 1 ? 0 : -1}
+                    aria-label={`Dégradé ${trio.join(", ")}`}
+                    tabIndex={swatchPage === PAGES_UNIES.length ? 0 : -1}
                     onClick={() => applyGradient(trio)}
                     // Le liseré d'Arc : un anneau INTÉRIEUR sombre du propre
                     // ton de la pastille (relevé sur zoom natif).
@@ -425,9 +568,9 @@ export function SpaceThemePanel({ spaceId }: { readonly spaceId?: string } = {})
           </div>
           <FlecheNuancier
             direction="droite"
-            libelle="Dégradés préréglés"
-            disabled={swatchPage === 1}
-            onClick={() => setSwatchPage(1)}
+            libelle="Page suivante"
+            disabled={swatchPage === NOMBRE_DE_PAGES - 1}
+            onClick={() => setSwatchPage((page) => Math.min(NOMBRE_DE_PAGES - 1, page + 1))}
             muted={mutedControl}
           />
         </div>

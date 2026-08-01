@@ -33,16 +33,38 @@ import type { SidebarThemeStop } from "../../sidebarThemeStore";
  *     149,3° ± 0,8 / 150,7° ± 0,6, somme 360,0°.
  *
  * LA LOI D'ARC, donc : les ronds vivent sur un CERCLE centré sur la toile.
- * Tirer un rond fixe le RAYON COMMUN de tous et fait TOURNER l'anneau entier.
+ * Tirer un rond fixe le RAYON COMMUN de tous et fait TOURNER l'anneau entier,
+ * en CONSERVANT les écarts angulaires.
  *
- * On la reprend telle quelle, avec les deux pièces qui manquaient au modèle 1 :
- * un PLANCHER de rayon (Arc ne descend pas sous 62/680 = 0,09), et des ronds
- * ÉGALEMENT RÉPARTIS en angle. Également répartis sur un cercle, ils forment
- * un polygone RÉGULIER : l'invariant « à distance égale » est vrai à tous les
- * rayons, gratuitement. Ce que le rayon change, c'est la TAILLE du polygone —
- * près du centre les couleurs sont vives et proches, au bord elles sont pâles
- * et écartées. C'est exactement ce que fait Arc, et c'est un seul geste pour
- * deux réglages.
+ * ── ET LE 01/08 J'AI ÉCRIT L'INVERSE ────────────────────────────────────────
+ *
+ * J'avais cette mesure sous les yeux, et j'ai quand même ajouté deux choses
+ * qu'elle ne disait pas, pour satisfaire au passage un vieux « à distance
+ * égale ». Les deux étaient fausses, et Enzo les a vues du premier coup d'œil :
+ *
+ *  • un RÉ-ÉTALEMENT à angles égaux pendant le glissé. Le nuancier pose ses
+ *    ronds par la COULEUR : un dégradé, c'est trois tons voisins, donc trois
+ *    angles voisins (mesuré chez lui : 37° / 38° / 285°). Au premier glissé,
+ *    mon code les projetait à 120° — le dégradé qu'il venait de choisir
+ *    explosait. Sur 7 018 images de sa capture, ZÉRO ne respectait le
+ *    120/120/120 que je croyais imposer.
+ *  • un PLANCHER de rayon à 0,09. « Les points se réunissent en un seul quand
+ *    ils sont pile poil au centre » — c'est la mécanique même : le rayon EST
+ *    l'étalement du dégradé, et au centre il se referme en une couleur UNIE.
+ *    Arc le fait (scan intégral : 13 fusions près du centre, 1 840 images à un
+ *    seul rond, deux ronds encore distincts à 35,6 px quand j'en imposais 61).
+ *    Mon plancher était un mur devant le geste.
+ *
+ * Ma mesure n'avait pas pu voir la fusion : j'avais filtré l'analyse sur « les
+ * images à TROIS ronds détectés », et les images de la fusion en ont moins. Je
+ * les avais exclues avant de regarder. Un filtre d'analyse est une hypothèse
+ * déguisée — celui-ci excluait justement le phénomène cherché.
+ *
+ * Ce qui reste, donc, et rien de plus : rayon commun, écarts angulaires
+ * conservés, rayon libre de zéro au bord. L'étalement des ronds ne se force
+ * qu'à la POSE (`poserFigure`, `ajouterRond`) — là où le vrai défaut vivait
+ * (« je ne peux pas rajouter trois points, le troisième naît sous les
+ * autres »). On répare où ça casse, pas ailleurs.
  */
 
 export interface Point {
@@ -61,19 +83,85 @@ const CENTRE = 0.5;
 const MARGE = 0.06;
 
 /**
- * LE PLANCHER DE RAYON — la pièce qui manquait au premier modèle.
- *
- * Reçu : sur 672 images de glissé à trois ronds, le rayon d'Arc balaie 62 à
- * 287 px sur une toile de 680, soit 0,09 à 0,42. À 62 px les deux ronds les
- * plus proches sont à 61 px l'un de l'autre et leurs anneaux se FRÔLENT sans
- * jamais fusionner (image 11 317, regardée).
- *
- * Chez nous à 0,09, trois ronds également répartis sont à 2 × 0,09 × sin 60°
- * = 0,156 de toile, soit 56 css pour des satellites de 20 : 36 css de vide
- * entre les bords. C'est le fil-piège — posé là où seul l'effondrement le
- * touche, jamais un geste sain.
+ * Le rayon minimal d'un rond SEUL — repris de `wheelPositionOf`, qui borne
+ * déjà la distance couleur↔position à [0,06 · 0,44]. Sans voisin, rien
+ * d'autre ne contraint.
  */
-export const RAYON_MINI = 0.09;
+export const RAYON_MINI = 0.06;
+
+/**
+ * LE RAYON DE L'ANNEAU REFERMÉ — assez petit pour se lire comme UN point,
+ * jamais zéro.
+ *
+ * L'angle d'un rond est porté par sa POSITION : à rayon exactement nul, il
+ * n'existe plus, et ressortir du centre ferait repartir tous les ronds du même
+ * angle — le dégradé serait mort au premier aller-retour. On garde donc une
+ * trace. 0,004 de toile = 1,4 css : deux ronds y sont à 2,8 css l'un de
+ * l'autre sous des disques de 20 à 34 css. C'est un point, à l'œil comme au
+ * pixel, et la mémoire des teintes survit.
+ */
+export const RAYON_REFERME = 0.004;
+
+/**
+ * Tailles MESURÉES des ronds, en css — `STOP_SIZES_PX` du panneau, et la
+ * largeur de la toile qui les met à l'échelle de nos coordonnées 0..1.
+ */
+const DIAMETRES_CSS = [34, 20, 20] as const;
+const TOILE_LARGEUR_CSS = 358;
+/** Le vide qu'on exige entre deux BORDS de ronds pour qu'on les COMPTE encore. */
+const VIDE_MINIMAL_CSS = 10;
+
+/** L'écart centre-à-centre qu'il faut entre ces deux ronds, en fraction de toile. */
+const ecartRequis = (i: number, j: number): number =>
+  ((DIAMETRES_CSS[i] ?? 20) / 2 + (DIAMETRES_CSS[j] ?? 20) / 2 + VIDE_MINIMAL_CSS) /
+  TOILE_LARGEUR_CSS;
+
+/**
+ * LE RAYON QUI REND UN ROND AJOUTÉ VISIBLE — et RIEN d'autre.
+ *
+ * Pour chaque paire, la corde 2·r·sin(Δ/2) doit dépasser la somme des deux
+ * demi-diamètres plus un vide. On rend le plus exigeant de ces besoins.
+ *
+ * ⚠️ Ceci ne s'applique QU'À LA POSE d'un rond (ajout, préréglage), JAMAIS au
+ * glissé. C'est la faute que j'ai commise le 01/08 : j'en avais fait un
+ * plancher permanent, et il murait le geste (voir `deplacerFigure`).
+ *
+ * C'est aussi la vraie réponse au vieux reproche « je ne peux pas rajouter
+ * trois points, le troisième naît sous les autres » : le défaut était à
+ * l'AJOUT, pas au déplacement. On répare là où ça casse.
+ */
+export function rayonPourRendreVisible(angles: ReadonlyArray<number>): number {
+  let besoin = RAYON_MINI;
+  for (let i = 0; i < angles.length; i += 1) {
+    for (let j = i + 1; j < angles.length; j += 1) {
+      const brut = (((angles[j]! - angles[i]!) % TOUR) + TOUR) % TOUR;
+      const corde = 2 * Math.sin(Math.min(brut, TOUR - brut) / 2);
+      // Deux ronds au MÊME angle ne se sépareront jamais en poussant le
+      // rayon : on demande le maximum, et c'est à la pose des angles de ne
+      // pas les superposer.
+      besoin = Math.max(besoin, corde < 1e-6 ? RAYON_MAXI : ecartRequis(i, j) / corde);
+    }
+  }
+  return Math.min(RAYON_MAXI, besoin);
+}
+
+/** L'angle du plus grand vide angulaire — la place la plus loin de tous. */
+function angleDuPlusGrandVide(angles: ReadonlyArray<number>): number {
+  if (angles.length === 0) return ORIENTATION_DEFAUT;
+  const tries = [...angles].map((a) => ((a % TOUR) + TOUR) % TOUR).sort((a, b) => a - b);
+  let meilleur = tries[0]! + Math.PI;
+  let plusGrand = -1;
+  for (let i = 0; i < tries.length; i += 1) {
+    const debut = tries[i]!;
+    const fin = i + 1 < tries.length ? tries[i + 1]! : tries[0]! + TOUR;
+    const vide = fin - debut;
+    if (vide > plusGrand) {
+      plusGrand = vide;
+      meilleur = debut + vide / 2;
+    }
+  }
+  return meilleur;
+}
 
 /** Le plafond : au-delà, un rond sortirait de la toile. Arc mesure 0,42. */
 export const RAYON_MAXI = CENTRE - MARGE;
@@ -208,7 +296,8 @@ export function wheelPositionOf(hex: string): Point {
  */
 export function recaler(points: ReadonlyArray<Point>): Point[] {
   if (points.length === 0) return [];
-  return anneauRegulier(angleDe(points[0]!), rayonDe(points), points.length);
+  const rayon = rayonDe(points);
+  return points.map((point) => surLeCercle(angleDe(point), rayon));
 }
 
 /** L'orientation de la figure : l'angle de la dominante autour du centre. */
@@ -218,17 +307,28 @@ export function orientationDe(points: ReadonlyArray<Point>): number {
 }
 
 /**
- * LE GLISSÉ, tel qu'Arc le fait (mesuré : voir l'en-tête du fichier).
+ * LE GLISSÉ, tel qu'Arc le fait — et cette fois tel que je l'avais MESURÉ.
  *
- * Tirer un rond vers (x, y) fixe le RAYON COMMUN de tous les ronds et fait
- * TOURNER l'anneau entier pour que la dominante vise le doigt. Les écarts
- * angulaires ne changent jamais ; le rayon, lui, change tout le temps — et
- * c'est le sujet : près du centre le thème est vif et resserré, au bord il est
- * pâle et écarté.
+ * Tirer un rond vers (x, y) fixe le RAYON COMMUN de tous et fait TOURNER
+ * l'anneau entier. Les écarts angulaires sont CONSERVÉS : c'est littéralement
+ * ce que disaient mes 672 images d'Arc (60,0° ± 0,6 / 149,3° ± 0,8 /
+ * 150,7° ± 0,6, immobiles pendant que le rayon quadruplait).
  *
- * Le rayon est BORNÉ des deux côtés. Le plancher est ce qui manquait à la
- * première version : sans lui, viser le centre écrase l'anneau et les ronds se
- * superposent.
+ * Le 01/08 j'ai écrit l'inverse — un ré-étalement à angles égaux — parce que
+ * je voulais aussi satisfaire un vieux « à distance égale ». Résultat : au
+ * premier glissé, le dégradé qu'on venait de choisir dans le nuancier EXPLOSE,
+ * ses trois tons voisins étant projetés à 120° l'un de l'autre. Mesuré chez
+ * Enzo le 02/08 : zéro image sur 7 018 ne respectait mon propre 120/120/120,
+ * parce que le nuancier pose ses ronds par la COULEUR. J'avais la mesure et je
+ * l'ai recouverte par mon idée.
+ *
+ * ET LE RAYON DESCEND JUSQU'À ZÉRO. « Les points se réunissent en un seul
+ * quand ils sont pile poil au centre » (Enzo, 02/08) — c'est la MÉCANIQUE, pas
+ * un défaut : le rayon est l'étalement du dégradé, et au centre il se referme
+ * en une couleur UNIE. Arc fait exactement ça (scan intégral : 13 fusions près
+ * du centre, 1 840 images à un seul rond à moins de 70 px, et deux ronds
+ * encore distincts à 35,6 px quand mon plancher en imposait 61). Un plancher
+ * ici, c'est un mur devant le geste.
  */
 export function deplacerFigure(points: ReadonlyArray<Point>, x: number, y: number): Point[] {
   if (points.length === 0) return [];
@@ -237,30 +337,32 @@ export function deplacerFigure(points: ReadonlyArray<Point>, x: number, y: numbe
   const vise = Math.hypot(dx, dy);
   // Au centre PILE, le doigt ne désigne aucune direction : on garde celle
   // qu'on avait plutôt que de faire sauter la figure sur un angle nul.
-  const angle = vise < 1e-9 ? angleDe(points[0]!) : Math.atan2(dy, dx);
-  return anneauRegulier(angle, rayonBorne(vise), points.length);
+  const rotation = vise < 1e-9 ? 0 : Math.atan2(dy, dx) - angleDe(points[0]!);
+  const rayon = Math.min(RAYON_MAXI, Math.max(RAYON_REFERME, vise));
+  return points.map((point) => surLeCercle(angleDe(point) + rotation, rayon));
 }
 
 /**
- * Ajoute un rond : l'anneau se REDISTRIBUE à N+1, même rayon, même orientation
- * de dominante.
+ * Ajoute un rond dans le plus grand VIDE angulaire — la place la plus éloignée
+ * de tous les autres. Les ronds déjà là ne bougent pas d'un angle.
  *
- * Sous l'ancien modèle il fallait choisir où poser le nouveau et vérifier
- * qu'il ne naissait pas sous les autres (« je ne peux pas rajouter trois
- * points »). Ici la question ne se pose plus : N+1 points également répartis
- * sur un cercle sont à distance égale par construction, et le plancher de
- * rayon garantit que cette distance reste visible.
+ * C'est ICI, et seulement ici, que le rayon est poussé pour que le nouveau se
+ * VOIE : c'était le vrai « je ne peux pas rajouter trois points, le troisième
+ * naît sous les autres ». Si l'anneau était refermé au centre, l'ajout le
+ * rouvre juste assez.
  */
 export function ajouterRond(points: ReadonlyArray<Point>, max: number): Point[] {
-  if (points.length === 0) return anneauRegulier(ORIENTATION_DEFAUT, RAYON_DEFAUT, 1);
+  if (points.length === 0) return [surLeCercle(ORIENTATION_DEFAUT, RAYON_DEFAUT)];
   if (points.length >= max) return [...points];
-  return anneauRegulier(angleDe(points[0]!), rayonDe(points), points.length + 1);
+  const angles = [...points.map(angleDe), angleDuPlusGrandVide(points.map(angleDe))];
+  const rayon = Math.max(rayonDe(points), rayonPourRendreVisible(angles));
+  return angles.map((angle) => surLeCercle(angle, rayon));
 }
 
-/** Retire un rond : l'anneau se redistribue à N−1, rayon et orientation gardés. */
+/** Retire le dernier rond. Les rescapés gardent leur angle ET leur rayon. */
 export function retirerRond(points: ReadonlyArray<Point>): Point[] {
   if (points.length <= 1) return [...points];
-  return anneauRegulier(angleDe(points[0]!), rayonDe(points), points.length - 1);
+  return points.slice(0, -1).map((point) => ({ ...point }));
 }
 
 /**
@@ -274,7 +376,14 @@ export function poserFigure(x: number, y: number, count: number): Point[] {
   const dy = y - CENTRE;
   const vise = Math.hypot(dx, dy);
   const angle = vise < 1e-9 ? ORIENTATION_DEFAUT : Math.atan2(dy, dx);
-  return anneauRegulier(angle, rayonBorne(vise), count);
+  const angles = Array.from(
+    { length: Math.max(1, count) },
+    (_, index) => angle + (TOUR * index) / Math.max(1, count),
+  );
+  // Une figure NEUVE s'étale : c'est la pose, donc les ronds doivent tous se
+  // voir. Le glissé, lui, pourra la refermer jusqu'à l'uni.
+  const rayon = Math.max(Math.min(RAYON_MAXI, vise), rayonPourRendreVisible(angles));
+  return angles.map((valeur) => surLeCercle(valeur, rayon));
 }
 
 // ------------------------------------------------------- points ↔ pastilles
