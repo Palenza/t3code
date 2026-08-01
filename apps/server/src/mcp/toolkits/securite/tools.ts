@@ -73,4 +73,47 @@ export const SuggestionsTool = Tool.make("autorisations-suggerees", {
   .annotate(Tool.Destructive, false)
   .annotate(Tool.Idempotent, true);
 
-export const SuggestionsToolkit = Toolkit.make(SuggestionsTool);
+/**
+ * L'outil `ce-qui-sexecute` — chantier P4, la bouche du reçu.
+ *
+ * Mesuré le 01/08 : un dépôt cloné exécute son hook `SessionStart` chez nous,
+ * à CHAQUE session, sans confiance demandée — et sa skill entre dans la liste
+ * de l'agent à côté des nôtres (`docs/P4-CONFIANCE-LE-RECU.md`).
+ *
+ * Le remède est un bac à sable, et c'est un changement de comportement pour
+ * tout le monde (palier D2). Cet outil-ci ne change RIEN : il regarde et il
+ * dit. Donc il est livrable tout de suite, et il reste utile après le bac à
+ * sable — un bac à sable protège sans jamais expliquer de quoi.
+ */
+export const ExecutableInput = Schema.Struct({
+  /** Le dossier à regarder AVANT d'y ouvrir une session. */
+  chemin: Schema.String,
+  /**
+   * Est-ce un dépôt à nous ? Par défaut NON — c'est le défaut sûr : sur un
+   * dossier inconnu, mieux vaut décrire trop que se taire.
+   */
+  ecritParNous: Schema.optional(Schema.Boolean),
+});
+
+export const ExecutableResultat = Schema.Struct({
+  gravite: Schema.Literals(["rien", "instruit", "execute"]),
+  /** Ce qui s'exécutera ou instruira, NOMMÉ (A7). */
+  quoi: Schema.Array(Schema.String),
+  message: Schema.String,
+  note: Schema.optional(Schema.String),
+});
+
+export const ExecutableTool = Tool.make("ce-qui-sexecute", {
+  description:
+    "Qu'est-ce qui s'exécutera si j'ouvre une session dans ce dossier ? Liste les hooks, réglages, serveurs MCP et skills que le dossier porte, et distingue ce qui S'EXÉCUTE tout seul de ce qui INSTRUIT l'agent. Mesuré : un dépôt cloné exécute son hook à chaque session sans qu'aucune confiance soit demandée. À appeler AVANT de travailler dans un dépôt qu'on n'a pas écrit.",
+  parameters: ExecutableInput,
+  success: ExecutableResultat,
+  failure: SuggestionsError,
+  dependencies: [FileSystem.FileSystem, Path.Path],
+})
+  .annotate(Tool.Title, "Ce qui s'exécute à l'ouverture")
+  .annotate(Tool.Readonly, true)
+  .annotate(Tool.Destructive, false)
+  .annotate(Tool.Idempotent, true);
+
+export const SuggestionsToolkit = Toolkit.make(SuggestionsTool, ExecutableTool);

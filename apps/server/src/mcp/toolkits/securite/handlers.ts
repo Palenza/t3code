@@ -1,5 +1,8 @@
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
 
+import { surfaceDe, verdictALOuverture } from "../../../securite/CeQuiSExecuteALOuverture.ts";
 import { RefusStore } from "../../../securite/RefusStore.ts";
 import { suggererDesAutorisations } from "../../../securite/SuggestionsDAutorisation.ts";
 import { porteDeSortie } from "../../DebordementSurDisque.ts";
@@ -29,6 +32,58 @@ const handlers = {
             new SuggestionsError({
               message: `Lecture des refus impossible : ${String(cause)}`,
             }),
+        ),
+      ),
+      porteDeSortie,
+    ),
+  "ce-qui-sexecute": (input) =>
+    Effect.flatMap(
+      Effect.gen(function* () {
+        const fileSystem = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+
+        // On ne descend QUE dans `.claude` et la racine : c'est là que vit
+        // l'exécutable, et marcher tout l'arbre d'un dépôt inconnu coûterait
+        // cher pour ne rien apprendre de plus.
+        const sous = (dossier: string): Effect.Effect<ReadonlyArray<string>> =>
+          Effect.gen(function* () {
+            const entrees = yield* fileSystem
+              .readDirectory(dossier)
+              .pipe(Effect.orElseSucceed(() => [] as ReadonlyArray<string>));
+            const trouves: string[] = [];
+            for (const entree of entrees) {
+              const complet = path.join(dossier, entree);
+              const info = yield* fileSystem.stat(complet).pipe(Effect.orElseSucceed(() => null));
+              if (info === null) continue;
+              if (info.type === "Directory") trouves.push(...(yield* sous(complet)));
+              else trouves.push(path.relative(input.chemin, complet));
+            }
+            return trouves;
+          });
+
+        const racine = yield* fileSystem
+          .readDirectory(input.chemin)
+          .pipe(Effect.orElseSucceed(() => [] as ReadonlyArray<string>));
+        const fichiers = [
+          ...racine,
+          ...(yield* sous(path.join(input.chemin, ".claude"))).map((f) =>
+            f.startsWith(".claude") ? f : path.join(".claude", f),
+          ),
+        ];
+
+        const verdict = verdictALOuverture(surfaceDe(fichiers), input.ecritParNous ?? false);
+        return {
+          gravite: verdict.gravite,
+          quoi: verdict.quoi,
+          message: verdict.message,
+          // H4 : ce qu'on n'a PAS regardé se dit. Sans ça, un « rien » se
+          // lirait comme « ce dépôt est sûr », ce qu'on n'a pas prouvé.
+          note: "Seuls `.claude/` et la racine sont inspectés. Un dépôt peut exécuter du code par d'autres chemins — scripts de paquet, Makefile, tâches d'éditeur. Un « rien » ici veut dire « rien PAR CE CHEMIN-LÀ ».",
+        };
+      }).pipe(
+        Effect.mapError(
+          (cause) =>
+            new SuggestionsError({ message: `Lecture du dossier impossible : ${String(cause)}` }),
         ),
       ),
       porteDeSortie,
