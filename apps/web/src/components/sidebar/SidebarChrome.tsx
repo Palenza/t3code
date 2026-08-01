@@ -3,6 +3,7 @@ import { memo, useCallback, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 
 import { useEnvironmentIdentificationMode } from "../../hooks/useSettings";
+import { APP_DISPLAY_NAME, APP_VERSION } from "../../branding";
 import { cn } from "../../lib/utils";
 import { SidebarCarnet } from "./SidebarCarnet";
 import { SidebarModeTravail } from "./SidebarModeTravail";
@@ -282,6 +283,22 @@ export const SidebarChromeFooter = memo(function SidebarChromeFooter() {
           </SidebarMenuButton>
         </SidebarMenuItem>
       </SidebarMenu>
+      {/* LA VERSION, EN PERMANENCE — et ce n'est pas cosmétique.
+       *
+       * Le 01/08, Enzo a piloté une app 149 commits en retard sans le savoir,
+       * pendant qu'on empilait des correctifs qu'il ne voyait pas. Quatre
+       * diagnostics faux sont nés de cet écart, et la journée entière avec.
+       * Rien à l'écran ne disait quelle version tournait.
+       *
+       * Discret par construction — un chiffre qu'on ne lit que lorsqu'on le
+       * cherche. Mais quand on le cherche, il est là, et il change à chaque
+       * DMG (`APP_VERSION` vient de la build). */}
+      <div
+        className="px-2 pb-0.5 text-right text-[10px] text-sidebar-muted-foreground/45 tabular-nums"
+        title={`${APP_DISPLAY_NAME} ${APP_VERSION}`}
+      >
+        v{APP_VERSION}
+      </div>
     </SidebarFooter>
   );
 });
