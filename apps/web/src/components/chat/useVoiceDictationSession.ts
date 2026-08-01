@@ -11,6 +11,7 @@ import { createVoiceTranscriber } from "~/voice/transcriberFactory";
 import type { DictationTranscriber } from "~/voice/types";
 import { applyAliases, voicePromptTerms } from "@t3tools/voice-core";
 import { toastManager } from "../ui/toast";
+import { deposerBrouillonDeDictee } from "./brouillonDeDictee";
 
 export type VoiceDictationState = "idle" | "starting" | "recording" | "stopping" | "error";
 
@@ -247,11 +248,16 @@ export function useVoiceDictationSession(props: {
       cancelStartup();
       requestStop({ commit: false, sendStop: false });
       if (texteEnCours.length > 0) {
+        // LES MOTS SURVIVENT, MÊME SI LA CAPTURE MEURT. Déposés ici, repris
+        // par le prochain composeur monté (`brouillonDeDictee`). C'est la
+        // moitié VÉRIFIABLE du problème — l'autre, faire continuer le micro,
+        // demande un déplacement qu'aucun test ne peut couvrir.
+        deposerBrouillonDeDictee(texteEnCours);
         toastManager.add({
-          type: "error",
+          type: "warning",
           title: "Dictée interrompue",
           description:
-            "Quitter le chat pendant une dictée l'arrête, et le texte n'est pas posé. Reviens sur le fil avant d'ouvrir les réglages.",
+            "Quitter le chat arrête l'enregistrement. Ce que tu avais dicté est gardé et te sera rendu en revenant sur le fil.",
         });
       }
     },

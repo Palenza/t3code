@@ -118,3 +118,30 @@ export function cheminDepuisLePontDesktop(file: File): string {
   if (pont === undefined || typeof pont.getPathForFile !== "function") return "";
   return pont.getPathForFile(file);
 }
+
+/**
+ * L'AGENT TOURNE-T-IL SUR CETTE MACHINE ?
+ *
+ * Le test était `environmentId === PRIMARY_LOCAL_ENVIRONMENT_ID`. Il confondait
+ * « c'est l'environnement PRIMAIRE » avec « ça tourne sur ce Mac ». Or
+ * `getLocalEnvironmentBootstraps()` en rend PLUSIEURS — le primaire n'en est
+ * qu'un (`contracts/ipc.ts:966`) ; les distants, eux, sont les SSH/WSL.
+ *
+ * Conséquence vécue le 01/08 : Enzo dépose un enregistrement d'écran depuis un
+ * checkout local, et Raptor répond « ce fil tourne sur un environnement
+ * distant ». Le fichier n'arrive jamais. C'est pour ça que la vidéo du bug de
+ * swipe n'a pas pu m'être montrée — le refus portait sur une machine qui était
+ * bien la sienne.
+ *
+ * On teste donc l'APPARTENANCE à la liste des environnements locaux, pas
+ * l'égalité avec le primaire. Le repli reste PRUDENT : sans pont desktop, on
+ * ne sait pas, et ne pas savoir vaut « distant » — poser un lien mort coûte
+ * plus cher que demander à Enzo de citer le chemin.
+ */
+export function agentTourneSurCetteMachine(
+  environmentId: string,
+  environnementsLocaux: ReadonlyArray<{ readonly id: string }> | undefined,
+): boolean {
+  if (environnementsLocaux === undefined) return false;
+  return environnementsLocaux.some((bootstrap) => bootstrap.id === environmentId);
+}

@@ -94,8 +94,10 @@ import {
   cheminDepuisLePontDesktop,
   messageHorsPortee,
   messageSansChemin,
+  agentTourneSurCetteMachine,
   trierFichiers,
 } from "./composerFileIntake";
+import { reprendreBrouillonDeDictee } from "./brouillonDeDictee";
 import { ProviderModelPicker } from "./ProviderModelPicker";
 import { type ComposerCommandItem, ComposerCommandMenu } from "./ComposerCommandMenu";
 import { ComposerPendingApprovalActions } from "./ComposerPendingApprovalActions";
@@ -1732,6 +1734,31 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
    * jour, sinon la liste de dépendances le lirait avant son initialisation. */
   const submitComposerRef = useRef<(() => void) | null>(null);
 
+  // LA REPRISE — sans elle, le dépôt serait un module sans appelant, et les
+  // mots sauvés resteraient dans un tiroir que personne n'ouvre.
+  //
+  // Quitter le chat pendant une dictée arrête la capture et met le texte de
+  // côté (`useVoiceDictationSession`). Ici, au retour, on le rend : il se pose
+  // dans le composeur comme s'il venait d'être dicté. `reprendre` vide le
+  // tiroir, donc un re-rendu ne peut pas coller le texte deux fois.
+  const dicteeRepriseRef = useRef(false);
+  useEffect(() => {
+    if (dicteeRepriseRef.current) return;
+    dicteeRepriseRef.current = true;
+    const repris = reprendreBrouillonDeDictee();
+    if (repris === null) return;
+    const base = promptRef.current;
+    const separateur = base.trim().length === 0 ? "" : base.endsWith(" ") ? "" : " ";
+    void applyPromptReplacement(base.length, base.length, `${separateur}${repris}`, {
+      focusEditorAfterReplace: false,
+    });
+    toastManager.add({
+      type: "success",
+      title: "Dictée récupérée",
+      description: "Ce que tu avais dicté avant de quitter le fil a été reposé dans le composeur.",
+    });
+  }, [applyPromptReplacement, promptRef]);
+
   const commitDictationTranscript = useCallback(
     (text: string) => {
       const base = promptRef.current;
@@ -2725,10 +2752,18 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     // Une mention est un CHEMIN : elle ne vaut que là où l'agent tourne.
     // Sur un environnement distant, le chemin du Mac ne désigne rien — on le
     // DIT au lieu de poser un lien mort qui n'échouera qu'à la lecture.
+    // On teste l'APPARTENANCE aux environnements locaux, pas l'égalité avec le
+    // primaire : `getLocalEnvironmentBootstraps()` en rend plusieurs, et un
+    // checkout local n'est pas le primaire. L'ancien test refusait donc les
+    // dépôts de fichiers depuis une machine qui était bien celle d'Enzo —
+    // c'est ce qui a empêché l'enregistrement du bug de swipe d'arriver.
     const tri = trierFichiers(
       files,
       cheminDepuisLePontDesktop,
-      environmentId === PRIMARY_LOCAL_ENVIRONMENT_ID,
+      agentTourneSurCetteMachine(
+        environmentId,
+        window.desktopBridge?.getLocalEnvironmentBootstraps(),
+      ),
     );
     if (tri.images.length > 0) {
       void addComposerImages(tri.images);
