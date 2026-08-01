@@ -250,7 +250,7 @@ export const SidebarChromeFooter = memo(function SidebarChromeFooter() {
   }, [navigateClosingMobile]);
 
   return (
-    <SidebarFooter className="p-2">
+    <SidebarFooter className="p-[var(--sidebar-content-inset)]">
       <SidebarForkUpdatePill />
       <SidebarProviderUpdatePill />
       <SidebarUpdatePill />
