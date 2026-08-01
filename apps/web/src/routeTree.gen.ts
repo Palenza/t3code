@@ -18,6 +18,7 @@ import { Route as SettingsVoiceRouteImport } from './routes/settings.voice'
 import { Route as SettingsThemeRouteImport } from './routes/settings.theme'
 import { Route as SettingsTableauLocalRouteImport } from './routes/settings.tableau-local'
 import { Route as SettingsSourceControlRouteImport } from './routes/settings.source-control'
+import { Route as SettingsSkillsRouteImport } from './routes/settings.skills'
 import { Route as SettingsProvidersRouteImport } from './routes/settings.providers'
 import { Route as SettingsKeybindingsRouteImport } from './routes/settings.keybindings'
 import { Route as SettingsGeneralRouteImport } from './routes/settings.general'
@@ -72,6 +73,11 @@ const SettingsTableauLocalRoute = SettingsTableauLocalRouteImport.update({
 const SettingsSourceControlRoute = SettingsSourceControlRouteImport.update({
   id: '/source-control',
   path: '/source-control',
+  getParentRoute: () => SettingsRoute,
+} as any)
+const SettingsSkillsRoute = SettingsSkillsRouteImport.update({
+  id: '/skills',
+  path: '/skills',
   getParentRoute: () => SettingsRoute,
 } as any)
 const SettingsProvidersRoute = SettingsProvidersRouteImport.update({
@@ -145,6 +151,7 @@ export interface FileRoutesByFullPath {
   '/settings/general': typeof SettingsGeneralRoute
   '/settings/keybindings': typeof SettingsKeybindingsRoute
   '/settings/providers': typeof SettingsProvidersRoute
+  '/settings/skills': typeof SettingsSkillsRoute
   '/settings/source-control': typeof SettingsSourceControlRoute
   '/settings/tableau-local': typeof SettingsTableauLocalRoute
   '/settings/theme': typeof SettingsThemeRoute
@@ -165,6 +172,7 @@ export interface FileRoutesByTo {
   '/settings/general': typeof SettingsGeneralRoute
   '/settings/keybindings': typeof SettingsKeybindingsRoute
   '/settings/providers': typeof SettingsProvidersRoute
+  '/settings/skills': typeof SettingsSkillsRoute
   '/settings/source-control': typeof SettingsSourceControlRoute
   '/settings/tableau-local': typeof SettingsTableauLocalRoute
   '/settings/theme': typeof SettingsThemeRoute
@@ -188,6 +196,7 @@ export interface FileRoutesById {
   '/settings/general': typeof SettingsGeneralRoute
   '/settings/keybindings': typeof SettingsKeybindingsRoute
   '/settings/providers': typeof SettingsProvidersRoute
+  '/settings/skills': typeof SettingsSkillsRoute
   '/settings/source-control': typeof SettingsSourceControlRoute
   '/settings/tableau-local': typeof SettingsTableauLocalRoute
   '/settings/theme': typeof SettingsThemeRoute
@@ -212,6 +221,7 @@ export interface FileRouteTypes {
     | '/settings/general'
     | '/settings/keybindings'
     | '/settings/providers'
+    | '/settings/skills'
     | '/settings/source-control'
     | '/settings/tableau-local'
     | '/settings/theme'
@@ -232,6 +242,7 @@ export interface FileRouteTypes {
     | '/settings/general'
     | '/settings/keybindings'
     | '/settings/providers'
+    | '/settings/skills'
     | '/settings/source-control'
     | '/settings/tableau-local'
     | '/settings/theme'
@@ -254,6 +265,7 @@ export interface FileRouteTypes {
     | '/settings/general'
     | '/settings/keybindings'
     | '/settings/providers'
+    | '/settings/skills'
     | '/settings/source-control'
     | '/settings/tableau-local'
     | '/settings/theme'
@@ -334,6 +346,13 @@ declare module '@tanstack/react-router' {
       path: '/source-control'
       fullPath: '/settings/source-control'
       preLoaderRoute: typeof SettingsSourceControlRouteImport
+      parentRoute: typeof SettingsRoute
+    }
+    '/settings/skills': {
+      id: '/settings/skills'
+      path: '/skills'
+      fullPath: '/settings/skills'
+      preLoaderRoute: typeof SettingsSkillsRouteImport
       parentRoute: typeof SettingsRoute
     }
     '/settings/providers': {
@@ -439,6 +458,7 @@ interface SettingsRouteChildren {
   SettingsGeneralRoute: typeof SettingsGeneralRoute
   SettingsKeybindingsRoute: typeof SettingsKeybindingsRoute
   SettingsProvidersRoute: typeof SettingsProvidersRoute
+  SettingsSkillsRoute: typeof SettingsSkillsRoute
   SettingsSourceControlRoute: typeof SettingsSourceControlRoute
   SettingsTableauLocalRoute: typeof SettingsTableauLocalRoute
   SettingsThemeRoute: typeof SettingsThemeRoute
@@ -454,6 +474,7 @@ const SettingsRouteChildren: SettingsRouteChildren = {
   SettingsGeneralRoute: SettingsGeneralRoute,
   SettingsKeybindingsRoute: SettingsKeybindingsRoute,
   SettingsProvidersRoute: SettingsProvidersRoute,
+  SettingsSkillsRoute: SettingsSkillsRoute,
   SettingsSourceControlRoute: SettingsSourceControlRoute,
   SettingsTableauLocalRoute: SettingsTableauLocalRoute,
   SettingsThemeRoute: SettingsThemeRoute,

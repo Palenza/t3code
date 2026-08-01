@@ -187,12 +187,27 @@ export const ModelPickerSidebar = memo(function ModelPickerSidebar(props: {
                   showBadge={showInstanceBadge}
                   className="size-6"
                   iconClassName="size-5"
+                  // UN ANNEAU DE DÉCOUPE DOIT ÊTRE OPAQUE — corrigé le 01/08,
+                  // deuxième fois après la puce du composeur.
+                  //
+                  // L'état par défaut valait
+                  // `color-mix(in oklab, var(--muted) 30%, transparent)` : 30 %
+                  // opaque. Un anneau translucide ne découpe rien, il dépose un
+                  // film sur le logo — les « boutons fantômes au-dessus du logo
+                  // Claude » qu'Enzo a signalés plusieurs fois. Les deux autres
+                  // états étaient déjà opaques, c'est pourquoi seul celui-ci se
+                  // voyait.
+                  //
+                  // Les trois valeurs restent distinctes : l'anneau doit
+                  // reprendre la surface DERRIÈRE l'icône, et cette surface
+                  // change au survol. C'est l'intention qui était juste, une
+                  // seule valeur qui était fausse.
                   indicatorBackground={
                     isHovered && !isDisabled
                       ? "var(--muted)"
                       : isSelected
                         ? "var(--background)"
-                        : "color-mix(in oklab, var(--muted) 30%, transparent)"
+                        : "var(--background)"
                   }
                   {...(entry.accentColor
                     ? { badgeClassName: "h-3 min-w-3 px-0.5 text-[7px]" }
