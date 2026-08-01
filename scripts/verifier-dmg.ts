@@ -89,7 +89,12 @@ const point = sortie
 if (point === undefined || !existsSync(point)) {
   echouer(CODES.montageImpossible, "le montage n'a rendu aucun point de montage utilisable");
 }
-process.on("exit", () => demonter(point));
+// On démonte en partant — SAUF si on doit laisser la fenêtre à l'écran : le
+// démontage la referme, et c'est tout l'intérêt de `--ouvrir`.
+process.on("exit", (code) => {
+  if (ouvrirEnsuite && code === 0) return;
+  demonter(point);
+});
 
 const app = readdirSync(point)
   .filter((entree) => entree.endsWith(".app"))
@@ -158,3 +163,10 @@ if (manquants > 0) {
 }
 
 console.log("✓ artefact vérifié");
+
+if (ouvrirEnsuite) {
+  // Après la vérification, jamais avant : ouvrir un artefact dont on ne sait
+  // rien, c'est livrer à l'aveugle.
+  execFileSync("open", [dmg]);
+  console.log("→ fenêtre du DMG ouverte à l'écran");
+}
