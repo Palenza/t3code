@@ -102,3 +102,40 @@ en allant lire la base plutôt qu'en raisonnant :
 
 Il n'y a donc plus rien à construire, et plus rien à décider. Seulement les
 deux clés du haut de cette page.
+
+---
+
+## 3 · La dictée doit survivre à la navigation
+
+**Le symptôme, vécu le 01/08** : Enzo dicte, ouvre les Réglages, revient — tout
+ce qu'il a dit a disparu. « Quoi que je fasse, ça doit continuer. »
+
+**La cause, trouvée** : `apps/web/src/components/chat/useVoiceDictationSession.ts`,
+l'effet de nettoyage en fin de hook appelle `requestStop({ commit: false })` au
+DÉMONTAGE. Les Réglages sont une route : ouvrir cette page démonte
+`ChatComposer`, donc le hook, donc la capture. `commit: false` signifie que le
+texte est **jeté**, pas posé.
+
+**Ce qui est livré en attendant** : la perte n'est plus SILENCIEUSE. Un
+avertissement part si — et seulement si — il y avait du texte à perdre. Une
+perte annoncée se re-dicte ; une perte muette se découvre trop tard.
+
+**Le remède, et pourquoi il n'a pas été fait**
+
+Il faut sortir la session du composeur pour qu'elle vive au-dessus de la
+navigation, comme `useSidebarPeekStore` le fait déjà pour le peek. Le chemin le
+plus court repéré :
+
+1. instancier le hook dans `AppSidebarLayout` (qui ne se démonte pas quand on
+   change de route) plutôt que dans `ChatComposer` ;
+2. exposer la session par un contexte ; `ChatComposer` la consomme ;
+3. `onCommit` est spécifique au composeur — mais `onCommitRef` existe DÉJÀ dans
+   le hook, donc le composeur monté n'a qu'à s'y ré-enregistrer.
+
+**Ce n'est pas la taille qui bloque, c'est la VÉRIFIABILITÉ.** Aucun des 7 478
+tests ne touche le microphone : une capture média ne se teste pas en CI ici. Si
+ce déplacement se trompe, la dictée ne perd plus du texte — elle ne fonctionne
+plus du tout. Le mode de panne du remède est PIRE que celui du bug.
+
+**Condition pour l'ouvrir** : une session dédiée, avec Enzo disponible pour
+essayer le micro après chaque étape. Pas en fin de session, pas en autonomie.
