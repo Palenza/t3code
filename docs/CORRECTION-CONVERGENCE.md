@@ -83,6 +83,56 @@ qu'elle produit des conclusions qui SONT plausibles.
 À appliquer partout où j'écris « convergence », « confirmé par plusieurs »,
 « tout le monde fait X ».
 
+## La correction de la correction — deux trous, dont un fatal
+
+**Trou 1 — « gstack est indépendant » reposait sur un silence.** Je l'ai conclu
+d'un grep négatif. Mesuré ensuite : **3 skills sur 59 portent une attribution
+quelconque.** gstack n'attribue quasiment rien — donc l'absence de citation de
+superpowers ne prouve strictement rien. C'est l'erreur du silence, la septième
+de la session, commise dans le document qui corrigeait les six autres.
+
+État réel des lignées :
+
+|             | statut                                                |
+| ----------- | ----------------------------------------------------- |
+| superpowers | source (ou codificateur précoce)                      |
+| Hermès      | **dérivé PROUVÉ** (frontmatter)                       |
+| gstack      | **INCONNU** — n'attribue rien, silence non concluant  |
+| Palenza     | **indépendant PROUVÉ** (dates antérieures au contact) |
+
+Donc : 2 lignées prouvées indépendantes, 1 inconnue, 1 dérivée. Pas 4, pas 3.
+
+**Trou 2, et il est fatal : la question ne valait pas la peine d'être posée.**
+
+`systematic-debugging`, `TDD`, `code-review`, `plan/spec` ne sont pas des
+trouvailles — c'est le **canon du génie logiciel** : TDD (Beck, ~1999), la
+revue par inspection (Fagan, 1976), l'analyse de cause racine (antérieure au
+logiciel), planifier avant de bâtir (universel).
+
+Quatre cadres d'agents qui encodent tous TDD, c'est comme quatre livres de
+cuisine qui ont tous un chapitre sur le couteau. **Ça prouve que le canon est
+célèbre, pas que quiconque a découvert une vérité.** Ma « convergence », dans
+sa version fausse comme dans sa version corrigée, mesurait quelque chose de
+trivial — et j'ai bâti un triage dessus.
+
+### Où l'information vit réellement : les DÉSACCORDS
+
+Là où tout le monde est d'accord, il n'y a **aucune décision à prendre**. Là où
+ils divergent, il y a un choix — et c'est là qu'il fallait regarder :
+
+| divergence                                                   | ce qu'elle tranche                   |
+| ------------------------------------------------------------ | ------------------------------------ |
+| superpowers : « code écrit avant le test ? **supprime-le** » | jusqu'où va la loi de fer            |
+| gstack : revue au stade **PLAN**, pas au stade code          | quand la revue coûte le moins cher   |
+| nous : **preuve par mutation**                               | comment savoir qu'un test mord       |
+| pi : **refuse** sous-agents, MCP, permissions                | noyau minimal contre produit complet |
+
+Ces quatre-là sont informatifs parce qu'ils s'excluent. Le tronc commun, non.
+
+**Leçon de méthode, plus générale que la première :** chercher la convergence
+est un réflexe rassurant qui produit des conclusions sans information. La
+question utile est toujours **« où divergent-ils, et pourquoi ? »**.
+
 ## Ce que la correction NE change pas
 
 Les gestes du triage tiennent, parce qu'ils ne reposaient pas sur le compte
