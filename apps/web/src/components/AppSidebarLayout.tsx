@@ -216,20 +216,29 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
       bascule();
       return;
     }
-    // Sortie du côté du geste, entrée par le côté opposé — 150 ms + 200 ms.
+    // PLUS D'ENTRÉE PAR LE CÔTÉ OPPOSÉ — 01/08, sur retour fondateur répété
+    // (« un rebond trop moche », « ça se décale et ça revient en place »).
+    //
+    // L'ancienne traversée sortait à +72 px, COUPAIT à −56 px, puis glissait
+    // jusqu'à 0. Ce retour depuis l'autre bord est précisément ce que l'œil
+    // lit comme un rebond : le contenu part d'un côté et revient de l'autre,
+    // deux mouvements contraires en 350 ms. La direction était pourtant juste
+    // — j'avais vérifié le signe, ce n'était pas un bug de sens.
+    //
+    // Désormais : on sort dans le sens du geste, et le nouvel espace apparaît
+    // À SA PLACE, en fondu. Un seul mouvement, aucun retour. Le geste reste
+    // lisible (la sortie suit les doigts), la lecture ne saute plus.
     inner.style.transition = "transform 150ms cubic-bezier(0.4, 0, 1, 1), opacity 150ms linear";
     inner.style.transform = `translateX(${direction * 72}px)`;
     inner.style.opacity = "0.25";
     window.setTimeout(() => {
       bascule();
       inner.style.transition = "none";
-      inner.style.transform = `translateX(${direction * -56}px)`;
-      // Reflow forcé : sans lui, le navigateur fusionne les deux écritures et
-      // l'entrée partirait du mauvais côté.
-      void inner.offsetWidth;
-      inner.style.transition =
-        "transform 200ms cubic-bezier(0.22, 1, 0.36, 1), opacity 200ms linear";
       inner.style.transform = "translateX(0px)";
+      // Reflow forcé : sans lui, le navigateur fusionne les deux écritures et
+      // le fondu partirait de l'opacité finale, donc ne se verrait pas.
+      void inner.offsetWidth;
+      inner.style.transition = "opacity 200ms linear";
       inner.style.opacity = "1";
     }, 150);
   };

@@ -41,7 +41,7 @@ const DEVELOPMENT_RETRYABLE_LOAD_ERROR_CODES = new Set([
 
 type WindowTitleBarOptions = Pick<
   Electron.BrowserWindowConstructorOptions,
-  "titleBarOverlay" | "titleBarStyle" | "trafficLightPosition"
+  "titleBarOverlay" | "titleBarStyle" | "trafficLightPosition" | "roundedCorners"
 >;
 
 type DesktopWindowRuntimeServices =
@@ -238,6 +238,17 @@ function getWindowTitleBarOptions(
     return {
       titleBarStyle: "hiddenInset",
       trafficLightPosition: { x: 16, y: 18 },
+      // COINS À 90° — décision fondateur du 01/08 : « Raptor c'est
+      // rectangulaire, c'est des coins à 90 degrés ».
+      //
+      // L'arrondi ne venait PAS de notre CSS : en mode ancré la barre latérale
+      // n'a aucun `rounded-*` (vérifié — `rounded-xl` ne s'applique qu'au mode
+      // flottant). C'est macOS qui arrondit toute fenêtre par défaut, et
+      // l'illustration d'en-tête, un rectangle plein, se faisait couper par ce
+      // coin : « comme si c'était croppé du rond ».
+      //
+      // Réversible en retirant cette seule ligne.
+      roundedCorners: false,
     };
   }
 

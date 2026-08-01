@@ -174,7 +174,21 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
               badgeContent="none"
               className="size-4"
               iconClassName={cn("size-4", props.activeProviderIconClassName)}
-              indicatorBackground="var(--input)"
+              // UN ANNEAU DE DÉCOUPE DOIT ÊTRE OPAQUE — corrigé le 01/08.
+              //
+              // C'était `var(--input)`, qui vaut en thème sombre
+              // `--alpha(var(--color-white) / 8%)` (index.css:929) : un blanc
+              // TRANSLUCIDE. Un anneau translucide ne découpe rien, il dépose
+              // un voile pâle — et comme `ComposerControl` est un bouton
+              // fantôme sans fond, ce voile se voyait sur la surface du
+              // composeur : un disque clair derrière l'icône du modèle, que
+              // Enzo a signalé plusieurs fois.
+              //
+              // `--background` est opaque dans TOUS les thèmes (zinc-25,
+              // neutral-950, #000, un color-mix opaque) — vérifié, c'est ce
+              // qui permet à l'anneau de faire son travail : séparer, pas
+              // teinter.
+              indicatorBackground="var(--background)"
               badgeClassName="right-[-0.1875rem] bottom-[-0.1875rem] size-2 min-w-0 border-2 p-0"
             />
           ) : null}
