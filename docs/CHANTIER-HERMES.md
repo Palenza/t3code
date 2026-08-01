@@ -184,23 +184,23 @@ la raison — un écart sans raison se rouvre tous les mois.
   base en mémoire, avec nos réglages actuels (`unicode61
 remove_diacritics 2`) contre `trigram` :
 
-                                                                                                      requête      unicode61 (le nôtre)   trigram
-                                                                                                      数据  (2)          0                   0
-                                                                                                      数据库 (3)          0                   1
-                                                                                                      東京  (2)          0                   0
-                                                                                                      chat               1                   1
-                                                                                                      dort               1                   1
+                                                                                                        requête      unicode61 (le nôtre)   trigram
+                                                                                                        数据  (2)          0                   0
+                                                                                                        数据库 (3)          0                   1
+                                                                                                        東京  (2)          0                   0
+                                                                                                        chat               1                   1
+                                                                                                        dort               1                   1
 
-                                                                                                  Donc **notre index ne trouve JAMAIS rien en CJK**, pas même sur trois
-                                                                                                  caractères — ce n'est pas une dégradation, c'est un mur. `trigram` le
-                                                                                                  lève dès 3 caractères sans toucher au français.
-                                                                                                  Reste hors de portée : les termes CJK de **1-2 caractères**, et c'est
-                                                                                                  précisément ce que leur bigramme compilé existe pour couvrir.
-                                                                                                  **On ne bascule PAS aujourd'hui** : produit français d'abord, un index
-                                                                                                  trigramme pèse plus lourd (une entrée par fenêtre de 3), et personne
-                                                                                                  n'attend cette recherche. Mais le jour où un utilisateur CJK arrive, la
-                                                                                                  décision est un MOT dans la migration 036 — plus un chantier natif.
-                                                                                                  `native/fts5_cjk/` **(copie C, désormais optionnelle)**
+                                                                                                    Donc **notre index ne trouve JAMAIS rien en CJK**, pas même sur trois
+                                                                                                    caractères — ce n'est pas une dégradation, c'est un mur. `trigram` le
+                                                                                                    lève dès 3 caractères sans toucher au français.
+                                                                                                    Reste hors de portée : les termes CJK de **1-2 caractères**, et c'est
+                                                                                                    précisément ce que leur bigramme compilé existe pour couvrir.
+                                                                                                    **On ne bascule PAS aujourd'hui** : produit français d'abord, un index
+                                                                                                    trigramme pèse plus lourd (une entrée par fenêtre de 3), et personne
+                                                                                                    n'attend cette recherche. Mais le jour où un utilisateur CJK arrive, la
+                                                                                                    décision est un MOT dans la migration 036 — plus un chantier natif.
+                                                                                                    `native/fts5_cjk/` **(copie C, désormais optionnelle)**
 
 - [–] **7 · ~~PTC — appel d'outils programmatique~~** — **Écarté : le CLI le
   porte déjà.** Troisième ligne fermée le 01/08 en fouillant le binaire du CLI
@@ -1303,3 +1303,17 @@ il remonte.
   **Deux voisins qui deviennent évidents une fois le panneau posé** : `Usage`
   (on compte déjà dans `skills/UsageDesSkills.ts`, on n'affiche rien) et
   `Language` (ZCode l'a ; c'est la demande d'Enzo de l'entrée 77).
+
+  **Point de départ pour l'implémenter** (relevé le 01/08, pour ne pas le
+  redécouvrir) : les sections de réglages sont des ROUTES, pas de simples
+  panneaux — `SettingsSidebarNav.tsx:57-61` associe une icône à
+  `/settings/voice`, `/settings/beta`, `/settings/theme`, `/settings/archived`.
+  Ajouter Skills demande donc : une route, une entrée de navigation, un
+  composant de panneau, une icône. Le plus proche à copier est
+  `BetaSettingsPanel.tsx` (simple, sans état serveur propre).
+
+  La liste des skills arrive déjà côté client dans le snapshot du provider
+  (`ServerProviderSkill[]`) — une version LECTURE SEULE ne demande donc aucune
+  plomberie serveur, et vaut déjà mieux que rien : aujourd'hui Enzo n'a AUCUN
+  moyen de voir quelles skills sont chargées. L'interrupteur par skill viendra
+  après, lui demande d'écrire `enabled` côté serveur.
