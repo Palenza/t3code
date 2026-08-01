@@ -10,6 +10,8 @@ import { useAtomCommand } from "../../state/use-atom-command";
 import { Popover, PopoverPopup, PopoverTrigger } from "../ui/popover";
 import { ProviderRateLimitGauges } from "../settings/ProviderRateLimitGauges";
 import { presentProviderRateLimits } from "../settings/providerRateLimits";
+import type { CompteDuRond } from "./comptesDuRond";
+import { useComptesDuRond } from "./useComptesDuRond";
 
 /** At most one hover-triggered refresh per meter per window. */
 const HOVER_REFRESH_THROTTLE_MS = 15_000;
@@ -42,6 +44,86 @@ function useRefreshRateLimitsOnOpen(instanceId: ProviderInstanceId | null | unde
   );
 }
 
+const TON_BARRE: Record<CompteDuRond["jauges"][number]["tone"], string> = {
+  normal: "bg-muted-foreground/60",
+  warning: "bg-warning",
+  critical: "bg-destructive",
+};
+
+const TON_TEXTE: Record<CompteDuRond["jauges"][number]["tone"], string> = {
+  normal: "text-muted-foreground/80",
+  warning: "text-warning",
+  critical: "text-destructive",
+};
+
+/**
+ * Un compte, sous le rond. L'actif se distingue par sa PASTILLE et son texte
+ * plein — pas par sa position : les trois comptes gardent le même rang d'une
+ * bascule à l'autre, sinon la jauge qu'on lisait se déplace sous la souris.
+ */
+function CompteDuRondBloc({ compte }: { compte: CompteDuRond }) {
+  return (
+    <div className="grid gap-1">
+      <div className="flex min-w-0 items-baseline gap-1.5">
+        <span
+          className={cn(
+            "flex size-3.5 shrink-0 items-center justify-center self-center rounded-full text-[9px] font-semibold leading-none",
+            compte.actif
+              ? "bg-foreground text-background"
+              : "bg-muted-foreground/20 text-muted-foreground/70",
+          )}
+          aria-hidden="true"
+        >
+          {compte.label}
+        </span>
+        <span
+          className={cn(
+            "min-w-0 flex-1 truncate text-[11px] leading-4",
+            compte.actif ? "font-medium text-foreground/90" : "text-muted-foreground/60",
+          )}
+          title={compte.email}
+        >
+          {compte.email}
+        </span>
+        {compte.actif ? (
+          <span className="shrink-0 text-[10px] leading-4 text-muted-foreground/70">actif</span>
+        ) : null}
+      </div>
+      {compte.jauges.map((jauge) => (
+        <div key={jauge.nom} className="grid gap-0.5">
+          <div className="flex min-w-0 items-baseline justify-between gap-2 text-[10px] leading-4">
+            <span className="truncate text-muted-foreground/60">{jauge.nom}</span>
+            <span className="flex shrink-0 items-baseline gap-1.5">
+              {jauge.resetLabel ? (
+                <span className="text-muted-foreground/45">{jauge.resetLabel}</span>
+              ) : null}
+              <span className={cn("font-medium tabular-nums", TON_TEXTE[jauge.tone])}>
+                {jauge.pctLabel}
+              </span>
+            </span>
+          </div>
+          <div
+            className="h-1 w-full overflow-hidden rounded-full bg-muted/60"
+            role="progressbar"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={Math.round(jauge.barPct)}
+            aria-label={`${compte.label} — ${jauge.nom}`}
+          >
+            <div
+              className={cn("h-full rounded-full", TON_BARRE[jauge.tone])}
+              style={{ width: `${jauge.barPct}%` }}
+            />
+          </div>
+        </div>
+      ))}
+      {compte.etat !== null ? (
+        <p className="text-pretty text-[10px] leading-3.5 text-warning/80">{compte.etat}</p>
+      ) : null}
+    </div>
+  );
+}
+
 function formatPercentage(value: number | null): string | null {
   if (value === null || !Number.isFinite(value)) {
     return null;
@@ -70,7 +152,15 @@ export function ContextWindowMeter(props: {
 }) {
   const { usage, providerDisplayName, rateLimits, rateLimitsInstanceId, rateLimitsExpected } =
     props;
-  const handleOpenChange = useRefreshRateLimitsOnOpen(rateLimitsInstanceId);
+  const rafraichirQuotas = useRefreshRateLimitsOnOpen(rateLimitsInstanceId);
+  const { comptes, lireSiOuvert } = useComptesDuRond();
+  const handleOpenChange = useCallback(
+    (open: boolean) => {
+      rafraichirQuotas(open);
+      lireSiOuvert(open);
+    },
+    [lireSiOuvert, rafraichirQuotas],
+  );
   const hasRateLimits =
     rateLimits !== undefined && presentProviderRateLimits({ rateLimits, now: Date.now() }) !== null;
   const showRateLimitsSection =
@@ -142,7 +232,7 @@ export function ContextWindowMeter(props: {
         tooltipStyle
         side="top"
         align="end"
-        className="dropdown-glass w-64 max-w-none border-0! bg-secondary! p-0 shadow-none! before:hidden"
+        className="dropdown-glass w-72 max-w-none border-0! bg-secondary! p-0 shadow-none! before:hidden"
       >
         <div className="flex flex-col gap-2 p-3">
           <div className="flex items-center justify-between gap-3">
@@ -190,7 +280,29 @@ export function ContextWindowMeter(props: {
               {providerDisplayName ?? "It"} automatically compacts its context when needed.
             </div>
           ) : null}
-          {showRateLimitsSection ? (
+          {/* LES TROIS COMPTES REMPLACENT LA SECTION DU DRIVER — ils ne s'y
+              AJOUTENT pas.
+
+              Le tableau local et le driver mesurent la MÊME chose par deux
+              chemins : les quotas d'abonnement. Les afficher côte à côte
+              donnerait deux pourcentages pour la même fenêtre, d'âges
+              différents, sans moyen de savoir lequel croire — c'est la règle
+              des deux chiffres pour une métrique.
+
+              Le tableau est retenu quand il répond parce qu'il est le SEUL à
+              connaître les trois comptes ; le driver ne voit que l'instance en
+              cours. Quand le tableau se tait, on retombe sur le driver, qui est
+              de première main. Jamais les deux en même temps. */}
+          {comptes.kind === "comptes" ? (
+            <div className="mt-1 border-t border-border/60 pt-2">
+              <div className="font-medium text-muted-foreground text-xs">Abonnements</div>
+              <div className="mt-2 grid gap-2.5">
+                {comptes.comptes.map((compte) => (
+                  <CompteDuRondBloc key={`${compte.label}-${compte.email}`} compte={compte} />
+                ))}
+              </div>
+            </div>
+          ) : showRateLimitsSection ? (
             <div className="mt-1 border-t border-border/60 pt-2">
               <div className="font-medium text-muted-foreground text-xs">Plan usage limits</div>
               {hasRateLimits ? (

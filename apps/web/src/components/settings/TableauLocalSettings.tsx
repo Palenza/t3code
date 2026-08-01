@@ -2,14 +2,11 @@ import { GitBranchIcon, HandshakeIcon, RefreshCwIcon, UsersIcon } from "lucide-r
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { cn } from "../../lib/utils";
-import { resolvePrimaryEnvironmentHttpUrl } from "../../environments/primary";
 import { Button } from "../ui/button";
 import { SettingsPageContainer, SettingsSection } from "./settingsLayout";
+import { lireTableauLocal } from "./tableauLocalSource";
 import {
-  RAISON_ILLISIBLE,
-  RAISON_INJOIGNABLE,
   TABLEAU_MUET_TITRE,
-  presentTableauLocal,
   type CompteClaudeVue,
   type ReseauAffiliationVue,
   type TableauLocalEtat,
@@ -27,32 +24,8 @@ const TONE_TEXT: Record<CompteClaudeVue["limites"][number]["tone"], string> = {
   critical: "text-destructive",
 };
 
-const TABLEAU_PATH = "/api/tableau-local/etat";
-const FETCH_TIMEOUT_MS = 5_000;
 /** Same cadence as the dashboard's own page. */
 const POLL_INTERVAL_MS = 60_000;
-
-async function lireTableauLocal(): Promise<TableauLocalEtat> {
-  let response: Response;
-  try {
-    response = await fetch(resolvePrimaryEnvironmentHttpUrl(TABLEAU_PATH), {
-      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-      cache: "no-store",
-    });
-  } catch {
-    return { kind: "muet", raison: RAISON_INJOIGNABLE };
-  }
-  if (!response.ok) {
-    return { kind: "muet", raison: RAISON_INJOIGNABLE };
-  }
-  let payload: unknown;
-  try {
-    payload = await response.json();
-  } catch {
-    return { kind: "muet", raison: RAISON_ILLISIBLE };
-  }
-  return presentTableauLocal(payload, Date.now());
-}
 
 function LigneEtat({ cle, valeur }: { cle: string; valeur: string }) {
   return (
