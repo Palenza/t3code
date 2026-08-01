@@ -230,7 +230,7 @@ async function requestMicrophonePermission(platform: NodeJS.Platform): Promise<b
   return false;
 }
 
-function getWindowTitleBarOptions(
+export function getWindowTitleBarOptions(
   shouldUseDarkColors: boolean,
   platform: NodeJS.Platform,
 ): WindowTitleBarOptions {
@@ -238,17 +238,20 @@ function getWindowTitleBarOptions(
     return {
       titleBarStyle: "hiddenInset",
       trafficLightPosition: { x: 16, y: 18 },
-      // COINS À 90° — décision fondateur du 01/08 : « Raptor c'est
-      // rectangulaire, c'est des coins à 90 degrés ».
+      // PAS de `roundedCorners: false` ICI — essayé le 01/08, ANNULÉ le jour
+      // même.
       //
-      // L'arrondi ne venait PAS de notre CSS : en mode ancré la barre latérale
-      // n'a aucun `rounded-*` (vérifié — `rounded-xl` ne s'applique qu'au mode
-      // flottant). C'est macOS qui arrondit toute fenêtre par défaut, et
-      // l'illustration d'en-tête, un rectangle plein, se faisait couper par ce
-      // coin : « comme si c'était croppé du rond ».
+      // La demande était juste (« Raptor c'est rectangulaire, des coins à 90
+      // degrés ») et le diagnostic aussi : l'arrondi vient de macOS, pas de
+      // notre CSS. Mais l'option Electron est prévue pour les fenêtres SANS
+      // CADRE. Combinée à `titleBarStyle: "hiddenInset"`, elle a fait
+      // DISPARAÎTRE les feux tricolores : plus de fermer, réduire, agrandir.
+      // Enzo l'a vu en une minute.
       //
-      // Réversible en retirant cette seule ligne.
-      roundedCorners: false,
+      // Perdre les contrôles de fenêtre coûte infiniment plus qu'un coin
+      // arrondi. Si on veut vraiment les angles droits, il faudra passer la
+      // fenêtre en `frame: false` et redessiner nous-mêmes ces trois boutons —
+      // un chantier, pas une ligne.
     };
   }
 

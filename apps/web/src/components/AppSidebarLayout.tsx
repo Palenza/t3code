@@ -175,18 +175,25 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
   /** Durée sans le moindre évènement au-delà de laquelle le geste est fini. */
   const SILENCE_FIN_DE_GESTE_MS = 120;
   /**
-   * LE DERNIER |deltaX| VU — ce qui sépare la traîne d'un NOUVEAU geste.
+   * LE PIC DE LA SALVE — ce qui sépare la traîne d'un NOUVEAU geste.
    *
    * Le verrou seul était une régression : il se faisait renouveler par les
    * évènements du geste SUIVANT, donc il ne se levait que si on s'arrêtait
    * complètement — « je swipe une fois et après ça ne marche plus, il faut
    * que je bouge ma souris pour re-swiper ».
    *
-   * L'inertie DÉCROÎT, toujours : c'est sa signature physique. Un doigt qui
-   * repart produit au contraire un delta plus GRAND que la traîne en cours.
-   * On lit donc la pente, pas l'horloge : ça remonte → c'est toi, on rouvre.
+   * On a d'abord lu la PENTE contre la dernière valeur, en supposant l'inertie
+   * strictement décroissante. Elle ne l'est pas : un geste franc ondule, et une
+   * seule remontée locale rouvrait le verrou EN PLEINE traîne. Le reste de
+   * l'inertie franchissait alors un second espace — « si je swipe trop fort,
+   * ça va sur design et ça revient » (01/08).
+   *
+   * Ce qui tient, c'est le PIC : une traîne ne dépasse jamais le maximum du
+   * geste qui l'a produite, même quand sa décroissance est bruitée. Un doigt
+   * qui repart, lui, produit une amplitude du même ordre que l'original. Le
+   * repli reste le SILENCE — c'est lui qui rouvre le cas normal.
    */
-  const spaceSwipeDernierDeltaRef = useRef(0);
+  const spaceSwipePicRef = useRef(0);
   // Le geste se VOIT pendant qu'il se fait. Avant, rien ne bougeait jusqu'au
   // seuil puis l'espace sautait d'un coup — « l'animation est très nulle, pas
   // fluide » (fondateur, 30/07). Désormais le contenu SUIT les doigts (offset
@@ -288,11 +295,26 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
     // la durée de l'inertie.
     const ampleur = Math.abs(event.deltaX);
     if (spaceSwipeVerrouRef.current) {
-      // Ça REMONTE : ce n'est plus la traîne, c'est un doigt qui repart. On
-      // rouvre immédiatement et on laisse cet évènement compter — sinon il
-      // faudrait s'arrêter net entre deux gestes.
-      const repart = ampleur > spaceSwipeDernierDeltaRef.current * 1.25 + 2;
-      spaceSwipeDernierDeltaRef.current = ampleur;
+      // ON COMPARE AU PIC, PAS À LA DERNIÈRE VALEUR — corrigé le 01/08.
+      //
+      // Le test était `ampleur > dernier * 1.25 + 2`. Il supposait une inertie
+      // strictement DÉCROISSANTE. Elle ne l'est pas : un geste franc produit
+      // des ondulations, et une seule remontée locale suffisait à rouvrir le
+      // verrou AU MILIEU de la traîne. Le reste de l'inertie atteignait alors
+      // le seuil et franchissait un SECOND espace — « si je swipe trop fort,
+      // ça va sur design et ça revient » (fondateur, 01/08).
+      //
+      // Une traîne ne dépasse jamais le PIC du geste qui l'a produite : c'est
+      // sa signature physique, et elle tient même quand la décroissance est
+      // bruitée. Un doigt qui repart, lui, produit une amplitude comparable au
+      // geste d'origine. On garde donc le pic de la salve en cours, et on ne
+      // rouvre que sur quelque chose du même ordre.
+      //
+      // Le repli reste le SILENCE (le minuteur ci-dessous) : c'est lui qui
+      // rouvre le cas normal, où l'on s'arrête entre deux gestes.
+      const pic = spaceSwipePicRef.current;
+      const repart = ampleur > pic * 0.9 + 2;
+      spaceSwipePicRef.current = Math.max(pic, ampleur);
       if (!repart) {
         if (spaceSwipeSilenceRef.current !== null) {
           window.clearTimeout(spaceSwipeSilenceRef.current);
@@ -300,7 +322,7 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
         spaceSwipeSilenceRef.current = window.setTimeout(() => {
           spaceSwipeVerrouRef.current = false;
           spaceSwipeAccumRef.current = 0;
-          spaceSwipeDernierDeltaRef.current = 0;
+          spaceSwipePicRef.current = 0;
         }, SILENCE_FIN_DE_GESTE_MS);
         return;
       }
@@ -311,7 +333,11 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
         spaceSwipeSilenceRef.current = null;
       }
     }
-    spaceSwipeDernierDeltaRef.current = ampleur;
+    // Le PIC de la salve, pas la dernière valeur : c'est lui qui sert de
+    // référence à la reprise ci-dessus. L'écraser ici le ramènerait à une
+    // valeur basse en fin de geste, et la moindre ondulation de la traîne
+    // repasserait pour un nouveau doigt.
+    spaceSwipePicRef.current = Math.max(spaceSwipePicRef.current, ampleur);
     if (Math.abs(event.deltaX) <= Math.abs(event.deltaY)) {
       if (spaceSwipeAccumRef.current !== 0) retomber(carte);
       spaceSwipeAccumRef.current = 0;

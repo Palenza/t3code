@@ -1725,6 +1725,13 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     projectSelectionRequired ||
     (environmentUnavailable !== null && activePendingProgress === null);
 
+  /** Posé par la touche Entrée pendant la dictée : le texte, une fois transcrit,
+   * doit PARTIR sans seconde frappe. Voir le commentaire de `surEntree`. */
+  const envoyerDesQueTranscritRef = useRef(false);
+  /** `submitComposer` est déclaré PLUS BAS : on passe par une référence tenue à
+   * jour, sinon la liste de dépendances le lirait avant son initialisation. */
+  const submitComposerRef = useRef<(() => void) | null>(null);
+
   const commitDictationTranscript = useCallback(
     (text: string) => {
       const base = promptRef.current;
@@ -1734,9 +1741,29 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         : composerCursor;
       const insertion = buildDictationReplacement(base, insertionCursor, text);
       if (!insertion) return;
-      void applyPromptReplacement(insertion.rangeStart, insertion.rangeEnd, insertion.replacement, {
-        focusEditorAfterReplace: false,
-      });
+      const pose = applyPromptReplacement(
+        insertion.rangeStart,
+        insertion.rangeEnd,
+        insertion.replacement,
+        { focusEditorAfterReplace: false },
+      );
+      // UNE SEULE ENTRÉE, et le message part — 01/08.
+      //
+      // La règle précédente était « première Entrée pose le texte, seconde
+      // Entrée l'envoie : rien ne part sans relecture ». Intention louable,
+      // mais Enzo l'a redemandée cinq fois : « je veux cliquer sur Entrée »,
+      // « toujours stop et pas la touche entrée direct ». Une relecture qu'on
+      // impose à quelqu'un qui n'en veut pas n'est pas une sécurité, c'est une
+      // friction — et il relit de toute façon en dictant.
+      //
+      // L'envoi attend que la pose soit RÉSOLUE : `applyPromptReplacement` est
+      // asynchrone, et envoyer avant sa fin partirait avec le prompt d'avant.
+      if (envoyerDesQueTranscritRef.current) {
+        envoyerDesQueTranscritRef.current = false;
+        void Promise.resolve(pose).then(() => {
+          submitComposerRef.current?.();
+        });
+      }
     },
     [applyPromptReplacement, composerCursor, promptRef],
   );
@@ -1793,8 +1820,15 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       if (event.isComposing) return;
       event.preventDefault();
       event.stopPropagation();
-      // Première Entrée : la dictée s'arrête et le texte se POSE. On relit,
-      // on corrige. Seconde Entrée : ça part. Rien ne s'envoie sans relecture.
+      // UNE SEULE ENTRÉE : la dictée s'arrête, le texte se pose, et il PART.
+      //
+      // C'était « première Entrée pose, seconde Entrée envoie — rien ne part
+      // sans relecture ». Enzo l'a redemandé cinq fois : « je veux cliquer sur
+      // Entrée », « toujours stop et pas la touche entrée direct ». Une
+      // relecture imposée à quelqu'un qui n'en veut pas n'est pas une
+      // sécurité, c'est une friction. L'envoi lui-même attend la transcription
+      // (voir `commitDictationTranscript`) : rien ne part vide.
+      envoyerDesQueTranscritRef.current = true;
       //
       // LE FOCUS DOIT REVENIR, sinon la SECONDE Entrée ne va nulle part —
       // mordu le 01/08. Les deux autres sorties de dictée (bouton stop,
@@ -2136,6 +2170,12 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       voiceIsActive,
     ],
   );
+  // L'APPELANT, et c'est l'étape que je rate. `commitDictationTranscript` est
+  // déclaré au-dessus de `submitComposer` : sans cette référence tenue à jour,
+  // l'envoi direct après dictée serait du code mort — écrit, jamais appelé.
+  useEffect(() => {
+    submitComposerRef.current = submitComposer;
+  }, [submitComposer]);
   const expandMobileComposer = useCallback(() => {
     if (composerBlurFrameRef.current !== null) {
       window.cancelAnimationFrame(composerBlurFrameRef.current);

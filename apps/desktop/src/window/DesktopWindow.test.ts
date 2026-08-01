@@ -1164,3 +1164,40 @@ describe("DesktopWindow", () => {
     }),
   );
 });
+
+/**
+ * LE CHROME DE LA FENÊTRE — ce qu'aucun contrôle de bundle n'attrape.
+ *
+ * Le 01/08, un `roundedCorners: false` a été posé sur macOS pour obtenir des
+ * angles droits. La demande était juste et le diagnostic aussi (l'arrondi vient
+ * de macOS, pas de notre CSS). Mais cette option Electron est prévue pour les
+ * fenêtres SANS CADRE : combinée à `titleBarStyle: "hiddenInset"`, elle fait
+ * DISPARAÎTRE les feux tricolores — plus de fermer, réduire, agrandir.
+ *
+ * Le DMG est parti quand même. Il avait été « vérifié » : version lue dans
+ * l'artefact monté, chaînes présentes dans `app.asar`. Aucun de ces contrôles
+ * ne regarde le CHROME — ils prouvent que le code est dedans, jamais que la
+ * fenêtre s'ouvre utilisable. Enzo l'a vu en une minute, moi jamais.
+ *
+ * Ce test ferme cette porte : il juge les OPTIONS, là où le bundle ne dit rien.
+ */
+describe("chrome de fenêtre macOS", () => {
+  it("ne retire JAMAIS les coins arrondis tant que la fenêtre a un cadre", () => {
+    const options = DesktopWindow.getWindowTitleBarOptions(true, "darwin");
+    assert.notStrictEqual(
+      options.roundedCorners,
+      false,
+      "roundedCorners:false avec titleBarStyle hiddenInset supprime les boutons fermer/réduire/agrandir. " +
+        "Pour de vrais angles droits il faut frame:false ET redessiner ces trois boutons — un chantier, pas une ligne.",
+    );
+  });
+
+  it("garde une barre de titre masquée ET la place des feux tricolores", () => {
+    const options = DesktopWindow.getWindowTitleBarOptions(true, "darwin");
+    assert.strictEqual(options.titleBarStyle, "hiddenInset");
+    assert.isDefined(
+      options.trafficLightPosition,
+      "sans position explicite, les feux se replacent en haut à gauche sous notre propre interface",
+    );
+  });
+});
