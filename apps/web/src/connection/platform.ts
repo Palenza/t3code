@@ -22,6 +22,7 @@ import {
   Wakeups,
 } from "@t3tools/client-runtime/connection";
 import { bootstrapRemoteBearerSession } from "@t3tools/client-runtime/authorization";
+import { APP_DISPLAY_NAME } from "../branding";
 import { fetchRemoteEnvironmentDescriptor } from "@t3tools/client-runtime/environment";
 import { managedRelayAccountChanges, managedRelaySessionAtom } from "@t3tools/client-runtime/relay";
 import { EnvironmentRpcRequestObserver } from "@t3tools/client-runtime/rpc";
@@ -117,7 +118,19 @@ function clientMetadata() {
   const desktop = window.desktopBridge !== undefined;
   const platform = navigator.platform.trim();
   return {
-    label: desktop ? "T3 Code Desktop" : "T3 Code Web",
+    // LE NOM VENAIT D'AILLEURS QUE DE LA MARQUE — corrigé le 01/08.
+    //
+    // Ces deux libellés étaient écrits EN DUR, court-circuitant
+    // `APP_DISPLAY_NAME` (`branding.ts`). L'app s'affichait donc « T3 Code
+    // Raptor » partout et s'annonçait « T3 Code Desktop » dans Connexions :
+    // Enzo y a lu, à raison, que le fork se présentait encore sous le nom de
+    // l'amont. Ce n'était pas la marque qui était en cause, c'était une chaîne
+    // qui ne la lisait pas.
+    //
+    // La décision de marque du 29/07 est INCHANGÉE : nom affiché « T3 Code »,
+    // canal local « Raptor ». On se contente de la faire suivre ici, au lieu
+    // de la recopier — une marque recopiée diverge le jour où on la change.
+    label: desktop ? `${APP_DISPLAY_NAME} Desktop` : `${APP_DISPLAY_NAME} Web`,
     deviceType: "desktop" as const,
     ...(platform === "" ? {} : { os: platform }),
   };

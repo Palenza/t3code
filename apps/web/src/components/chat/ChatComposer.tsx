@@ -317,7 +317,41 @@ const ComposerFooterModeControls = memo(function ComposerFooterModeControls(prop
   // Le raccourci ⇧⇥ et la valeur `interactionMode` restent : le mode existe
   // toujours côté provider, on retire seulement l'interrupteur qui obligeait
   // à y penser. Rien n'est cassé en dessous, une décision de moins au-dessus.
-  const interactionModeToggle = null;
+  //
+  // MAIS RETIRER L'INTERRUPTEUR A FERMÉ LA PORTE DE SORTIE — mordu le 01/08.
+  //
+  // Le mode plan s'active encore tout seul : un `ExitPlanMode`, un tour de
+  // plan, et `interactionMode` reste à "plan". Sans bouton, plus AUCUN moyen
+  // visible d'en sortir : le composeur n'affiche rien, et chaque édition
+  // repart en demande d'approbation. Enzo y a passé une session entière,
+  // convaincu que « Build avait disparu » — il n'y avait plus de bouton du
+  // tout. Seul ⇧⇥ subsistait, et rien ne l'annonçait.
+  //
+  // On ne rend donc PAS l'interrupteur d'ENTRÉE (l'ordre du 31/07 tient : on
+  // ne clique pas pour entrer en plan, il monte tout seul). On rend seulement
+  // la SORTIE, et uniquement quand elle sert : visible si — et seulement si —
+  // on est déjà enfermé. Hors mode plan, la rangée est inchangée.
+  const interactionModeToggle =
+    props.showInteractionModeToggle && props.interactionMode === "plan" ? (
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <ComposerControl
+              className="shrink-0 whitespace-nowrap bg-amber-500/10 text-amber-400 hover:bg-amber-500/15 hover:text-amber-300"
+              type="button"
+              onClick={props.onToggleInteractionMode}
+              aria-label="Quitter le mode plan"
+            />
+          }
+        >
+          <ComposerControlIcon icon={ListTodoIcon} className="text-current opacity-100" />
+          <span className="sr-only sm:not-sr-only">Quitter le plan</span>
+        </TooltipTrigger>
+        <TooltipPopup side="top">
+          Quitter le mode plan (⇧⇥) — l'agent réécrit à nouveau
+        </TooltipPopup>
+      </Tooltip>
+    ) : null;
 
   return (
     <>
@@ -1761,6 +1795,15 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       event.stopPropagation();
       // Première Entrée : la dictée s'arrête et le texte se POSE. On relit,
       // on corrige. Seconde Entrée : ça part. Rien ne s'envoie sans relecture.
+      //
+      // LE FOCUS DOIT REVENIR, sinon la SECONDE Entrée ne va nulle part —
+      // mordu le 01/08. Les deux autres sorties de dictée (bouton stop,
+      // annulation) posent ce drapeau ; ce chemin-ci, non. Le texte se posait
+      // donc bien dans le composeur, mais le focus restait sur le bouton micro
+      // cliqué : « c'est toujours le bouton stop au lieu de la touche entrée
+      // pour envoyer ». La promesse « seconde Entrée, ça part » n'était tenue
+      // que si on avait arrêté la dictée à la SOURIS.
+      shouldRestoreComposerFocusAfterVoiceRef.current = true;
       void stopAndCommitVoiceDictation();
     };
     // En capture : on passe AVANT l'éditeur et avant tout autre gestionnaire.

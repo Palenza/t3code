@@ -229,6 +229,7 @@ import {
 } from "../state/entities";
 import { environmentShell } from "../state/shell";
 import { ChatComposer, type ChatComposerHandle } from "./chat/ChatComposer";
+import { useNotificationsDeBureau } from "./chat/useNotificationsDeBureau";
 import { DraftHeroHeadline } from "./chat/DraftHeroHeadline";
 import { ExpandedImageDialog } from "./chat/ExpandedImageDialog";
 import { PullRequestThreadDialog } from "./PullRequestThreadDialog";
@@ -2112,6 +2113,14 @@ function ChatViewContent(props: ChatViewProps) {
     () => derivePendingUserInputs(threadActivities),
     [threadActivities],
   );
+  // Prévenir quand la fenêtre n'est PAS regardée — le manque qui a laissé Enzo
+  // bloqué des heures le 01/08 sur des approbations qu'il ne voyait pas.
+  useNotificationsDeBureau({
+    approbationsEnAttente: pendingApprovals.length,
+    saisiesEnAttente: pendingUserInputs.length,
+    tourEnCours: phase === "running",
+    erreur: threadError ?? null,
+  });
   const activePendingUserInput = pendingUserInputs[0] ?? null;
   const activePendingDraftAnswers = useMemo(
     () =>
@@ -3695,31 +3704,69 @@ function ChatViewContent(props: ChatViewProps) {
     setShowScrollToBottom(false);
     void legendListRef.current?.scrollToEnd?.({ animated });
   }, []);
+  // CE QUI REND LA MAIN À L'HUMAIN QUAND IL REMONTE LE FIL.
+  //
+  // Ces écouteurs sont la SEULE chose qui coupe le suivi automatique. S'ils ne
+  // s'installent pas, la vue redescend au bas à chaque nouveau morceau et on ne
+  // peut plus rien lire pendant que l'agent parle — « je remonte la
+  // conversation et ça saute » (01/08).
+  //
+  // Deux défauts corrigés ici, tous deux silencieux :
+  //
+  //  1. UNE SEULE TENTATIVE, à la frame suivante. Si la liste virtuelle
+  //     n'était pas encore montée à cet instant précis, `scrollNode` était nul,
+  //     on sortait — et plus AUCUN écouteur n'était jamais posé, pour toute la
+  //     durée du fil. Rien ne le signalait. On réessaie donc jusqu'à ce que le
+  //     nœud existe, avec un plafond pour ne pas tourner indéfiniment si la
+  //     liste ne monte jamais.
+  //
+  //  2. LE CLAVIER N'ÉTAIT PAS ÉCOUTÉ. Molette, tactile et clic coupaient le
+  //     suivi ; ↑/↓, PagePrec/PageSuiv, Début/Fin, non. Remonter au clavier
+  //     laissait donc le suivi actif, et la vue se rabattait en bas sous les
+  //     doigts.
   useEffect(() => {
     let removeListeners: (() => void) | null = null;
-    const frame = requestAnimationFrame(() => {
+    let frame = 0;
+    let essais = 0;
+    const ESSAIS_MAX = 120; // ~2 s à 60 Hz : au-delà, la liste ne viendra pas.
+
+    const poser = () => {
       const scrollNode = legendListRef.current?.getScrollableNode();
       if (!scrollNode) {
+        essais += 1;
+        if (essais < ESSAIS_MAX) {
+          frame = requestAnimationFrame(poser);
+        }
         return;
       }
       const handleManualNavigation = () => {
         cancelTimelineLiveFollowForUserNavigationRef.current();
       };
-      scrollNode.addEventListener("wheel", handleManualNavigation, {
-        passive: true,
-      });
-      scrollNode.addEventListener("touchmove", handleManualNavigation, {
-        passive: true,
-      });
-      scrollNode.addEventListener("pointerdown", handleManualNavigation, {
-        passive: true,
-      });
+      // Seules les touches qui DÉPLACENT la vue comptent : taper du texte dans
+      // le composeur ne doit pas couper le suivi.
+      const TOUCHES_DE_NAVIGATION = new Set([
+        "ArrowUp",
+        "ArrowDown",
+        "PageUp",
+        "PageDown",
+        "Home",
+        "End",
+      ]);
+      const handleKeyNavigation = (event: KeyboardEvent) => {
+        if (TOUCHES_DE_NAVIGATION.has(event.key)) handleManualNavigation();
+      };
+      scrollNode.addEventListener("wheel", handleManualNavigation, { passive: true });
+      scrollNode.addEventListener("touchmove", handleManualNavigation, { passive: true });
+      scrollNode.addEventListener("pointerdown", handleManualNavigation, { passive: true });
+      scrollNode.addEventListener("keydown", handleKeyNavigation, { passive: true });
       removeListeners = () => {
         scrollNode.removeEventListener("wheel", handleManualNavigation);
         scrollNode.removeEventListener("touchmove", handleManualNavigation);
         scrollNode.removeEventListener("pointerdown", handleManualNavigation);
+        scrollNode.removeEventListener("keydown", handleKeyNavigation);
       };
-    });
+    };
+    frame = requestAnimationFrame(poser);
 
     return () => {
       cancelAnimationFrame(frame);

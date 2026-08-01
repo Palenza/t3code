@@ -1,0 +1,29 @@
+{
+  "_pourquoi": "JUSQU'OÙ ON A LU, dépôt par dépôt. Sans ce repère, une veille relit le même terrain à chaque passage et rate ce qui est arrivé entre-temps. Le repère ne s'avance JAMAIS tout seul : `vigie.sh --marquer-lu` est un geste délibéré, sinon on déclarerait lu ce que personne n'a ouvert — la case cochée qui ment, déjà payée le 01/08 sur l'i18n.",
+  "_champs": {
+    "depot": "owner/name sur GitHub",
+    "role": "pourquoi on le regarde — si on ne sait pas l'écrire, on ne le regarde pas",
+    "lu_jusqua": "date ISO ; ce qui est APRÈS est à examiner",
+    "dernier_examen": "quand un humain a réellement passé la liste en revue"
+  },
+  "depots": [
+    {
+      "depot": "pingdotgg/t3code",
+      "role": "la base dont Raptor est parti. On ne fusionne plus : on absorbe ce qu'on choisit.",
+      "lu_jusqua": "2026-08-01",
+      "dernier_examen": "2026-08-01"
+    },
+    {
+      "depot": "NousResearch/hermes-agent",
+      "role": "agent concurrent le plus proche de nos sujets — catalogue d'absorption dans CHANTIER-HERMES.md",
+      "lu_jusqua": "2026-08-01",
+      "dernier_examen": "2026-08-01"
+    },
+    {
+      "depot": "obsidianmd/obsidian-releases",
+      "role": "SUSPECT — ne tient PAS son rôle. Mesuré au premier run (01/08) : les 8 commits sont des « Mirror community plugins » automatiques. C'est un miroir de publication, pas la source d'Obsidian (qui est fermée). Aucune idée d'implémentation n'en sortira. À remplacer par un dépôt qui porte VRAIMENT la maille de liens qu'on cherche, ou à retirer — une vigie qui regarde à côté coûte de l'attention et rend un faux « rien de neuf ».",
+      "lu_jusqua": "2026-08-01",
+      "dernier_examen": "2026-08-01"
+    }
+  ]
+}

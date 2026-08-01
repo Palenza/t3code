@@ -76,7 +76,12 @@ export class DesktopEnvironment extends Context.Service<
   }
 >()("@t3tools/desktop/app/DesktopEnvironment") {}
 
-const APP_BASE_NAME = "T3 Code";
+/** EXPORTÉ, et c'est le point : la marque doit avoir UNE source par processus.
+ * Elle était recopiée en dur dans `DesktopLocalEnvironmentAuth`, qui annonçait
+ * « T3 Code Desktop » pendant que l'app s'affichait « T3 Code (Raptor) » —
+ * Enzo y a lu, à raison, que le fork se présentait sous le nom de l'amont. Une
+ * marque recopiée diverge le jour où on la change ; celle-ci se lit. */
+export const APP_BASE_NAME = "T3 Code";
 
 function resolveDesktopAppStageLabel(input: {
   readonly isDevelopment: boolean;

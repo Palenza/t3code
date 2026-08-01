@@ -74,6 +74,14 @@ export const VoiceRecordingOverlay = memo(function VoiceRecordingOverlay(props: 
             onClick={props.onStop}
           >
             Stop
+            {/* ENTRÉE D'ABORD — 01/08. Le raccourci existait, la touche aussi
+             * (`surEntree`, ChatComposer), mais la barre n'annonçait que
+             * ⌥⇧R : « il y a toujours stop et pas entrer, je dois aller
+             * chercher le bouton à la souris ». Un geste qui marche mais que
+             * rien ne montre n'existe pas pour celui qui l'utilise. On met
+             * donc ⏎ en tête, et le raccourci reste pour ceux qui l'ont
+             * appris. */}
+            <Keycap>⏎</Keycap>
             <ShortcutKeycaps shortcut={props.stopShortcutLabel} />
           </Button>
 

@@ -16,7 +16,17 @@ plan.
 
 ## Où en est le catalogue — au 01/08/2026
 
-**36 livrés · 17 partiels · 32 écartés sur pièce · 0 restant.**
+**36 livrés · 17 partiels · 33 écartés sur pièce · 1 RESTANT — 87 lignes.**
+
+> Le total se VÉRIFIE contre les cases, il ne se retient pas :
+> `awk '/^- \[x\]/{x++} /^- \[~\]/{t++} /^- \[–\]/{e++} /^- \[ \]/{v++} END{print x,t,e,v,x+t+e+v}' docs/CHANTIER-HERMES.md`
+> Deux fois le 01/08 il a divergé après une modification — c'est ce contrôle
+> qui l'a vu, pas ma relecture.
+
+> Corrigé le 01/08 : l'entrée **77 · i18n** était cochée à tort — des locales
+> présentes dans des paquets avaient été prises pour un réglage livré. Le
+> compte disait donc « 0 restant » alors qu'une demande d'Enzo dormait. Un
+> total ne vaut que ce que valent ses cases.
 
 Chaque ligne a été INSTRUITE : aucune n'est restée sans qu'on aille voir. Un
 écart porte toujours sa raison, et une raison porte un reçu quand elle repose
@@ -174,23 +184,23 @@ la raison — un écart sans raison se rouvre tous les mois.
   base en mémoire, avec nos réglages actuels (`unicode61
 remove_diacritics 2`) contre `trigram` :
 
-                                                                                            requête      unicode61 (le nôtre)   trigram
-                                                                                            数据  (2)          0                   0
-                                                                                            数据库 (3)          0                   1
-                                                                                            東京  (2)          0                   0
-                                                                                            chat               1                   1
-                                                                                            dort               1                   1
+                                                                                              requête      unicode61 (le nôtre)   trigram
+                                                                                              数据  (2)          0                   0
+                                                                                              数据库 (3)          0                   1
+                                                                                              東京  (2)          0                   0
+                                                                                              chat               1                   1
+                                                                                              dort               1                   1
 
-                                                                                        Donc **notre index ne trouve JAMAIS rien en CJK**, pas même sur trois
-                                                                                        caractères — ce n'est pas une dégradation, c'est un mur. `trigram` le
-                                                                                        lève dès 3 caractères sans toucher au français.
-                                                                                        Reste hors de portée : les termes CJK de **1-2 caractères**, et c'est
-                                                                                        précisément ce que leur bigramme compilé existe pour couvrir.
-                                                                                        **On ne bascule PAS aujourd'hui** : produit français d'abord, un index
-                                                                                        trigramme pèse plus lourd (une entrée par fenêtre de 3), et personne
-                                                                                        n'attend cette recherche. Mais le jour où un utilisateur CJK arrive, la
-                                                                                        décision est un MOT dans la migration 036 — plus un chantier natif.
-                                                                                        `native/fts5_cjk/` **(copie C, désormais optionnelle)**
+                                                                                          Donc **notre index ne trouve JAMAIS rien en CJK**, pas même sur trois
+                                                                                          caractères — ce n'est pas une dégradation, c'est un mur. `trigram` le
+                                                                                          lève dès 3 caractères sans toucher au français.
+                                                                                          Reste hors de portée : les termes CJK de **1-2 caractères**, et c'est
+                                                                                          précisément ce que leur bigramme compilé existe pour couvrir.
+                                                                                          **On ne bascule PAS aujourd'hui** : produit français d'abord, un index
+                                                                                          trigramme pèse plus lourd (une entrée par fenêtre de 3), et personne
+                                                                                          n'attend cette recherche. Mais le jour où un utilisateur CJK arrive, la
+                                                                                          décision est un MOT dans la migration 036 — plus un chantier natif.
+                                                                                          `native/fts5_cjk/` **(copie C, désormais optionnelle)**
 
 - [–] **7 · ~~PTC — appel d'outils programmatique~~** — **Écarté : le CLI le
   porte déjà.** Troisième ligne fermée le 01/08 en fouillant le binaire du CLI
@@ -953,7 +963,128 @@ seulement pour le bloc.`stream*consumer.py` (2 250)
 
 - [x] **76 · Moteur de skins multi-surfaces** — l'éditeur de thème d'Arc, mesuré sur 10 761 frames, thème par projet.
 
-- [x] **77 · i18n — 17 langues** — des locales existent déjà côté paquets.
+- [ ] **77 · i18n — 17 langues** — **RIEN N'EST LIVRÉ, et cette ligne a menti.**
+      Elle était cochée au motif que « des locales existent déjà côté paquets ».
+      Des fichiers de locale dans des dépendances ne sont pas un réglage : mesuré
+      le 01/08, `apps/web/src` ne contient AUCUN sélecteur de langue d'interface —
+      les seules occurrences de `locale` servent au formatage des dates
+      (`timestampFormat.ts`, `session-logic.ts`). Enzo avait envoyé les réglages
+      d'Hermès en exemple ; il a cru sa demande perdue, et la case cochée est ce
+      qui le lui a fait croire. Une case qui déclare fait ce qui ne l'est pas est
+      pire qu'une case vide : elle éteint la question.
+      **La justification était fausse DEUX fois** — vérifié le 01/08 :
+      `find apps packages` ne rend aucun dossier `locales`/`i18n`/`lang`, aucun
+      `.ftl`, aucun `en.json`/`fr.json`, et `apps/web/package.json` ne dépend
+      d'aucun moteur (`i18next`, `intl`, `lingui`, `fluent`). Les « locales côté
+      paquets » vivaient dans `node_modules` : elles ne traduisent rien de NOTRE
+      interface.
+
+  **Deux chantiers différents dorment sous le même mot « langue ». Les
+  confondre est ce qui a produit la case cochée.**
+
+  1. **La langue de RÉPONSE de l'agent** — petit, borné, utile tout de suite :
+     un réglage qui ajoute une consigne de langue au prompt système. Aucune
+     traduction à écrire, rien à extraire. C'est ce que la plupart des outils
+     d'agent appellent « changer la langue », et vraisemblablement ce
+     qu'Enzo a vu chez Hermès.
+  2. **La langue de l'INTERFACE** — gros : moteur i18n, extraction de toutes
+     les chaînes de `apps/web`, traductions, tests de non-régression. Un
+     sélecteur posé avant ce travail n'est qu'une coquille — exactement le
+     genre de « livré » qui a déjà éteint cette demande une fois.
+
+  **Reco : faire le 1, et n'ouvrir le 2 que sur décision explicite d'Enzo**
+  (c'est un chantier de produit, pas une case de catalogue). Ne PAS recocher
+  cette ligne tant que l'un des deux n'est pas réellement dans l'interface.
+
+- [–] **87 · Sauter le résumé de compaction quand il ne peut rien gagner** —
+  première prise de la VIGIE (01/08), et premier écart motivé.
+
+  **L'idée est excellente.** Hermès (`8daf0306`) : avant de payer un appel LLM
+  de résumé, vérifier qu'il peut réellement libérer des tokens. Si la section
+  centrale fait moins de 10 % du seuil ET qu'une inefficacité a déjà été
+  constatée, on saute l'appel et on retombe sur la suppression déterministe.
+  Sans ce garde, une session lourde en outils **brûle 500 s** pour remplacer
+  quelques messages légers par un gain négligeable. Leur soin du détail vaut
+  d'être noté : un compteur de « sauts » SÉPARÉ de celui des échecs, pour
+  qu'un saut délibéré ne verrouille jamais la compaction ; et un journal en
+  info, pas en avertissement, parce que c'est une optimisation, pas une panne.
+
+  **Écarté quand même, et voici le reçu** : `apps/server/src` ne contient
+  AUCUNE compaction — vérifié le 01/08, zéro `compact`/`summarize` dans un
+  chemin de conversation. C'est le SDK `@anthropic-ai/claude-agent-sdk` qui
+  compacte pour nous. Il n'y a donc rien où brancher ce garde : le coût qu'il
+  évite n'est pas le nôtre à payer, et le code qui le paierait ne nous
+  appartient pas.
+
+  **À rouvrir si — et seulement si — on reprend la compaction en main.** Ce
+  jour-là, c'est la conception à copier. En attendant, construire notre propre
+  compaction POUR pouvoir y mettre ce garde serait résoudre un problème qu'on
+  n'a pas.
+
+- [x] **86 · NOTIFICATIONS NATIVES DE BUREAU — les QUATRE événements livrés le
+      01/08.** `notifyOnApproval`, `notifyOnInput`, `notifyOnFailure`,
+      `notifyOnCompletion` : le quatuor du contrat, câblé sur la surface bureau.
+
+  **Livré** : `apps/web/src/components/chat/useNotificationsDeBureau.ts`,
+  appelé depuis `ChatView.tsx:2118` (import l. 232 — appelant VÉRIFIÉ, pas
+  supposé : c'est l'étape que je rate). Prévient sur _approbation attendue_ et
+  _saisie attendue_, uniquement fenêtre non regardée. La décision est extraite
+  en fonction PURE `aviserOuSeTaire`, testée sans monter de composant — comme
+  `session-logic.ts` — parce que `@testing-library/react` n'est pas au dépôt et
+  qu'une dépendance pour un test ne se justifiait pas. 6 tests, dont **quatre
+  de SILENCE** : c'est là qu'est la valeur, une notification de trop apprend à
+  ignorer le canal.
+
+  **L'ordre des avis est un choix** : ce qui BLOQUE (approbation, saisie) passe
+  devant ce qui informe (échec, fin de tour). Un tour qui attend ton feu vert
+  ne repartira jamais seul ; un tour fini a déjà rendu son travail. Jamais deux
+  avis d'un coup — deux notifications simultanées, c'est la moitié qui ne sera
+  pas lue. Et l'échec prime la complétion : un tour qui plante retombe AUSSI,
+  annoncer « réponse prête » pour un tour qui vient d'échouer serait le pire
+  message possible (cas figé au banc).
+
+  **Sur les transitions, jamais sur l'état** : apparition de l'erreur (pas sa
+  présence, sinon elle re-sonnerait tant qu'elle reste affichée), retombée du
+  tour (pas son arrêt — au repos `tourEnCours` est faux en permanence, et on
+  sonnerait sans fin). Deux cas de banc gardent précisément ça.
+
+  **Reste à faire, et ce n'est PAS bloquant** : les RÉGLAGES. Les quatre
+  bascules d'Hermès, le son de fin et le bouton de test n'existent pas côté
+  bureau ; la permission du navigateur fait office d'interrupteur unique, et on
+  ne la redemande jamais de force. À ouvrir si le canal se révèle trop bavard
+  à l'usage — pas avant, on ne règle pas un problème qu'on n'a pas.
+
+  Relevé le 01/08 en comparant les réglages d'Hermès aux nôtres.
+
+  **Ce n'est PAS une fonctionnalité à inventer.**
+  `packages/contracts/src/relay.ts:65` porte déjà exactement le quatuor
+  d'Hermès — `enabled`, `notifyOnApproval`, `notifyOnInput`,
+  `notifyOnCompletion`, `notifyOnFailure` — plus la portée
+  `agent_activity_notifications` (l. 210) et le genre `push_notification`
+  (l. 836). Mais tout ça ne sert qu'au **relais push** (mobile / distant).
+  L'app de BUREAU, la seule qu'Enzo utilise, n'en tire rien.
+
+  **Ce que ça a coûté, le jour même où on l'a trouvé.** Enzo est resté bloqué
+  des heures sur des demandes d'approbation qu'il ne voyait pas, fenêtre en
+  arrière-plan. Rien ne l'a prévenu. C'est le manque de la liste qui a déjà
+  fait perdre une journée entière.
+
+  **Point d'ancrage repéré, et son piège.** L'événement arrive dans
+  `apps/web/src/session-logic.ts:393` (`activity.kind === "approval.requested"`),
+  et les genres y sont déjà classés (`command` / `file-read` / `file-change`,
+  l. 382-390). MAIS `session-logic.ts` est un module de logique PURE, couvert
+  par `session-logic.test.ts` : y déclencher une `Notification` y planterait un
+  effet de bord. Le câblage doit passer par un abonné React qui observe ces
+  activités, pas par la logique elle-même.
+
+  **Deux exigences pour que ce soit utile et pas du bruit** : ne notifier que
+  fenêtre NON focalisée (sinon ça double le toast déjà présent), et réutiliser
+  le quatuor du contrat plutôt que d'en réinventer un — deux taxonomies pour
+  la même chose divergeraient en silence.
+
+  **Reco : c'est le n°1 de la liste des manques face à Hermès**, devant les
+  réglages de sous-agents. Il est petit (câblage d'un contrat existant vers une
+  surface) et il répare une douleur mesurée, pas supposée.
 
 - [–] **78 · Vue focus, moteur console, UI curses de repli, presse-papier** — T3 est Electron : une UI terminal de repli répond à un produit qui vit dans un terminal.
 

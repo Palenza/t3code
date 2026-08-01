@@ -157,6 +157,40 @@ describe("chunked transcription engine", () => {
     expect(updates.map((update) => update.kind)).toEqual(["ready", "ended", "ready"]);
   });
 
+  // FIGE UN COMPORTEMENT EXISTANT, ne corrige rien — et le dire importe.
+  //
+  // Le silence coûterait l'ENREGISTREMENT, pas seulement un bouton qui tourne :
+  // `useVoiceDictationSession` arme un délai dès la demande d'arrêt et ne le
+  // désarme que sur `ended` (un `final` range le texte, il ne conclut rien).
+  // Au bout du délai, l'UI JETTE le transcript dicté.
+  //
+  // J'ai cru le 01/08 que le moteur sortait sans `ended` quand la
+  // reconnaissance échouait, et j'ai écrit un correctif. Ce test, passé sur le
+  // code d'ORIGINE, l'a démenti : `#finalizationTail` est `.catch`-gardé, donc
+  // il ne rejette jamais et l'échec voyage dans `#backgroundError`. Correctif
+  // annulé. Le test reste parce qu'il verrouille ce qui protège vraiment :
+  // si quelqu'un retire ce `.catch`, l'échec deviendrait un rejet, `ended` ne
+  // serait plus émis, et la dictée se perdrait en silence.
+  it("annonce `ended` même quand la reconnaissance échoue, et propage l'erreur", async () => {
+    const recognizer: Recognizer = {
+      capabilities: {},
+      transcribe: () => Promise.reject(new Error("moteur indisponible")),
+    };
+    const updates: TranscriptionUpdate[] = [];
+    const engine = new ChunkedTranscriptionEngine({
+      recognizer,
+      onUpdate: (update) => updates.push(update),
+      partialIntervalSeconds: 99,
+      minimumSegmentSeconds: 0,
+    });
+    await engine.start({ sessionId: "qui-rejette" });
+    engine.pushAudio(new Float32Array([0.1]));
+
+    await expect(engine.stopAndCommit()).rejects.toThrow("moteur indisponible");
+    // L'erreur remonte ET l'UI est débloquée : les deux, pas l'un ou l'autre.
+    expect(updates.map((update) => update.kind)).toContain("ended");
+  });
+
   it("matches the sidecar by skipping inference at or below 0.3 seconds", async () => {
     const lengths: number[] = [];
     const recognizer: Recognizer = {

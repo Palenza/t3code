@@ -9,6 +9,7 @@ import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 
+import { APP_BASE_NAME } from "../app/DesktopEnvironment.ts";
 import * as DesktopBackendPool from "./DesktopBackendPool.ts";
 
 export class DesktopLocalEnvironmentAuthBackendNotConfiguredError extends Schema.TaggedErrorClass<DesktopLocalEnvironmentAuthBackendNotConfiguredError>()(
@@ -71,7 +72,8 @@ export const make = Effect.gen(function* () {
           httpBaseUrl: config.httpBaseUrl.href,
           credential,
           clientMetadata: {
-            label: "T3 Code Desktop",
+            // Lue, pas recopiée — voir le commentaire sur `APP_BASE_NAME`.
+            label: `${APP_BASE_NAME} Desktop`,
             deviceType: "desktop",
           },
         }).pipe(
