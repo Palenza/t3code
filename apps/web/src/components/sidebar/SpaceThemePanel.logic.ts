@@ -7,18 +7,42 @@ import type { SidebarThemeStop } from "../../sidebarThemeStore";
  *
  *   LES RONDS SONT TOUJOURS À DISTANCE ÉGALE LES UNS DES AUTRES.
  *
- * L'implémentation précédente posait les ronds sur un RAYON COMMUN autour du
- * centre de la toile, chacun gardant son angle propre. Conséquence : dès que
- * la dominante s'approchait du centre, le rayon tombait et les trois ronds se
- * SUPERPOSAIENT — d'où « je ne peux pas rajouter trois points » (le troisième
- * naissait sous les autres) et « les points ne sont pas à distance égale ».
+ * ── CE QUE LA MESURE A TRANCHÉ, le 01/08 ────────────────────────────────────
  *
- * Le modèle ici est le seul qui rende l'invariant vrai PARTOUT : les ronds
- * forment une FIGURE RIGIDE — un point, un segment, ou un triangle
- * ÉQUILATÉRAL de côté ÉCART_RONDS. Glisser la TRANSLATE (les distances sont
- * invariantes par translation, gratuitement) ; promouvoir un satellite ne
- * fait que permuter les rôles (un triangle équilatéral vu depuis n'importe
- * lequel de ses sommets reste équilatéral) ; retirer un rond en enlève un.
+ * Deux modèles se sont succédé ici, et les DEUX étaient faux :
+ *
+ *  1. Rayon commun, chacun gardant son angle propre. Au centre, le rayon
+ *     tombait et les ronds se SUPERPOSAIENT — « je ne peux pas rajouter trois
+ *     points », « les points ne sont pas à distance égale ». Il manquait un
+ *     PLANCHER de rayon ; on a jeté le modèle au lieu de poser le plancher.
+ *  2. Figure RIGIDE translatée. L'invariant devenait vrai partout, mais le
+ *     glissé ne ressemblait plus à Arc du tout : chaque rond finissait à une
+ *     distance différente du centre, donc à une vivacité différente, et le
+ *     thème se délitait à mesure qu'on le déplaçait.
+ *
+ * Reçu (enregistrement Arc du 31/07, 120 fps, décortiqué le 01/08) :
+ *
+ *   • 300 images d'un glissé à 2 ronds : le milieu des deux reste à
+ *     (339,96 ± 1,05 · 337,21 ± 0,58) px sur une toile de 680 — le CENTRE.
+ *     Ratio de déplacement de l'autre rond : −0,95 en x, −1,00 en y. Ils vont
+ *     à l'OPPOSÉ. La mesure du 30/07 avait lu 0,98 et conclu « ratio 1 » :
+ *     elle avait la magnitude et lui manquait le SIGNE.
+ *   • 672 images d'un glissé à 3 ronds : les trois rayons ne s'écartent que de
+ *     1,5 % (médiane) les uns des autres pendant que le rayon lui-même balaie
+ *     62 → 287 px ; les trois écarts angulaires tiennent à 60,0° ± 0,6 /
+ *     149,3° ± 0,8 / 150,7° ± 0,6, somme 360,0°.
+ *
+ * LA LOI D'ARC, donc : les ronds vivent sur un CERCLE centré sur la toile.
+ * Tirer un rond fixe le RAYON COMMUN de tous et fait TOURNER l'anneau entier.
+ *
+ * On la reprend telle quelle, avec les deux pièces qui manquaient au modèle 1 :
+ * un PLANCHER de rayon (Arc ne descend pas sous 62/680 = 0,09), et des ronds
+ * ÉGALEMENT RÉPARTIS en angle. Également répartis sur un cercle, ils forment
+ * un polygone RÉGULIER : l'invariant « à distance égale » est vrai à tous les
+ * rayons, gratuitement. Ce que le rayon change, c'est la TAILLE du polygone —
+ * près du centre les couleurs sont vives et proches, au bord elles sont pâles
+ * et écartées. C'est exactement ce que fait Arc, et c'est un seul geste pour
+ * deux réglages.
  */
 
 export interface Point {
@@ -26,17 +50,8 @@ export interface Point {
   readonly y: number;
 }
 
-/**
- * L'écart CONSTANT entre deux ronds voisins, en fraction de toile.
- *
- * Reçu : la toile mesure 358 × 372 css ; la dominante fait 34 css et les
- * satellites 20 (STOP_SIZES_PX, mesurés). 0,2 → 71,6 css à l'horizontale,
- * 74,4 à la verticale, soit ~44 css de vide entre les BORDS de deux ronds :
- * assez pour qu'un rond ajouté se voie immédiatement, assez peu pour que le
- * triangle complet tienne dans la toile avec ses marges (0,2 × √3/2 = 0,173
- * de hauteur, contre 0,88 disponible).
- */
-export const ECART_RONDS = 0.2;
+/** Le centre de la toile — le point autour duquel TOUT tourne ici. */
+const CENTRE = 0.5;
 
 /**
  * La marge que la figure ne franchit pas : un rond de 34 css sur 358 fait
@@ -45,10 +60,68 @@ export const ECART_RONDS = 0.2;
  */
 const MARGE = 0.06;
 
+/**
+ * LE PLANCHER DE RAYON — la pièce qui manquait au premier modèle.
+ *
+ * Reçu : sur 672 images de glissé à trois ronds, le rayon d'Arc balaie 62 à
+ * 287 px sur une toile de 680, soit 0,09 à 0,42. À 62 px les deux ronds les
+ * plus proches sont à 61 px l'un de l'autre et leurs anneaux se FRÔLENT sans
+ * jamais fusionner (image 11 317, regardée).
+ *
+ * Chez nous à 0,09, trois ronds également répartis sont à 2 × 0,09 × sin 60°
+ * = 0,156 de toile, soit 56 css pour des satellites de 20 : 36 css de vide
+ * entre les bords. C'est le fil-piège — posé là où seul l'effondrement le
+ * touche, jamais un geste sain.
+ */
+export const RAYON_MINI = 0.09;
+
+/** Le plafond : au-delà, un rond sortirait de la toile. Arc mesure 0,42. */
+export const RAYON_MAXI = CENTRE - MARGE;
+
+/** Le rayon d'une figure NEUVE, entre les deux — thème franc, ronds lisibles. */
+export const RAYON_DEFAUT = 0.24;
+
 /** Orientation de départ quand rien ne la dicte : vers le bas-droite. */
 const ORIENTATION_DEFAUT = Math.PI / 4;
 
-const TIERS_DE_TOUR = Math.PI / 3;
+const TOUR = Math.PI * 2;
+
+/** Le rayon d'un point, borné aux limites de la toile. */
+const rayonBorne = (rayon: number): number => Math.min(RAYON_MAXI, Math.max(RAYON_MINI, rayon));
+
+/** L'angle d'un point autour du centre. Au centre pile, la direction n'existe
+ * pas : on rend l'orientation par défaut plutôt qu'un zéro qui se ferait
+ * passer pour une mesure. */
+const angleDe = (point: Point): number => {
+  const dx = point.x - CENTRE;
+  const dy = point.y - CENTRE;
+  if (Math.hypot(dx, dy) < 1e-9) return ORIENTATION_DEFAUT;
+  return Math.atan2(dy, dx);
+};
+
+/** Le rayon commun de la figure : celui de la dominante, borné. */
+const rayonDe = (points: ReadonlyArray<Point>): number => {
+  const dominante = points[0];
+  if (dominante === undefined) return RAYON_DEFAUT;
+  return rayonBorne(Math.hypot(dominante.x - CENTRE, dominante.y - CENTRE));
+};
+
+/** Le point du cercle à cet angle et ce rayon. */
+const surLeCercle = (angle: number, rayon: number): Point => ({
+  x: CENTRE + Math.cos(angle) * rayon,
+  y: CENTRE + Math.sin(angle) * rayon,
+});
+
+/**
+ * `count` ronds ÉGALEMENT répartis sur le cercle, le premier à `angle`.
+ * Également répartis sur un cercle = polygone régulier = tous à distance
+ * égale, à n'importe quel rayon. L'invariant n'est plus quelque chose qu'on
+ * maintient, c'est une conséquence de la forme.
+ */
+const anneauRegulier = (angle: number, rayon: number, count: number): Point[] =>
+  Array.from({ length: Math.max(1, count) }, (_, index) =>
+    surLeCercle(angle + (TOUR * index) / Math.max(1, count), rayon),
+  );
 
 // ------------------------------------------------------------------ couleur
 // LA ROUE INVISIBLE (10 761 frames, mesure du 29/07) : teinte = angle autour
@@ -125,116 +198,83 @@ export function wheelPositionOf(hex: string): Point {
 
 // ------------------------------------------------------------------ figure
 
-/** De combien translater un axe pour que [min, max] rentre dans les marges. */
-function recalageAxe(min: number, max: number): number {
-  const bas = MARGE;
-  const haut = 1 - MARGE;
-  // Figure plus large que la toile (impossible aux tailles actuelles, mais
-  // une limite silencieuse est pire que pas de limite) : on la CENTRE.
-  if (max - min > haut - bas) return (bas + haut) / 2 - (min + max) / 2;
-  if (min < bas) return bas - min;
-  if (max > haut) return haut - max;
-  return 0;
-}
-
 /**
- * Ramène la figure entière dans la toile SANS jamais la déformer : une seule
- * translation pour tout le monde, donc toutes les distances survivent.
+ * Ramène les ronds sur l'anneau régulier le plus proche de ce qu'ils sont.
+ *
+ * C'est aussi la MIGRATION des thèmes enregistrés sous l'ancien modèle : leurs
+ * ronds sont à des rayons quelconques, on les remet sur un cercle commun sans
+ * changer l'orientation de la dominante — la teinte principale du thème
+ * survit, seule la cohérence revient.
  */
 export function recaler(points: ReadonlyArray<Point>): Point[] {
   if (points.length === 0) return [];
-  const xs = points.map((point) => point.x);
-  const ys = points.map((point) => point.y);
-  const dx = recalageAxe(Math.min(...xs), Math.max(...xs));
-  const dy = recalageAxe(Math.min(...ys), Math.max(...ys));
-  return points.map((point) => ({ x: point.x + dx, y: point.y + dy }));
+  return anneauRegulier(angleDe(points[0]!), rayonDe(points), points.length);
 }
 
-/** L'orientation actuelle de la figure : l'angle dominante → premier satellite. */
+/** L'orientation de la figure : l'angle de la dominante autour du centre. */
 export function orientationDe(points: ReadonlyArray<Point>): number {
   const dominante = points[0];
-  const satellite = points[1];
-  if (dominante === undefined || satellite === undefined) return ORIENTATION_DEFAUT;
-  const angle = Math.atan2(satellite.y - dominante.y, satellite.x - dominante.x);
-  return Number.isFinite(angle) ? angle : ORIENTATION_DEFAUT;
+  return dominante === undefined ? ORIENTATION_DEFAUT : angleDe(dominante);
 }
 
-/** La distance d'un point au centre de la toile — plus c'est loin, plus c'est PÂLE. */
-const distanceAuCentre = (point: Point) => Math.hypot(point.x - 0.5, point.y - 0.5);
-
-const sommet = (depuis: Point, angle: number): Point => ({
-  x: depuis.x + Math.cos(angle) * ECART_RONDS,
-  y: depuis.y + Math.sin(angle) * ECART_RONDS,
-});
-
 /**
- * Translate toute la figure pour que la dominante vise (x, y). C'est le
- * glissé : ratio de déplacement satellite/dominante = 1 exactement (mesure
- * du 30/07 : médiane 0,98 sur 244 relevés), et les écarts entre ronds ne
- * bougent pas d'un pixel.
+ * LE GLISSÉ, tel qu'Arc le fait (mesuré : voir l'en-tête du fichier).
+ *
+ * Tirer un rond vers (x, y) fixe le RAYON COMMUN de tous les ronds et fait
+ * TOURNER l'anneau entier pour que la dominante vise le doigt. Les écarts
+ * angulaires ne changent jamais ; le rayon, lui, change tout le temps — et
+ * c'est le sujet : près du centre le thème est vif et resserré, au bord il est
+ * pâle et écarté.
+ *
+ * Le rayon est BORNÉ des deux côtés. Le plancher est ce qui manquait à la
+ * première version : sans lui, viser le centre écrase l'anneau et les ronds se
+ * superposent.
  */
 export function deplacerFigure(points: ReadonlyArray<Point>, x: number, y: number): Point[] {
-  const dominante = points[0];
-  if (dominante === undefined) return recaler([{ x, y }]);
-  const dx = x - dominante.x;
-  const dy = y - dominante.y;
-  return recaler(points.map((point) => ({ x: point.x + dx, y: point.y + dy })));
+  if (points.length === 0) return [];
+  const dx = x - CENTRE;
+  const dy = y - CENTRE;
+  const vise = Math.hypot(dx, dy);
+  // Au centre PILE, le doigt ne désigne aucune direction : on garde celle
+  // qu'on avait plutôt que de faire sauter la figure sur un angle nul.
+  const angle = vise < 1e-9 ? angleDe(points[0]!) : Math.atan2(dy, dx);
+  return anneauRegulier(angle, rayonBorne(vise), points.length);
 }
 
 /**
- * Ajoute un rond à ÉCART_RONDS de tous les autres, du côté qui S'ÉLOIGNE du
- * centre — donc sur un ton plus PÂLE (la roue s'éclaircit vers le bord).
- * C'est la demande fondateur : « en rajoutant un point, ça garde le plus
- * blanc ». Le dégradé va du franc au clair, comme les préréglages.
+ * Ajoute un rond : l'anneau se REDISTRIBUE à N+1, même rayon, même orientation
+ * de dominante.
+ *
+ * Sous l'ancien modèle il fallait choisir où poser le nouveau et vérifier
+ * qu'il ne naissait pas sous les autres (« je ne peux pas rajouter trois
+ * points »). Ici la question ne se pose plus : N+1 points également répartis
+ * sur un cercle sont à distance égale par construction, et le plancher de
+ * rayon garantit que cette distance reste visible.
  */
 export function ajouterRond(points: ReadonlyArray<Point>, max: number): Point[] {
-  const dominante = points[0];
-  if (dominante === undefined) return recaler([{ x: 0.5, y: 0.5 }]);
+  if (points.length === 0) return anneauRegulier(ORIENTATION_DEFAUT, RAYON_DEFAUT, 1);
   if (points.length >= max) return [...points];
-
-  if (points.length === 1) {
-    // Vers l'extérieur : l'angle centre → dominante. Au centre pile, la
-    // direction n'existe pas ; on prend l'orientation par défaut.
-    const angle =
-      distanceAuCentre(dominante) < 1e-6
-        ? ORIENTATION_DEFAUT
-        : Math.atan2(dominante.y - 0.5, dominante.x - 0.5);
-    return recaler([dominante, sommet(dominante, angle)]);
-  }
-
-  // Le troisième sommet du triangle équilatéral : ±60° du côté déjà occupé.
-  // Des deux candidats possibles, on garde le PLUS ÉLOIGNÉ du centre — le
-  // plus pâle, toujours la même règle.
-  const base = orientationDe(points);
-  const candidats = [
-    sommet(dominante, base + TIERS_DE_TOUR),
-    sommet(dominante, base - TIERS_DE_TOUR),
-  ];
-  const troisieme =
-    distanceAuCentre(candidats[0]!) >= distanceAuCentre(candidats[1]!)
-      ? candidats[0]!
-      : candidats[1]!;
-  return recaler([...points, troisieme]);
+  return anneauRegulier(angleDe(points[0]!), rayonDe(points), points.length + 1);
 }
 
-/** Retire le dernier satellite. Les rescapés n'ont pas bougé — donc l'écart tient. */
+/** Retire un rond : l'anneau se redistribue à N−1, rayon et orientation gardés. */
 export function retirerRond(points: ReadonlyArray<Point>): Point[] {
   if (points.length <= 1) return [...points];
-  return points.slice(0, -1);
+  return anneauRegulier(angleDe(points[0]!), rayonDe(points), points.length - 1);
 }
 
 /**
- * Pose une figure NEUVE de `count` ronds ancrée sur (x, y) — le clic sur une
- * pastille du nuancier. Orientée vers l'extérieur : les ronds ajoutés sont
- * les plus pâles.
+ * Pose une figure NEUVE de `count` ronds dont la dominante vise (x, y) — le
+ * clic sur une pastille du nuancier. Le rayon vient de (x, y) : choisir une
+ * couleur pâle du nuancier pose un anneau large, une couleur franche un
+ * anneau serré. La pastille cliquée reste la dominante.
  */
 export function poserFigure(x: number, y: number, count: number): Point[] {
-  const ancre = { x, y };
-  let points: Point[] = [ancre];
-  while (points.length < count) {
-    points = ajouterRond(points, count);
-  }
-  return recaler(points);
+  const dx = x - CENTRE;
+  const dy = y - CENTRE;
+  const vise = Math.hypot(dx, dy);
+  const angle = vise < 1e-9 ? ORIENTATION_DEFAUT : Math.atan2(dy, dx);
+  return anneauRegulier(angle, rayonBorne(vise), count);
 }
 
 // ------------------------------------------------------- points ↔ pastilles

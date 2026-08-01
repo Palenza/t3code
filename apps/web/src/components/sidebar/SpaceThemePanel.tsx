@@ -153,16 +153,16 @@ export function SpaceThemePanel({ spaceId }: { readonly spaceId?: string } = {})
 
   const dominant = current.stops[0] ?? { color: wheelColorAt(0.62, 0.4), x: 0.62, y: 0.4 };
 
-  const moveGroup = useCallback(
+  const tournerLAnneau = useCallback(
     (clientX: number, clientY: number) => {
       const canvas = canvasRef.current;
       if (canvas === null || !draggingRef.current) return;
       const rect = canvas.getBoundingClientRect();
       const x = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
       const y = Math.max(0, Math.min(1, (clientY - rect.top) / rect.height));
-      // TRANSLATION de toute la figure : les écarts entre ronds sont
-      // invariants par translation, donc « à distance égale » tient sans
-      // qu'on ait à le rattraper après coup.
+      // Le doigt fixe le RAYON COMMUN et l'orientation de l'anneau — la loi
+      // d'Arc, mesurée sur 972 images le 01/08. Toute la géométrie, et le
+      // pourquoi, vivent dans `SpaceThemePanel.logic.ts`.
       apply({ ...current, stops: stopsDepuisPoints(deplacerFigure(current.stops, x, y)) });
     },
     [apply, current],
@@ -255,7 +255,7 @@ export function SpaceThemePanel({ spaceId }: { readonly spaceId?: string } = {})
             : "[--dot:color-mix(in_oklab,black_18%,transparent)]",
         )}
         onPointerMove={(event) => {
-          if (draggingRef.current) moveGroup(event.clientX, event.clientY);
+          if (draggingRef.current) tournerLAnneau(event.clientX, event.clientY);
         }}
         onPointerUp={finDeGlisse}
       >
@@ -315,7 +315,7 @@ export function SpaceThemePanel({ spaceId }: { readonly spaceId?: string } = {})
         })}
         <button
           type="button"
-          aria-label="Mélanger — la position module la couleur, les ronds gardent leur écart"
+          aria-label="Mélanger — loin du centre le thème pâlit et s'écarte, près du centre il devient vif et resserré"
           onPointerDown={(event) => {
             event.preventDefault();
             draggingRef.current = true;
@@ -327,7 +327,7 @@ export function SpaceThemePanel({ spaceId }: { readonly spaceId?: string } = {})
             }
           }}
           onPointerMove={(event) => {
-            if (draggingRef.current) moveGroup(event.clientX, event.clientY);
+            if (draggingRef.current) tournerLAnneau(event.clientX, event.clientY);
           }}
           onPointerUp={finDeGlisse}
           className="absolute -translate-x-1/2 -translate-y-1/2 cursor-grab rounded-full shadow-md ring-[3px] ring-white active:cursor-grabbing"
