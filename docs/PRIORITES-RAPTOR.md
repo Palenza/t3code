@@ -1,4 +1,22 @@
-# Priorités Raptor — ce qu'on fusionne, dans quel ordre, et pourquoi
+# Priorités Raptor
+
+> **Avancement au 01/08 (session nuit).** P0 → P3 faits, tout vert.
+>
+> |                                        | état                  | preuve                                                                                                 |
+> | -------------------------------------- | --------------------- | ------------------------------------------------------------------------------------------------------ |
+> | **P0** test instable OTLP              | ✅                    | course event-loop, attente bornée, 4 suites vertes (`8cadfd148`)                                       |
+> | **P1** rattraper l'amont               | ✅                    | 16 commits, 4 conflits résolus main, 0 de retard (`630a204f9`)                                         |
+> | **P2** première éval                   | ✅                    | corpus injection, **a trouvé une brèche réelle**, 13 %→0 % de ratés (`7419d2fbd`)                      |
+> | **P3** détecteur de cache              | ✅ pur, ⏳ activation | module prouvé (`b924d3776`) ; câblage live dans `INFRA-ACTIVATIONS.md`, attend un GO de reconstruction |
+> | **BONUS** 3ᵉ étage de garde            | ✅                    | « livré ne veut rien dire, observé si » (`71a65e270`)                                                  |
+> | **P4** bac à sable Seatbelt            | ⏳                    | à instruire : le hook d'un dépôt cloné s'exécute-t-il ? (1 h)                                          |
+> | **P5** orchestration-v2 + subagent-obs | ⏳                    | un seul chantier à deux étages, après décision                                                         |
+>
+> Reste au palier D2, à MONTRER (aucune preuve LIVE sans reconstruction) : la
+> barre latérale fusionnée, les deux changements de comportement de sécurité
+> (motif d'injection élargi, détecteur de cache), et l'activation P3.
+
+— ce qu'on fusionne, dans quel ordre, et pourquoi
 
 Contrainte posée par Enzo, et c'est elle qui décide de tout :
 **« on a aspiré Hermès, donc tout doit tourner vert sur Raptor. »**
