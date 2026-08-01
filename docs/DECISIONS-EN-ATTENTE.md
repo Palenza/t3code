@@ -139,3 +139,48 @@ plus du tout. Le mode de panne du remède est PIRE que celui du bug.
 
 **Condition pour l'ouvrir** : une session dédiée, avec Enzo disponible pour
 essayer le micro après chaque étape. Pas en fin de session, pas en autonomie.
+
+---
+
+## 4 · Le rebond de la barre latérale — mesuré, cause NON trouvée
+
+Enregistrement du 01/08 22:03 (120 fps, 3600×2338, 28,7 s), 3 443 images
+extraites. Deux mesures tiennent, une hypothèse est morte, la cause reste
+ouverte.
+
+**Ce qui est MESURÉ (solide, aucun seuil deviné)**
+
+Bord de la zone colorée de la barre, critère de SATURATION, à deux instants
+calmes hors animation, sur trois lignes concordantes (y = 120, 150, 180) :
+
+    avant  9,20 s ....... 87   (échelle 360 px)
+    après 10,40 s ....... 85
+    → ~20 px de rétrécissement en résolution réelle
+
+Centroïde horizontal du texte de la barre, même fenêtre :
+
+    repos avant ......... x = 71,0
+    minimum à 9,50 s .... x = 60,8   (dépassement)
+    repos après ......... x = 65,4
+    → dépassement de 4,6 px, résorbé en ~230 ms
+
+**Ce qui est ÉCARTÉ**
+
+- Ce n'est pas la courbe de traversée : `cubic-bezier(0.22, 1, 0.36, 1)` est
+  bornée dans [0,1], elle ne peut pas dépasser.
+- Ce n'est pas `sidebarWidth` : il n'est modifié que par la poignée de
+  redimensionnement (`AppSidebarLayout.tsx:136, 541`).
+- Ce n'est PAS une barre de défilement : le conteneur passe `hideScrollbars`,
+  et sur macOS elles sont en superposition — largeur nulle.
+
+**Une mesure FAUSSE, gardée comme avertissement**
+
+Un premier relevé annonçait un « saut de +100 px » du bord (86 → 185). C'était
+l'instrument : il cherchait la plus grosse chute de LUMINANCE, or la traversée
+estompe le panneau à 0,25 d'opacité — le détecteur attrapait alors un bord
+ailleurs dans la fenêtre. Vu seulement en OUVRANT l'image. Sur un panneau qui
+s'estompe, ne jamais détecter un bord par la luminance : la saturation, elle,
+survit à l'opacité.
+
+**Reste à trouver** : ce qui rétrécit la barre de ~20 px au changement
+d'espace. Ce n'est aucun des trois suspects ci-dessus.
