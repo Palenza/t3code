@@ -6,6 +6,7 @@ export type SettingsPath =
   | "/settings/source-control"
   | "/settings/connections"
   | "/settings/voice"
+  | "/settings/skills"
   | "/settings/beta"
   | "/settings/theme"
   | "/settings/tableau-local"
@@ -30,6 +31,8 @@ export const SETTINGS_SECTION_LABELS: Readonly<Record<SettingsPath, string>> = {
   "/settings/source-control": "Source Control",
   "/settings/connections": "Connections",
   "/settings/voice": "Voice",
+  // Après Voice et avant Beta : c'est un réglage établi, pas une expérience.
+  "/settings/skills": "Skills",
   "/settings/beta": "Beta",
   "/settings/theme": "Theme",
   "/settings/tableau-local": "Tableau local",
