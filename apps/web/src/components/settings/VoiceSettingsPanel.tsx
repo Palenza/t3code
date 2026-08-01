@@ -343,7 +343,27 @@ export function VoiceSettingsPanel() {
     () => [...new Set(selectedModel?.capabilities.languages ?? FALLBACK_LANGUAGES)].toSorted(),
     [selectedModel],
   );
-  const filtered = catalog.filter((model) => modelSearchMatches(model, query));
+  // UN SEUL MODÈLE OFFERT — décision fondateur du 01/08 : « ne laisse que ce
+  // modèle, on en a trop pour rien dans VOICE ».
+  //
+  // Le catalogue en compte 68. Ce n'est PAS un menu de ce qu'on propose : c'est
+  // un miroir GÉNÉRÉ de ce que publie transcribe.cpp, et un test vérifie son
+  // exhaustivité (`catalog.test.ts`). Le réduire à la source casse l'invariant
+  // — essayé le 01/08, 18 tests rouges. On filtre donc à l'AFFICHAGE : la
+  // source reste complète, l'offre devient courte. On ne ment pas sur ce qui
+  // existe, on choisit ce qu'on montre.
+  //
+  // Parakeet TDT 0.6B v3 : meilleur taux d'erreur mesuré que Whisper large-v3
+  // (6,32 % contre 7,44 % sur l'Open ASR Leaderboard) pour un quart de la
+  // taille, rapide sur CPU simple, sans hallucination de silence, et le
+  // français est dans ses 25 langues (vérifié dans le catalogue).
+  //
+  // Une RECHERCHE explicite continue de tout voir : cacher une correspondance
+  // à quelqu'un qui la cherche, c'est une recherche cassée. Le filtre ne vaut
+  // que pour la liste au repos.
+  const MODELE_OFFERT = "parakeet-tdt-0.6b-v3";
+  const offerts = query.trim().length > 0 ? catalog : catalog.filter((m) => m.id === MODELE_OFFERT);
+  const filtered = offerts.filter((model) => modelSearchMatches(model, query));
   const featured = filtered.filter((model) => model.featured);
   const allModels = filtered.filter((model) => !model.featured);
   const downloadedBytes = downloadStates
@@ -531,7 +551,9 @@ export function VoiceSettingsPanel() {
                 <Select
                   items={engineItems}
                   value={settings.voice.engine}
-                  onValueChange={(engine) => engine && patchVoice({ engine: engine as VoiceEngine })}
+                  onValueChange={(engine) =>
+                    engine && patchVoice({ engine: engine as VoiceEngine })
+                  }
                 >
                   <SelectTrigger size="sm" className="w-56" aria-label="Moteur de reconnaissance">
                     <SelectValue />
@@ -670,9 +692,9 @@ export function VoiceSettingsPanel() {
 
       <SettingsSection title="Corriger les mots que la dictée écorche">
         <p className="px-3 pb-3 text-[13px] text-muted-foreground sm:px-4">
-          La dictée entend « té trois code » quand vous dites T3 Code ? Ajoutez la correction ici
-          et elle s'appliquera toute seule. « Respecter les majuscules » n'agit que si la casse
-          compte pour vous ; « accepter les à-peu-près » rattrape aussi les variantes proches.
+          La dictée entend « té trois code » quand vous dites T3 Code ? Ajoutez la correction ici et
+          elle s'appliquera toute seule. « Respecter les majuscules » n'agit que si la casse compte
+          pour vous ; « accepter les à-peu-près » rattrape aussi les variantes proches.
         </p>
         <div className="px-3 sm:px-4">
           <VoiceDictionarySection
