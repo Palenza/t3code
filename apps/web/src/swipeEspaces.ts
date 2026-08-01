@@ -52,3 +52,53 @@ export const SEUIL_ZONE_DE_TRAVAIL = 200;
 export function seuilDuSwipe(depuisLaBarre: boolean): number {
   return depuisLaBarre ? SEUIL_BARRE : SEUIL_ZONE_DE_TRAVAIL;
 }
+
+/**
+ * L'AXE DU GESTE — décidé UNE FOIS, tenu jusqu'au bout.
+ *
+ * Le mal : « quand je swipe de haut en bas dans le chat pour monter ou
+ * descendre du texte mais que mes mouvements sont un peu diagonaux, ça fait un
+ * peu bouger la sidebar » (fondateur, 01/08).
+ *
+ * La cause : on comparait les deux axes cumulés à CHAQUE image. Au tout début
+ * d'un geste, les deux cumuls valent quelques pixels — le bruit du trackpad
+ * suffit à ce que l'horizontal l'emporte sur une image ou deux. La barre suit
+ * alors le doigt, puis le vertical prend le dessus et elle retombe : elle
+ * VIBRE. Le ratio n'est pas faux, il est juste sans objet tant qu'on n'a pas
+ * assez de course pour que le rapport veuille dire quelque chose.
+ *
+ * D'où : tant que le geste n'a pas parcouru de quoi se prononcer, il est
+ * INDÉCIS et on ne peint RIEN. Passé ce budget, l'axe est arrêté pour toute la
+ * salve — un geste jugé vertical ne touchera plus jamais la barre, quelle que
+ * soit sa dérive latérale ensuite. C'est ce que fait le système pour ses
+ * propres vues, et pour la même raison.
+ */
+export type AxeDuGeste = "indecis" | "horizontal" | "vertical";
+
+/**
+ * FIL-PIÈGE, posé au-delà de tout ce qui est sain.
+ *
+ * 24 px de course TOTALE avant de trancher. Pour être jugé horizontal à ce
+ * stade, il faut ~15 px de côté contre ~9 px de haut en bas : un défilement de
+ * lecture qui dérive à ce point serait à 45°, ce n'est plus un défilement.
+ *
+ * Et c'est indolore pour un vrai swipe : 24 px, c'est 22 % de `SEUIL_BARRE`
+ * (110) — le doigt a encore 86 px devant lui pendant lesquels la barre le
+ * suit. Valeur RAISONNÉE à partir d'un seuil calibré, pas mesurée sur trackpad.
+ * Si un swipe franc paraissait mort au démarrage, c'est CE budget qu'on
+ * abaisse — et on le dit.
+ */
+export const BUDGET_DE_DECISION_PX = 24;
+
+/** Au-delà de ce rapport, le geste est un défilement, pas un swipe. */
+const DOMINANCE_VERTICALE = 1.6;
+
+export function deciderLAxe(cumul: {
+  readonly horizontal: number;
+  readonly vertical: number;
+}): AxeDuGeste {
+  const horizontal = Math.abs(cumul.horizontal);
+  const vertical = Math.abs(cumul.vertical);
+  if (horizontal + vertical < BUDGET_DE_DECISION_PX) return "indecis";
+  return vertical > horizontal * DOMINANCE_VERTICALE ? "vertical" : "horizontal";
+}
