@@ -53,28 +53,34 @@ jobs:
       - name: Typecheck
         run: vpr typecheck
 
-      # UNE SEULE INVOCATION, DEPUIS LA RACINE — et ce n'est pas un détail.
+      # LE BUDGET PAR TEST, RELEVÉ — SANS TOUCHER À L'ISOLATION.
       #
-      # `vp run test` lance le script de CHAQUE paquet depuis son dossier, donc
-      # avec la config de ce paquet. Or `apps/web/vite.config.ts` fixe un
-      # budget de 15 s par test : confortable sur un Mac, pas sur un runner
-      # gratuit. Mesuré ici : `imageCompression.test.ts` — de l'encodage
-      # d'images, purement CPU — met 3,5 s pour ses treize cas en local et a
-      # dépassé 21 s pour UN seul cas sur ce runner. L'amont ne voit jamais ce
-      # mur : sa CI tourne sur des runners 8 cœurs inaccessibles ici.
+      # `apps/web/vite.config.ts` fixe 15 s par test : confortable sur un Mac,
+      # pas sur un runner gratuit. Mesuré ici : `imageCompression.test.ts` —
+      # de l'encodage d'images, purement CPU — met 3,5 s pour ses treize cas
+      # en local et a dépassé 21 s pour UN seul cas sur ce runner. L'amont ne
+      # voit jamais ce mur : sa CI tourne sur des runners 8 cœurs.
       #
-      # `vp test run` à la racine couvre EXACTEMENT le même périmètre — mesuré
-      # des deux côtés : 853 fichiers, 7 593 tests, au test près — en une seule
-      # invocation, donc avec le budget de la racine (60 s, `vite.config.ts:37`)
-      # et en ~58 s au lieu de plusieurs minutes.
+      # ⚠️ DEUX FAÇONS DE SE TROMPER, ÉPROUVÉES PLUTÔT QUE SUPPOSÉES :
       #
-      # ⚠️ Ce qui NE marche PAS, éprouvé plutôt que supposé : passer le drapeau
-      # à travers `vp run test -- --testTimeout=60000`. Après `--`, vitest le
-      # prend pour un filtre de fichier et l'IGNORE — le test continuait
-      # d'échouer « in 15000ms » alors que le drapeau apparaissait bien dans la
-      # ligne de commande du log. Un correctif qui a l'air fait et ne l'est pas.
+      # 1. `vp run test -- --testTimeout=60000` — après `--`, vitest prend
+      #    l'argument pour un FILTRE de fichier et l'ignore. Le drapeau
+      #    apparaissait dans le log et le test échouait toujours « in
+      #    15000ms ». Un correctif qui a l'air fait et ne l'est pas.
+      #
+      # 2. `vp test run` à la racine — même périmètre au test près (853
+      #    fichiers, 7 593), mais TOUT dans un seul processus vitest. La
+      #    concurrence change, et deux tests amont sensibles au séquencement
+      #    (`GrokAdapter`, `ProviderRegistry`) sont tombés sur ce runner alors
+      #    qu'ils passaient avant. « Même couverture » parlait du COMPTE, pas
+      #    de l'ISOLATION.
+      #
+      # La forme qui marche garde l'isolation par paquet — la commande
+      # canonique du dépôt — et met le drapeau en position d'option, avant
+      # tout `--`. Vérifié avec un test qui dort 20 s exprès : sans le
+      # drapeau il échoue à 15 000 ms, avec lui il passe.
       - name: Tests
-        run: vp test run
+        run: vp run test --testTimeout=60000
 
   # Le garde de marque vit dans la suite de tests, donc il tourne déjà au-dessus.
   # Ce travail-là vérifie l'autre moitié : que l'app se CONSTRUIT. Le typecheck
