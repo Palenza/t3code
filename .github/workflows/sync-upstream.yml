@@ -116,7 +116,36 @@ jobs:
         # version exacte qu'on embarque, et l'historique du fork se lit comme
         # une suite de builds identifiés plutôt que de « merge du jour ».
         run: |
-          git merge "${{ steps.cible.outputs.tag }}" --no-edit --no-ff
+          # LA FUSION PEUT ENTRER EN CONFLIT SUR UN FICHIER QU'ON JETTE JUSTE
+          # APRÈS — et c'est exactement ce qui a tué la synchro.
+          #
+          # Le run du 2026-08-01 est mort ici, sur UN seul fichier :
+          # `.github/workflows/mobile-showcase-screenshots.yml`. Or le bloc
+          # ci-dessous écarte SYSTÉMATIQUEMENT tout changement de workflow
+          # amont. La fusion échouait donc sur un fichier qu'on allait
+          # abandonner trois lignes plus bas, et le fork a cessé de vieillir
+          # avec l'amont pendant deux jours.
+          #
+          # On résout donc ces conflits-là en gardant les NÔTRES. Tout conflit
+          # AILLEURS reste une panne bruyante : c'est le signal qu'un humain
+          # doit trancher, et il ne doit jamais être avalé.
+          if ! git merge "${{ steps.cible.outputs.tag }}" --no-edit --no-ff; then
+            CONFLITS=$(git diff --name-only --diff-filter=U)
+            HORS_WORKFLOWS=$(printf '%s\n' "$CONFLITS" | grep -v '^\.github/workflows/' || true)
+            if [ -n "$HORS_WORKFLOWS" ]; then
+              echo "::error::Conflits hors .github/workflows — un humain doit trancher :"
+              printf '%s\n' "$HORS_WORKFLOWS"
+              git merge --abort
+              exit 1
+            fi
+            echo "::warning::Conflits limités aux workflows amont, résolus en gardant les nôtres : $(printf '%s' "$CONFLITS" | tr '\n' ' ')"
+            printf '%s\n' "$CONFLITS" | while IFS= read -r fichier; do
+              [ -n "$fichier" ] || continue
+              git checkout --ours -- "$fichier" 2>/dev/null || git rm -q -f -- "$fichier"
+              git add -- "$fichier" 2>/dev/null || true
+            done
+            git commit -q --no-edit
+          fi
 
           # GITHUB_TOKEN NE PEUT PAS pousser un commit qui touche
           # `.github/workflows/**`. Ce n'est pas un réglage qu'on a raté :
