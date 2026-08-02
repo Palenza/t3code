@@ -1,3 +1,4 @@
+// @effect-diagnostics nodeBuiltinImport:off - Ce garde LIT les fichiers de workflow et l'arbre du dépôt : il lui faut le disque brut, pas une couche Effect.
 /**
  * UN CHEMIN APPELÉ PAR UN WORKFLOW EST UN CONTRAT.
  *
