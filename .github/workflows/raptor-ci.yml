@@ -53,6 +53,18 @@ jobs:
       - name: Typecheck
         run: vpr typecheck
 
+      # UN MODULE QUE SEUL SON PROPRE TEST CONSOMME.
+      #
+      # `orchestrationRecovery.ts` porte une machine de reprise complète,
+      # couverte par quarante assertions, verte à chaque CI — et appelée par
+      # RIEN depuis que #2978 a supprimé son unique consommateur. Un lecteur
+      # ouvre le fichier, voit la logique ET les tests verts, et conclut que
+      # le comportement est livré. C'est pire que du code mort franc.
+      #
+      # Knip ne le voit pas : pour lui, l'import du test EST un usage.
+      - name: Aucun module orphelin de plus
+        run: node scripts/garde-orphelins.mjs
+
       # LE BUDGET PAR TEST, RELEVÉ — SANS TOUCHER À L'ISOLATION.
       #
       # `apps/web/vite.config.ts` fixe 15 s par test : confortable sur un Mac,
