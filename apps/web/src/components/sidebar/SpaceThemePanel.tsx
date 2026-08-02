@@ -868,6 +868,15 @@ function GrainDial(props: {
     const dy = clientY - (rect.top + rect.height / 2);
     return (Math.atan2(dy, dx) * 180) / Math.PI;
   };
+  // LE RELÂCHEMENT — la moitié qui manquait (02/08). `onPointerDown` posait
+  // la rotation, `onPointerMove` tournait tant qu'elle existait… et rien ne
+  // la remettait à null : après le premier clic, chaque SURVOL traînait la
+  // pilule, pour toujours. Trois portes de sortie : up, cancel, et perte de
+  // capture — il suffit d'en oublier une pour refaire le bug, et le garde
+  // `moletteRelachee.test.ts` les exige toutes les trois.
+  const relacherLaMolette = () => {
+    rotationRef.current = null;
+  };
   const poserCran = (prochain: number) => {
     const borne = ((prochain % CRANS) + CRANS) % CRANS;
     props.onChange(borne / (CRANS - 1));
@@ -903,6 +912,9 @@ function GrainDial(props: {
           // Sans capture, la rotation vit tant que le pointeur survole.
         }
       }}
+      onPointerUp={relacherLaMolette}
+      onPointerCancel={relacherLaMolette}
+      onLostPointerCapture={relacherLaMolette}
       onPointerMove={(event) => {
         const rotation = rotationRef.current;
         if (rotation === null) return;
