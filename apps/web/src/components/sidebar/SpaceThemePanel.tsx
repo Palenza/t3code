@@ -219,12 +219,18 @@ export function SpaceThemePanel({ spaceId }: { readonly spaceId?: string } = {})
   // première retouche. Rien à migrer, rien qui reste coincé en nuit.
   const themeAuto: SidebarTheme =
     enregistre.appearance === "auto" ? enregistre : { ...enregistre, appearance: "auto" };
-  // MIGRATION À LA LECTURE (02/08) : les thèmes enregistrés avant les
-  // gabarits gardaient leurs vieilles géométries (duo à 112°, rayons
-  // inégaux) — la pose avait été corrigée, jamais l'existant. On recale les
-  // POSITIONS au gabarit en gardant les couleurs telles quelles ; l'écriture
-  // suivante persiste la version recalée.
+  // MIGRATION À L'OUVERTURE, UNE FOIS PAR ESPACE (02/08, corrigé deux fois
+  // le même jour) : la première version normalisait dans un useMemo réactif
+  // — à CHAQUE rendu. Pendant un glissé, chaque position écrite était
+  // aussitôt re-clouée au gabarit à la relecture : la migration se battait
+  // contre le geste, et gagnait (visible sur raptor2.mov). Et mon premier
+  // correctif a été perdu par un remplacement silencieusement raté — attrapé
+  // par le vérificateur de DMG, marqueur absent du bundle. D'où l'assertion
+  // d'existence côté patch et le grep post-écriture, désormais.
+  const dejaMigreRef = useRef<string | null>(null);
+  const clefMigration = cibleId ?? "(defaut)";
   const current: SidebarTheme = useMemo(() => {
+    if (dejaMigreRef.current === clefMigration) return themeAuto;
     if (themeAuto.stops.length < 2) return themeAuto;
     const points = themeAuto.stops.map((stop) => ({ x: stop.x, y: stop.y }));
     const recales = normaliserAuGabarit(points);
@@ -240,7 +246,10 @@ export function SpaceThemePanel({ spaceId }: { readonly spaceId?: string } = {})
         themeAuto.stops.map((stop) => stop.color),
       ),
     };
-  }, [themeAuto]);
+  }, [themeAuto, clefMigration]);
+  useEffect(() => {
+    dejaMigreRef.current = clefMigration;
+  }, [clefMigration]);
   const apply = useCallback(
     (next: SidebarTheme) => {
       if (activeSpace) {
