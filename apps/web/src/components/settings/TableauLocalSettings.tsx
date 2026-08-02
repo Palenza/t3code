@@ -1,3 +1,4 @@
+import { t } from "../../langue";
 import { GitBranchIcon, HandshakeIcon, RefreshCwIcon, UsersIcon } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -103,7 +104,8 @@ function ReseauBloc({ reseau }: { reseau: ReseauAffiliationVue }) {
       </div>
       {reseau.acceptes.length > 0 ? (
         <p className="max-w-2xl text-[13px] leading-[1.45] text-muted-foreground/80">
-          <span className="text-foreground/70">Acceptés :</span> {reseau.acceptes.join(" · ")}
+          <span className="text-foreground/70">{t("tableau.acceptes")}</span>{" "}
+          {reseau.acceptes.join(" · ")}
         </p>
       ) : null}
       {reseau.attente.length > 0 ? (
@@ -113,12 +115,14 @@ function ReseauBloc({ reseau }: { reseau: ReseauAffiliationVue }) {
       ) : null}
       {reseau.refuses.length > 0 ? (
         <p className="max-w-2xl text-[13px] leading-[1.45] text-muted-foreground/60">
-          <span className="text-foreground/70">Refusés :</span> {reseau.refuses.join(" · ")}
+          <span className="text-foreground/70">{t("tableau.refuses")}</span>{" "}
+          {reseau.refuses.join(" · ")}
         </p>
       ) : null}
       {reseau.indetermines.length > 0 ? (
         <p className="max-w-2xl text-[13px] leading-[1.45] text-muted-foreground/60">
-          <span className="text-foreground/70">À trancher :</span> {reseau.indetermines.join(" · ")}
+          <span className="text-foreground/70">{t("tableau.aTrancher")}</span>{" "}
+          {reseau.indetermines.join(" · ")}
         </p>
       ) : null}
       {reseau.note !== null ? (
@@ -206,7 +210,7 @@ export function TableauLocalSettingsPanel() {
             >
               <LigneEtat cle="Branche" valeur={etat.vue.depot.branche} />
               {etat.vue.depot.etatLabel !== null ? (
-                <LigneEtat cle="Non déployé" valeur={etat.vue.depot.etatLabel} />
+                <LigneEtat cle={t("tableau.nonDeploye")} valeur={etat.vue.depot.etatLabel} />
               ) : null}
             </SettingsSection>
           ) : null}

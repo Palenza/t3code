@@ -1,3 +1,4 @@
+import { t } from "../../langue";
 import { PaletteIcon } from "lucide-react";
 
 import { SpaceThemePanel } from "../sidebar/SpaceThemePanel";
@@ -22,7 +23,7 @@ import { SettingsPageContainer, SettingsSection } from "./settingsLayout";
 export function ThemeSettingsPanel() {
   return (
     <SettingsPageContainer>
-      <SettingsSection title="Thème de la sidebar" icon={<PaletteIcon className="size-4.5" />}>
+      <SettingsSection title={t("theme.sidebar.titre")} icon={<PaletteIcon className="size-4.5" />}>
         <p className="max-w-xl px-3 text-[13px] leading-[1.45] text-muted-foreground/80 sm:px-4">
           Attrape le gros rond : la teinte suit ta main, les satellites s'accordent. Chaque espace
           peut porter son propre thème.

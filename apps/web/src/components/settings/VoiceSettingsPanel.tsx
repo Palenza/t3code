@@ -1,3 +1,4 @@
+import { t } from "../../langue";
 import type {
   ModelCatalogEntry,
   ModelDownloadState,
@@ -475,7 +476,7 @@ export function VoiceSettingsPanel() {
           en tête, en français, sans jargon. Le moteur serveur, le mode
           d'inférence et la langue sont des détails d'implémentation : ils
           descendent sous « Réglages avancés », repliés. */}
-      <SettingsSection title="Dictée vocale">
+      <SettingsSection title={t("dictee.titre")}>
         <SettingsRow
           title="Dicter avec le micro"
           description="Parlez, le texte s'écrit dans le composer. Tout se passe sur ce Mac : aucun son ne part sur Internet."
@@ -483,7 +484,7 @@ export function VoiceSettingsPanel() {
             <Switch
               checked={settings.voice.enabled}
               onCheckedChange={(enabled) => patchVoice({ enabled })}
-              aria-label="Activer la dictée vocale"
+              aria-label={t("dictee.activer")}
             />
           }
         />
@@ -498,7 +499,7 @@ export function VoiceSettingsPanel() {
                 language && patchVoice({ language: language === "auto" ? "" : language })
               }
             >
-              <SelectTrigger size="sm" className="w-44" aria-label="Langue de la dictée">
+              <SelectTrigger size="sm" className="w-44" aria-label={t("dictee.langue")}>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -530,7 +531,7 @@ export function VoiceSettingsPanel() {
                     mode && updateSettings({ voiceInferenceMode: mode as VoiceInferenceMode })
                   }
                 >
-                  <SelectTrigger size="sm" className="w-44" aria-label="Où tourne la dictée">
+                  <SelectTrigger size="sm" className="w-44" aria-label={t("dictee.moteur")}>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -587,7 +588,7 @@ export function VoiceSettingsPanel() {
                   type="number"
                   min={1}
                   className="w-24"
-                  aria-label="Minutes avant l'arrêt du moteur vocal"
+                  aria-label={t("dictee.arret")}
                   defaultValue={String(settings.voice.idleTimeoutMinutes)}
                   onBlur={(evenement) => {
                     const minutes = minutesDeVeilleValides(evenement.currentTarget.value);
@@ -743,7 +744,7 @@ export function VoiceSettingsPanel() {
         </p>
       </SettingsSection>
 
-      <SettingsSection title="Corriger les mots que la dictée écorche">
+      <SettingsSection title={t("dictee.dictionnaire.titre")}>
         <p className="px-3 pb-3 text-[13px] text-muted-foreground sm:px-4">
           La dictée entend « té trois code » quand vous dites Raptor ? Ajoutez la correction ici et
           elle s'appliquera toute seule. « Respecter les majuscules » n'agit que si la casse compte

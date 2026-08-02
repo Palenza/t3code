@@ -1,4 +1,11 @@
 import {
+  ETIQUETTE_DE_LANGUE,
+  LANGUES_CHOISISSABLES,
+  t,
+  useLangueStore,
+  type LangueChoisie,
+} from "../../langue";
+import {
   ArchiveIcon,
   ArchiveX,
   InfoIcon,
@@ -379,7 +386,7 @@ function AboutVersionTitle() {
       {APP_COMMIT_HASH ? (
         <code
           className="text-[11px] font-medium text-muted-foreground/70"
-          title="Le commit exact à partir duquel ce build a été produit"
+          title={t("build.commit.titre")}
         >
           · {APP_COMMIT_HASH}
         </code>
@@ -1159,6 +1166,8 @@ export function AppearanceSettingsPanel() {
 export function GeneralSettingsPanel() {
   const settings = usePrimarySettings();
   const updateSettings = useUpdatePrimarySettings();
+  const langueChoisie = useLangueStore((etat) => etat.langue);
+  const setLangue = useLangueStore((etat) => etat.setLangue);
   const [backgroundActivityDialogOpen, setBackgroundActivityDialogOpen] = useState(false);
   const lastEnabledProjectGroupingMode = useRef<SidebarProjectGroupingMode>(
     readLastEnabledProjectGroupingMode(),
@@ -1212,6 +1221,44 @@ export function GeneralSettingsPanel() {
   return (
     <SettingsPageContainer>
       <SettingsSection title="General">
+        {/* LA LANGUE, en tête du General : c'est le réglage qui change tous les
+            autres écrans, donc il se lit avant eux. Il ne gouverne QUE les
+            fonctionnalités nées dans le fork — traduire l'amont fabriquerait un
+            conflit à chaque synchro nocturne. C'est le modèle VS Code : le pack
+            de langue couvre l'éditeur, les extensions restent en anglais, et on
+            le DIT au lieu de le laisser découvrir. */}
+        <SettingsRow
+          {...searchableSetting("raptor-language")}
+          description={t("langue.description")}
+          status={t("langue.redemarrage")}
+          control={
+            <Select
+              value={langueChoisie}
+              onValueChange={(valeur) => {
+                if (typeof valeur !== "string") return;
+                if (!LANGUES_CHOISISSABLES.includes(valeur as LangueChoisie)) return;
+                setLangue(valeur as LangueChoisie);
+                // Un rechargement, pas une propagation réactive : `t()` lit
+                // l'état sans s'abonner, ce qui rend la migration d'un texte
+                // aussi simple qu'un remplacement de chaîne. Le prix est ce
+                // rechargement — le même geste que VS Code, et il est ANNONCÉ
+                // sous le contrôle plutôt que subi.
+                window.location.reload();
+              }}
+            >
+              <SelectTrigger size="sm" className="w-44" aria-label={t("langue.titre")}>
+                <SelectValue>{ETIQUETTE_DE_LANGUE[langueChoisie]}</SelectValue>
+              </SelectTrigger>
+              <SelectPopup align="end" alignItemWithTrigger={false}>
+                {LANGUES_CHOISISSABLES.map((valeur) => (
+                  <SelectItem key={valeur} hideIndicator value={valeur}>
+                    {ETIQUETTE_DE_LANGUE[valeur]}
+                  </SelectItem>
+                ))}
+              </SelectPopup>
+            </Select>
+          }
+        />
         <SettingsRow
           {...searchableSetting("project-grouping")}
           description="Combine matching repositories across environments."
