@@ -60,6 +60,7 @@ import {
   downloadKey,
   formatModelBytes,
   indexDownloadStates,
+  minutesDeVeilleValides,
   modelSearchMatches,
   modelSizeLabel,
   resolveDisplayedModelTarget,
@@ -568,6 +569,58 @@ export function VoiceSettingsPanel() {
                     </SelectGroup>
                   </SelectContent>
                 </Select>
+              }
+            />
+            {/*
+              DEUX RÉGLAGES QUE LE SERVEUR APPLIQUAIT DÉJÀ, SANS QU'ON PUISSE
+              LES TOUCHER. Ils vivaient dans le schéma, le serveur les lisait
+              (`TranscriptionService.ts:100` et `:306`), et aucun champ ne les
+              atteignait. Un réglage effectif et inatteignable est le cousin
+              silencieux du contrôle décoratif : l'un promet sans agir, l'autre
+              agit sans le dire.
+            */}
+            <SettingsRow
+              title="Garder le moteur chaud"
+              description="Après ce nombre de minutes sans dictée, le moteur est arrêté pour libérer la mémoire — et la dictée suivante attend de nouveau son chargement. Augmentez si vous dictez par à-coups."
+              control={
+                <Input
+                  type="number"
+                  min={1}
+                  className="w-24"
+                  aria-label="Minutes avant l'arrêt du moteur vocal"
+                  defaultValue={String(settings.voice.idleTimeoutMinutes)}
+                  onBlur={(evenement) => {
+                    const minutes = minutesDeVeilleValides(evenement.currentTarget.value);
+                    // Une saisie invalide ne part PAS au serveur — le schéma la
+                    // rejetterait, et le réglage semblerait s'être enregistré.
+                    if (minutes === null) {
+                      evenement.currentTarget.value = String(settings.voice.idleTimeoutMinutes);
+                      return;
+                    }
+                    if (minutes !== settings.voice.idleTimeoutMinutes) {
+                      patchVoice({ idleTimeoutMinutes: minutes });
+                    }
+                  }}
+                />
+              }
+            />
+            <SettingsRow
+              title="Chemin du moteur"
+              description="Laissez vide pour utiliser le moteur fourni avec l'app. Ne renseignez un chemin que si vous avez installé le vôtre ailleurs."
+              control={
+                <Input
+                  type="text"
+                  className="w-64"
+                  placeholder="(fourni avec l'app)"
+                  aria-label="Chemin du moteur de reconnaissance vocale"
+                  defaultValue={settings.voice.sidecarPath}
+                  onBlur={(evenement) => {
+                    const chemin = evenement.currentTarget.value.trim();
+                    if (chemin !== settings.voice.sidecarPath) {
+                      patchVoice({ sidecarPath: chemin });
+                    }
+                  }}
+                />
               }
             />
           </div>

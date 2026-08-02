@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import {
+  minutesDeVeilleValides,
   modelSearchMatches,
   parseDictionaryImport,
   parseDictionaryPaste,
@@ -156,5 +157,44 @@ describe("parseDictionaryPaste", () => {
     );
     expect(entries).toHaveLength(1);
     expect(rejected).toEqual(["-> sans gauche", "vide ->"]);
+  });
+});
+
+describe("les minutes avant l'arrêt du moteur vocal", () => {
+  it("accepte un entier à partir de 1", () => {
+    expect(minutesDeVeilleValides("1")).toBe(1);
+    expect(minutesDeVeilleValides("5")).toBe(5);
+    expect(minutesDeVeilleValides("120")).toBe(120);
+  });
+
+  it("tolère les espaces autour, comme un copier-coller en produit", () => {
+    expect(minutesDeVeilleValides("  7  ")).toBe(7);
+  });
+
+  it("refuse ce que le schéma refuserait — et le refuse ICI", () => {
+    // Si ces valeurs partaient au serveur, le schéma (`Int >= 1`) rejetterait
+    // le patch : le champ garderait la saisie, rien ne serait enregistré, et
+    // personne ne saurait pourquoi. On refuse donc avant l'envoi.
+    expect(minutesDeVeilleValides("0")).toBeNull();
+    expect(minutesDeVeilleValides("-3")).toBeNull();
+    expect(minutesDeVeilleValides("3.5")).toBeNull();
+    expect(minutesDeVeilleValides("abc")).toBeNull();
+    expect(minutesDeVeilleValides("5 minutes")).toBeNull();
+  });
+
+  it("refuse le champ vide, l'état normal pendant la frappe", () => {
+    // Effacer pour retaper ne doit rien écrire : sinon le réglage part à
+    // « vide » entre deux touches.
+    expect(minutesDeVeilleValides("")).toBeNull();
+    expect(minutesDeVeilleValides("   ")).toBeNull();
+  });
+
+  it("refuse les notations que Number() accepterait pourtant", () => {
+    // `Number("1e3")` vaut 1000 et `Number("0x10")` vaut 16. Un parseur qui
+    // se contente de Number() laisserait entrer des valeurs que personne n'a
+    // voulu taper dans un champ de minutes.
+    expect(minutesDeVeilleValides("1e3")).toBeNull();
+    expect(minutesDeVeilleValides("0x10")).toBeNull();
+    expect(minutesDeVeilleValides("+5")).toBeNull();
   });
 });
