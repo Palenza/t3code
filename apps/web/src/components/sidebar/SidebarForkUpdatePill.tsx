@@ -168,11 +168,16 @@ export function SidebarForkUpdatePill() {
         <DownloadIcon className="size-3.5 shrink-0" />
       )}
       <span className="truncate">
+        {/* Le libellé promet ce que le CLIC apporte, jamais ce qu'on a mesuré
+            ailleurs. Le 02/08 il annonçait « 6 nouveautés » d'amont, alors que
+            le script ne les prend plus — il reconstruit NOTRE branche, et la
+            synchro nocturne s'occupe de l'amont. Une pastille qui compte une
+            chose et en livre une autre, c'est le cosmétique qu'on chasse. */}
         {building
           ? "Update en cours — rebuild local…"
           : (etat.behind ?? 0) > 0
             ? `Mettre à jour l'app · ${etat.behind} changement${(etat.behind ?? 0) > 1 ? "s" : ""}`
-            : `Mettre à jour l'app · ${amont} nouveauté${amont > 1 ? "s" : ""}`}
+            : "Reconstruire l'app avec le code à jour"}
       </span>
     </button>
   );

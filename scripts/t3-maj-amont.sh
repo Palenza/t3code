@@ -44,77 +44,43 @@ restaurer_stash() {
 }
 trap restaurer_stash EXIT
 
-echo "→ [2/5] Récupération de l'amont (pingdotgg/t3code)"
+echo "→ [2/5] Récupération de notre branche de travail"
 git remote get-url upstream >/dev/null 2>&1 || \
   git remote add upstream https://github.com/pingdotgg/t3code.git
 git fetch upstream main --tags --quiet
 git fetch origin "$BRANCHE" --quiet
 
-RETARD=$(git rev-list --count "HEAD..upstream/main")
-echo "  $RETARD commit(s) d'avance chez Théo"
-
-# Les fichiers qui portent NOS features : un merge git n'écrase jamais en
-# silence — il S'ARRÊTE sur conflit — mais il peut passer proprement et
-# casser la LOGIQUE (l'amont refactore, notre greffe ne suit plus). C'est ce
-# cas-là que le filet ci-dessous attrape (crainte fondateur 29/07 : « s'ils
-# implémentent le voice et que ça vient écraser ce que l'on a fait »).
-# Cette liste écrite à la main portait SEPT fichiers. Le fork en a ajouté
-# CINQUANTE-NEUF. N'y figuraient ni la dictée vocale, ni le pool de comptes,
-# ni le relais, ni les modes de travail — c'est-à-dire précisément les
-# features dont la crainte ci-dessus parle. Le filet annonçait « Nos features
-# tiennent » après avoir ignoré les cinq sixièmes d'entre elles (audit 30/07).
+# ── POURQUOI CE SCRIPT NE FUSIONNE PLUS L'AMONT (03/08) ────────────────────
 #
-# On lance donc TOUT. Une liste tenue à la main vieillit à chaque feature
-# ajoutée ; un « tous les tests » ne vieillit jamais.
+# Il le faisait, et c'était une mine à deux détentes. Vécu ce soir : le
+# fondateur clique « Mettre à jour », reçoit « Conflit de fusion » deux fois
+# de suite, et l'app ne bouge pas. Le dépôt restait avec un merge à moitié
+# fait (10 fichiers en conflit, dont des PNG binaires) ; le clic suivant
+# butait sur le cadavre du précédent — donc un blocage DÉFINITIF, jamais un
+# incident isolé.
+#
+# La racine est un doublon de rôle. La synchro nocturne (workflow GitHub)
+# fusionne DÉJÀ l'amont dans `travail`, avec sa résolution des conflits de
+# workflows et son journal. Le faire AUSSI ici, sur la machine du fondateur,
+# c'est demander à un utilisateur de résoudre à la main ce qu'un robot fait
+# tous les matins. Et quand la synchro tombe (elle est rouge depuis le
+# 01/08 sur `mobile-showcase-screenshots.yml`), la panne du serveur devient
+# une panne du BOUTON — deux surfaces cassées pour une seule cause.
+#
+# Mettre à jour l'app, c'est donc désormais : prendre notre branche, et
+# reconstruire. Le retard sur l'amont reste MESURÉ et affiché par la
+# pastille (`amontBehind` dans forkUpdate.ts) — on informe, on ne fusionne
+# pas dans le dos de l'utilisateur.
+RETARD_AMONT=$(git rev-list --count "HEAD..upstream/main")
+echo "  Pour information : $RETARD_AMONT commit(s) d'avance chez Théo (la synchro nocturne les prend)"
 
-echo "→ [3/5] Fusion dans $BRANCHE"
+echo "→ [3/5] Mise à niveau de $BRANCHE"
 git checkout "$BRANCHE" --quiet
 git pull --ff-only origin "$BRANCHE" --quiet
-# APRÈS le checkout et le pull, jamais avant : capturé plus tôt, un lancement
-# depuis une autre branche ferait du rollback un hard-reset vers le mauvais
-# commit — et --ff-only garantit qu'aucun commit local n'existe entre les deux.
-AVANT_FUSION=$(git rev-parse HEAD)
-if [ "$RETARD" -gt 0 ]; then
-  # --no-edit : le message de merge par défaut suffit. En cas de conflit,
-  # git s'arrête ici et `set -e` nous fait sortir : l'arbre reste en état de
-  # conflit visible, à résoudre à la main, et l'app installée n'a pas bougé.
-  if ! git merge upstream/main --no-edit; then
-    echo "✗ Conflit de fusion — l'app n'a PAS été touchée."
-    echo "  Résous les conflits dans $REPO puis relance."
-    exit 2
-  fi
-  echo "  Fusion faite."
-
-  # Les dépendances AVANT les tests. Cette fusion-ci a changé la liste des
-  # paquets (+122 lignes de verrou) ; tester contre l'ancien état donne soit
-  # un faux vert, soit un échec qu'on rapporterait comme « l'amont casse une
-  # de nos features » — un faux diagnostic qui ferait jeter une bonne fusion.
-  echo "→ [3bis/5] Dépendances de l'amont"
-  export PATH="$REPO/node_modules/.bin:$PATH"
-  if command -v pnpm > /dev/null 2>&1; then
-    if ! (cd "$REPO" && pnpm install --silent); then
-      echo "✗ Dépendances non installables — on ne teste pas à l'aveugle."
-      git reset --hard "$AVANT_FUSION" --quiet
-      exit 4
-    fi
-  else
-    echo "  pnpm absent : dépendances NON rafraîchies, les tests portent sur l'ancien état."
-  fi
-
-  echo "→ [3ter/5] Nos features tiennent-elles toujours ?"
-  VERT=1
-  # TOUS les tests du dépôt, pas une liste tenue à la main.
-  (cd "$REPO" && vp run -r test) || VERT=0
-  if [ "$VERT" -eq 0 ]; then
-    echo "✗ La mise à jour de l'amont CASSE une de nos features."
-    echo "  Fusion annulée, retour à $AVANT_FUSION — l'app installée n'a pas bougé."
-    git reset --hard "$AVANT_FUSION"
-    exit 3
-  fi
-  echo "  Nos features tiennent. Pense à pousser : git push origin $BRANCHE"
-else
-  echo "  Déjà à jour avec l'amont."
-fi
+# Le commit d'où sort ce build — cité en cas d'échec, pour savoir sur quoi
+# on est retombé. `--ff-only` garantit qu'aucun commit local ne s'y glisse.
+COMMIT_CONSTRUIT=$(git rev-parse HEAD)
+echo "  À jour sur $(git rev-parse --short HEAD)."
 
 echo "→ [4/5] Construction du DMG (quelques minutes)"
 export PATH="$REPO/node_modules/.bin:$PATH"
@@ -125,15 +91,20 @@ VERSION=$(node -p "require('$REPO/apps/desktop/package.json').version")
 # manquait, le build mourait, et rien ne le disait à l'utilisateur.
 if ! node scripts/build-desktop-artifact.ts --platform mac --target dmg --arch arm64 --build-version "$VERSION"; then
   echo "✗ La construction du DMG a échoué — l'app installée n'a PAS changé."
-  echo "  La fusion, elle, est faite. Pour l'annuler : git reset --hard $AVANT_FUSION"
+  echo "  Le dépôt est sur $COMMIT_CONSTRUIT ; il n'a pas bougé."
   exit 5
 fi
 
 # Le DMG doit porter LA version qu'on vient de construire. Prendre « le plus
 # récent » ouvrirait un ancien fichier si le build avait échoué sans le dire.
-DMG="$REPO/release/T3-Code-$VERSION-arm64.dmg"
-if [ ! -f "$DMG" ]; then
-  echo "✗ Aucun DMG en version $VERSION — rien n'est ouvert."
+# Le nom du DMG a suivi le débranding (« T3 Code » → « Raptor »), et le
+# deviner à partir d'un préfixe en dur a déjà ouvert un fichier PÉRIMÉ.
+# On prend donc le plus récent QUI PORTE LA VERSION construite, et on exige
+# qu'il ait été écrit à l'instant : un DMG vieux de trois jours qui s'ouvre
+# comme s'il était neuf est la panne la plus trompeuse de ce script.
+DMG=$(ls -t "$REPO"/release/*"$VERSION"-arm64.dmg 2>/dev/null | head -1)
+if [ -z "$DMG" ] || [ -z "$(find "$DMG" -mmin -30 2>/dev/null)" ]; then
+  echo "✗ Aucun DMG FRAIS en version $VERSION — rien n'est ouvert."
   exit 5
 fi
 echo "→ [5/5] Prêt : $DMG"
