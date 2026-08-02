@@ -19,7 +19,14 @@ import { primaryServerKeybindingsAtom } from "../state/server";
 import { useEnvironmentIdentificationMode, useSidebarV2Enabled } from "../hooks/useSettings";
 import ThreadSidebar from "./Sidebar";
 import { useSidebarSpacesStore } from "../sidebarSpacesStore";
-import { deciderLAxe, peutEncoreDefiler, seuilDuSwipe, type AxeDuGeste } from "../swipeEspaces";
+import { peutEncoreDefiler, seuilDuSwipe } from "../swipeEspaces";
+import {
+  SALVE_AU_REPOS,
+  SILENCE_FIN_DE_SALVE_MS,
+  surEvenement,
+  surSilence,
+  type EtatSalve,
+} from "../salveDeSwipe";
 import { SidebarEdgePeek, useSidebarPeekStore } from "./sidebar/SidebarEdgePeek";
 import { BibliothequeOverlay, useBibliothequeStore } from "./sidebar/BibliothequeOverlay";
 import { SidebarThemeWash } from "./sidebar/SidebarThemeWash";
@@ -146,82 +153,15 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
       : false;
   });
   const sidebarPeek = useSidebarPeekStore((store) => store.peek);
-  // Swipe deux doigts sur la sidebar (façon Arc) : le deltaX horizontal du
-  // trackpad cumule jusqu'au seuil, puis bascule d'espace — avec un temps
-  // mort pour qu'un long geste ne saute pas trois espaces d'un coup.
-  const spaceSwipeAccumRef = useRef(0);
-  const spaceSwipeLastFireRef = useRef(0);
-  const spaceSwipeSettleRef = useRef<number | null>(null);
-  /**
-   * L'INERTIE DU TRACKPAD — la cause des deux défauts du geste.
-   *
-   * Sur macOS, quand les doigts quittent la surface, le système continue
-   * d'émettre des `wheel` à `deltaX` décroissant pendant près d'une seconde.
-   * Ces évènements-là ne sont plus un geste : c'est la traîne du précédent.
-   *
-   * Le temps mort de 450 ms ne suffisait pas à la couvrir. Passé ce délai,
-   * l'accumulateur se remplissait de la SEULE inertie résiduelle, atteignait
-   * le seuil, et changeait d'espace tout seul — « parfois ça continue à
-   * swiper tout seul ». Et comme chaque évènement de traîne repoussait le
-   * minuteur de retombée de 140 ms, la carte continuait de dériver puis
-   * revenait tard : le rebond et la latence.
-   *
-   * On ne compte donc plus une DURÉE, on attend le SILENCE : après un
-   * basculement, tout évènement est avalé, et le verrou ne se lève que
-   * lorsque le trackpad s'est réellement tu.
-   */
-  const spaceSwipeVerrouRef = useRef(false);
-  const spaceSwipeSilenceRef = useRef<number | null>(null);
-  /** Durée sans le moindre évènement au-delà de laquelle le geste est fini. */
-  const SILENCE_FIN_DE_GESTE_MS = 120;
-  /**
-   * LE PIC DE LA SALVE — ce qui sépare la traîne d'un NOUVEAU geste.
-   *
-   * Le verrou seul était une régression : il se faisait renouveler par les
-   * évènements du geste SUIVANT, donc il ne se levait que si on s'arrêtait
-   * complètement — « je swipe une fois et après ça ne marche plus, il faut
-   * que je bouge ma souris pour re-swiper ».
-   *
-   * On a d'abord lu la PENTE contre la dernière valeur, en supposant l'inertie
-   * strictement décroissante. Elle ne l'est pas : un geste franc ondule, et une
-   * seule remontée locale rouvrait le verrou EN PLEINE traîne. Le reste de
-   * l'inertie franchissait alors un second espace — « si je swipe trop fort,
-   * ça va sur design et ça revient » (01/08).
-   *
-   * Ce qui tient, c'est le PIC : une traîne ne dépasse jamais le maximum du
-   * geste qui l'a produite, même quand sa décroissance est bruitée. Un doigt
-   * qui repart, lui, produit une amplitude du même ordre que l'original. Le
-   * repli reste le SILENCE — c'est lui qui rouvre le cas normal.
-   */
-  const spaceSwipePicRef = useRef(0);
-  /** Les deux axes CUMULÉS sur la salve en cours. On juge l'intention du geste
-   * sur eux, jamais sur une image isolée — voir le commentaire du test. Remis à
-   * zéro en même temps que l'accumulateur, sinon ils dériveraient d'un geste à
-   * l'autre et un vieux défilement vertical condamnerait un swipe neuf. */
-  const spaceSwipeVerticalRef = useRef(0);
-  const spaceSwipeHorizontalRef = useRef(0);
-  /**
-   * L'axe arrêté pour la salve en cours. Tant qu'il vaut « indecis », on ne
-   * peint RIEN : c'est ce qui a fait vibrer la barre pendant les défilements un
-   * peu diagonaux (fondateur, 01/08). La règle vit dans `swipeEspaces.ts`.
-   */
-  const spaceSwipeAxeRef = useRef<AxeDuGeste>("indecis");
-  /**
-   * UNE SEULE remise à zéro, appelée partout.
-   *
-   * Ces compteurs étaient remis à zéro à SIX endroits, chacun recopiant la
-   * liste à la main — et l'un d'eux l'écrivait déjà deux fois. Ajouter un
-   * septième compteur (l'axe) en oubliant un seul site, c'est le geste
-   * suivant qui hérite d'une décision périmée : un défilement vertical
-   * condamnerait un swipe neuf, ou l'inverse. La liste tient donc ici, une
-   * fois.
-   */
-  const remettreLeGesteAZero = useCallback(() => {
-    spaceSwipeAccumRef.current = 0;
-    spaceSwipeVerticalRef.current = 0;
-    spaceSwipeHorizontalRef.current = 0;
-    spaceSwipeAxeRef.current = "indecis";
-  }, []);
+  // LE SWIPE EST UNE MACHINE À ÉTATS PURE (`salveDeSwipe.ts`, testée sur
+  // traces) — réécrite de zéro le 02/08 sur ordre fondateur : quatre
+  // correctifs successifs avaient laissé SEPT refs ici, et un état
+  // « verticale » sans aucune porte de sortie — un seul défilement du fil
+  // tuait le swipe jusqu'au redémarrage. Le composant ne garde que la salve
+  // et LE minuteur de silence qui la clôt ; toutes les règles (axe, seuil,
+  // pic, traîne) vivent dans la machine, sous test.
+  const salveRef = useRef<EtatSalve>(SALVE_AU_REPOS);
+  const silenceDeSalveRef = useRef<number | null>(null);
   // Le geste se VOIT pendant qu'il se fait. Avant, rien ne bougeait jusqu'au
   // seuil puis l'espace sautait d'un coup — « l'animation est très nulle, pas
   // fluide » (fondateur, 30/07). Désormais le contenu SUIT les doigts (offset
@@ -296,187 +236,81 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
    * panneau de la barre à l'intérieur du chat, ne trouverait rien, et le
    * changement d'espace se ferait sans la moindre animation.
    */
-  const surLaMolette = useCallback(
-    (event: WheelEvent) => {
-      const depart = event.target instanceof Element ? event.target : null;
-      if (depart === null) return;
-      const barre = depart.closest<HTMLElement>("[data-app-sidebar]");
-      const zoneDeTravail = depart.closest<HTMLElement>("[data-slot=sidebar-inset]");
-      if (barre === null && zoneDeTravail === null) return;
-      const depuisLaBarre = barre !== null;
+  const surLaMolette = useCallback((event: WheelEvent) => {
+    const depart = event.target instanceof Element ? event.target : null;
+    if (depart === null) return;
+    const barre = depart.closest<HTMLElement>("[data-app-sidebar]");
+    const zoneDeTravail = depart.closest<HTMLElement>("[data-slot=sidebar-inset]");
+    if (barre === null && zoneDeTravail === null) return;
+    const depuisLaBarre = barre !== null;
 
-      // Ce qui a encore de la course sous le doigt garde le geste. On s'arrête
-      // à la surface qu'on a reconnue : au-delà, on sortirait de notre domaine.
-      if (!depuisLaBarre) {
-        const limite = zoneDeTravail;
-        for (let noeud: Element | null = depart; noeud !== null; noeud = noeud.parentElement) {
-          if (peutEncoreDefiler(noeud, event.deltaX)) return;
-          if (noeud === limite) break;
-        }
+    // Ce qui a encore de la course sous le doigt garde le geste. On
+    // s'arrête à la surface qu'on a reconnue : au-delà, on sortirait de
+    // notre domaine.
+    if (!depuisLaBarre) {
+      const limite = zoneDeTravail;
+      for (let noeud: Element | null = depart; noeud !== null; noeud = noeud.parentElement) {
+        if (peutEncoreDefiler(noeud, event.deltaX)) return;
+        if (noeud === limite) break;
       }
+    }
 
-      const carte = document.querySelector<HTMLDivElement>("[data-app-sidebar]");
-      if (carte === null) return;
+    const carte = document.querySelector<HTMLDivElement>("[data-app-sidebar]");
+    if (carte === null) return;
 
-      // VERROU D'INERTIE : tant que la traîne du geste précédent n'a pas cessé,
-      // on avale tout. Chaque évènement repousse la fin du silence — le verrou
-      // ne se lève donc qu'une fois le trackpad vraiment muet, quelle que soit
-      // la durée de l'inertie.
-      const ampleur = Math.abs(event.deltaX);
-      if (spaceSwipeVerrouRef.current) {
-        // ON COMPARE AU PIC, PAS À LA DERNIÈRE VALEUR — corrigé le 01/08.
-        //
-        // Le test était `ampleur > dernier * 1.25 + 2`. Il supposait une inertie
-        // strictement DÉCROISSANTE. Elle ne l'est pas : un geste franc produit
-        // des ondulations, et une seule remontée locale suffisait à rouvrir le
-        // verrou AU MILIEU de la traîne. Le reste de l'inertie atteignait alors
-        // le seuil et franchissait un SECOND espace — « si je swipe trop fort,
-        // ça va sur design et ça revient » (fondateur, 01/08).
-        //
-        // Une traîne ne dépasse jamais le PIC du geste qui l'a produite : c'est
-        // sa signature physique, et elle tient même quand la décroissance est
-        // bruitée. Un doigt qui repart, lui, produit une amplitude comparable au
-        // geste d'origine. On garde donc le pic de la salve en cours, et on ne
-        // rouvre que sur quelque chose du même ordre.
-        //
-        // Le repli reste le SILENCE (le minuteur ci-dessous) : c'est lui qui
-        // rouvre le cas normal, où l'on s'arrête entre deux gestes.
-        const pic = spaceSwipePicRef.current;
-        const repart = ampleur > pic * 0.9 + 2;
-        spaceSwipePicRef.current = Math.max(pic, ampleur);
-        if (!repart) {
-          if (spaceSwipeSilenceRef.current !== null) {
-            window.clearTimeout(spaceSwipeSilenceRef.current);
-          }
-          spaceSwipeSilenceRef.current = window.setTimeout(() => {
-            spaceSwipeVerrouRef.current = false;
-            remettreLeGesteAZero();
-            spaceSwipePicRef.current = 0;
-          }, SILENCE_FIN_DE_GESTE_MS);
-          return;
-        }
-        spaceSwipeVerrouRef.current = false;
-        remettreLeGesteAZero();
-        if (spaceSwipeSilenceRef.current !== null) {
-          window.clearTimeout(spaceSwipeSilenceRef.current);
-          spaceSwipeSilenceRef.current = null;
-        }
-      }
-      // Le PIC de la salve, pas la dernière valeur : c'est lui qui sert de
-      // référence à la reprise ci-dessus. L'écraser ici le ramènerait à une
-      // valeur basse en fin de geste, et la moindre ondulation de la traîne
-      // repasserait pour un nouveau doigt.
-      spaceSwipePicRef.current = Math.max(spaceSwipePicRef.current, ampleur);
-      // UNE IMAGE VERTICALE NE TUE PLUS LE GESTE — corrigé le 01/08, et c'est LA
-      // cause des saccades.
-      //
-      // Le test était `|deltaX| <= |deltaY|` sur l'évènement SEUL : chaque image
-      // un peu verticale remettait l'accumulateur à ZÉRO et rappelait `retomber`,
-      // qui ramène la barre à sa place. Or un glissement LENT à deux doigts n'est
-      // jamais parfaitement horizontal — une image sur trois a un `deltaY`
-      // supérieur. Chacune détruisait toute l'accumulation.
-      //
-      // Résultat mesuré sur l'enregistrement du 01/08 (120 fps, 3 443 images) :
-      // avant le basculement de 13,60 s, le décalage fait +4, +3, +2, +2, puis
-      // −1, −4, −8 — il repart en sens INVERSE au milieu du même geste. C'est le
-      // tremblement : « elle bouge de gauche à droite comme si elle tremblait,
-      // sans jamais passer à l'autre espace ». En allant vite, `deltaX` domine,
-      // il y a moins de resets, et ça finit par passer — d'où « ça ne marche que
-      // si je swipe plus fort ».
-      //
-      // On juge donc l'INTENTION du geste, pas une image isolée : on compare les
-      // deux axes CUMULÉS. Un geste franchement vertical (défilement de la liste)
-      // abandonne toujours ; un geste horizontal traversé d'une image oblique
-      // continue.
-      spaceSwipeVerticalRef.current += Math.abs(event.deltaY);
-      spaceSwipeHorizontalRef.current += Math.abs(event.deltaX);
-      // ... ET L'AXE SE DÉCIDE UNE FOIS, PAS À CHAQUE IMAGE — corrigé le 01/08.
-      //
-      // Comparer les deux cumulés était juste, mais on le refaisait à chaque
-      // évènement, y compris sur les toutes premières images où les deux valent
-      // deux ou trois pixels. Le bruit du trackpad y fait gagner l'horizontal une
-      // image sur deux : la barre suivait le doigt, puis le vertical reprenait le
-      // dessus et elle retombait. Elle VIBRAIT pendant tout défilement un peu
-      // diagonal — « ça fait un peu bouger la sidebar » (fondateur, 01/08).
-      //
-      // Tant que le geste n'a pas assez de course pour que le rapport veuille
-      // dire quelque chose, il est INDÉCIS : on cumule, on ne peint rien. Une
-      // fois tranché, l'axe tient pour toute la salve — un défilement ne pourra
-      // plus toucher la barre, quelle que soit sa dérive ensuite.
-      if (spaceSwipeAxeRef.current === "indecis") {
-        spaceSwipeAxeRef.current = deciderLAxe({
-          horizontal: spaceSwipeHorizontalRef.current,
-          vertical: spaceSwipeVerticalRef.current,
-        });
-      }
-      if (spaceSwipeAxeRef.current !== "horizontal") {
-        // Indécis : on attend d'en savoir plus, sans rien remettre à zéro — ce
-        // sont justement ces pixels-là qui trancheront. Vertical : le geste
-        // appartient au défilement, définitivement.
-        //
-        // Rien à faire retomber dans les deux cas : la barre ne bouge que sous
-        // l'axe horizontal, et un axe tranché ne se retourne plus. Un `retomber`
-        // ici serait du code qui ment sur ce qui peut arriver.
-        return;
-      }
-      const now = Date.now();
-      if (now - spaceSwipeLastFireRef.current < 450) return;
-      spaceSwipeAccumRef.current += event.deltaX;
-      // Un geste qui s'arrête sans atteindre le seuil retombe en douceur.
-      if (spaceSwipeSettleRef.current !== null) window.clearTimeout(spaceSwipeSettleRef.current);
-      const cible = carte;
-      spaceSwipeSettleRef.current = window.setTimeout(() => {
-        remettreLeGesteAZero();
-        retomber(cible);
-      }, 140);
-      if (Math.abs(spaceSwipeAccumRef.current) < seuilDuSwipe(depuisLaBarre)) {
-        suivreLeDoigt(cible, spaceSwipeAccumRef.current);
-        return;
-      }
-      if (spaceSwipeSettleRef.current !== null) window.clearTimeout(spaceSwipeSettleRef.current);
-      // ATTENTION AU SIGNE. Avec le défilement naturel de macOS, deux doigts qui
-      // partent vers la DROITE produisent un deltaX NÉGATIF : le contenu suit les
-      // doigts, donc la fenêtre recule. Je lisais ce signe tel quel, et tout le
-      // geste marchait à l'envers. La variable porte désormais le sens PHYSIQUE
-      // du geste, pas le signe brut : +1 = les doigts vont vers la droite.
-      const versLaDroite = spaceSwipeAccumRef.current < 0 ? 1 : -1;
-      remettreLeGesteAZero();
-      spaceSwipeLastFireRef.current = now;
-      // Le geste a abouti : tout ce qui suit est de la traîne, pas une intention.
-      // On verrouille jusqu'au silence — un seul geste, un seul espace franchi.
-      spaceSwipeVerrouRef.current = true;
-      if (spaceSwipeSilenceRef.current !== null) window.clearTimeout(spaceSwipeSilenceRef.current);
-      spaceSwipeSilenceRef.current = window.setTimeout(() => {
-        spaceSwipeVerrouRef.current = false;
-        remettreLeGesteAZero();
-      }, SILENCE_FIN_DE_GESTE_MS);
-      // Deux doigts vers la DROITE ouvrent la bibliothèque — mais SEULEMENT
-      // depuis la vue principale. Depuis un espace, le même geste ramène
-      // d'abord vers « Tous » : sinon il faudrait deviner quand il navigue et
-      // quand il ouvre une fenêtre, et on sortirait de son rangement par
-      // surprise (précision fondateur 30/07). Le geste garde donc un seul
-      // sens : vers la droite on REMONTE — d'espace en espace jusqu'à la vue
-      // principale, puis d'un cran de plus jusqu'à la bibliothèque.
-      if (versLaDroite > 0 && useSidebarSpacesStore.getState().activeSpaceId === null) {
-        // La bibliothèque est un survol : la sidebar retombe pendant qu'il
-        // s'ouvre, pas de traversée — deux animations concurrentes se battraient.
-        retomber(cible);
-        useBibliothequeStore.getState().ouvrir("espaces");
-        return;
-      }
-      traverser(cible, versLaDroite, () => {
-        useSidebarSpacesStore.getState().cycleSpace(versLaDroite);
-      });
-    },
-    [remettreLeGesteAZero],
-  );
+    const [prochaine, sortie] = surEvenement(
+      salveRef.current,
+      event.deltaX,
+      event.deltaY,
+      seuilDuSwipe(depuisLaBarre),
+    );
+    salveRef.current = prochaine;
+
+    // LE minuteur : chaque évènement le réarme, le silence clôt la salve —
+    // quelle que soit sa phase. C'est la porte de sortie universelle qui
+    // manquait à l'ancien code.
+    if (silenceDeSalveRef.current !== null) window.clearTimeout(silenceDeSalveRef.current);
+    silenceDeSalveRef.current = window.setTimeout(() => {
+      silenceDeSalveRef.current = null;
+      const [repos, fin] = surSilence(salveRef.current);
+      salveRef.current = repos;
+      if (fin.type === "retomber") retomber(carte);
+    }, SILENCE_FIN_DE_SALVE_MS);
+
+    if (sortie.type === "suivre") {
+      suivreLeDoigt(carte, sortie.accumule);
+      return;
+    }
+    if (sortie.type !== "traverser") return;
+
+    // Deux doigts vers la DROITE ouvrent la bibliothèque — mais SEULEMENT
+    // depuis la vue principale. Depuis un espace, le même geste ramène
+    // d'abord vers « Tous » (précision fondateur 30/07) : vers la droite on
+    // REMONTE — d'espace en espace jusqu'à la vue principale, puis d'un
+    // cran de plus jusqu'à la bibliothèque.
+    if (sortie.versLaDroite > 0 && useSidebarSpacesStore.getState().activeSpaceId === null) {
+      // La bibliothèque est un survol : la sidebar retombe pendant qu'il
+      // s'ouvre — deux animations concurrentes se battraient.
+      retomber(carte);
+      useBibliothequeStore.getState().ouvrir("espaces");
+      return;
+    }
+    traverser(carte, sortie.versLaDroite, () => {
+      useSidebarSpacesStore.getState().cycleSpace(sortie.versLaDroite);
+    });
+  }, []);
 
   useEffect(() => {
     // `passive` : on ne coupe jamais le défilement natif — les blocs qui ont
     // encore de la course l'ont déjà gardé plus haut, et laisser le navigateur
     // faire évite toute saccade.
     window.addEventListener("wheel", surLaMolette, { passive: true });
-    return () => window.removeEventListener("wheel", surLaMolette);
+    return () => {
+      window.removeEventListener("wheel", surLaMolette);
+      // Un minuteur de silence encore armé viserait une carte démontée.
+      if (silenceDeSalveRef.current !== null) window.clearTimeout(silenceDeSalveRef.current);
+      salveRef.current = SALVE_AU_REPOS;
+    };
   }, [surLaMolette]);
 
   /**
