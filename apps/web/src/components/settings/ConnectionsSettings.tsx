@@ -2973,10 +2973,30 @@ export function ConnectionsSettings() {
           <TooltipTrigger
             render={
               <span className="inline-flex">
+                {/*
+                  reglage-inerte-assume: ce réglage EXISTE et il est réellement
+                  actionnable — mais ailleurs. `renderNetworkAccessToggle()`
+                  rend le même interrupteur, vivant, quand le backend peut
+                  changer d'exposition. Ici il est VERROUILLÉ, pas faux :
+                  l'exposition réseau redémarre le serveur et se décide là où
+                  ce serveur est lancé. Garder la même forme dit « même
+                  réglage, verrouillé ici » ; le retirer laisserait croire
+                  qu'il n'existe pas.
+
+                  L'étiquette, elle, mentait : « Enable network access »
+                  annonçait à un lecteur d'écran une action impossible. Elle
+                  dit maintenant l'état ET le verrou. L'explication complète
+                  est dans la description visible de la ligne, donc elle
+                  atteint aussi ceux qui ne survolent jamais.
+                */}
                 <Switch
                   checked={isLocalBackendNetworkAccessible}
                   disabled
-                  aria-label="Enable network access"
+                  aria-label={
+                    isLocalBackendNetworkAccessible
+                      ? "Network access is on — locked, change it where the server is launched"
+                      : "Network access is off — locked, change it where the server is launched"
+                  }
                 />
               </span>
             }

@@ -18,6 +18,12 @@ import {
 } from "@t3tools/shared/backgroundActivitySettings";
 
 import { usePrimarySettings, useUpdatePrimarySettings } from "../../hooks/useSettings";
+import {
+  etatDeLaSource,
+  libelleEtatSource,
+  pastilleEtatSource,
+  type EtatSource,
+} from "./SourceControlSettings.logic";
 import { cn } from "../../lib/utils";
 import { usePrimaryEnvironment } from "../../state/environments";
 import { useEnvironmentQuery } from "../../state/query";
@@ -41,7 +47,6 @@ import {
   NumberFieldIncrement,
   NumberFieldInput,
 } from "../ui/number-field";
-import { Switch } from "../ui/switch";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import {
   AzureDevOpsIcon,
@@ -175,11 +180,20 @@ function RedactedAccount(props: { readonly account: string | null }) {
   );
 }
 
-function itemStatusDot(item: VcsDiscoveryItem | SourceControlProviderDiscoveryItem): string {
-  if (isVcsNotReady(item)) return "bg-muted-foreground/35";
-  if (item.status !== "available") return "bg-warning";
-  if (isProviderDiscoveryItem(item) && item.auth.status !== "authenticated") return "bg-warning";
-  return "bg-success";
+/**
+ * L'état d'une ligne, calculé une seule fois et NOMMÉ.
+ *
+ * La version d'avant rendait directement une classe de couleur, ce qui rendait
+ * impossible d'en tirer un libellé : « warning » recouvrait à la fois « l'outil
+ * est absent » et « l'outil est là mais personne n'est connecté ». Deux causes,
+ * deux réparations différentes, une seule teinte.
+ */
+function etatDeLItem(item: VcsDiscoveryItem | SourceControlProviderDiscoveryItem): EtatSource {
+  return etatDeLaSource({
+    prisEnCharge: !isVcsNotReady(item),
+    disponible: item.status === "available",
+    authentifie: isProviderDiscoveryItem(item) ? item.auth.status === "authenticated" : null,
+  });
 }
 
 function SourceControlItemMark({
@@ -187,13 +201,24 @@ function SourceControlItemMark({
 }: {
   readonly item: VcsDiscoveryItem | SourceControlProviderDiscoveryItem;
 }) {
-  const dotClassName = itemStatusDot(item);
+  const etat = etatDeLItem(item);
+  const dotClassName = pastilleEtatSource(etat);
+  // La pastille n'est plus muette : elle PORTE l'état. Avant, elle était
+  // `aria-hidden` et l'unique nom de cet état vivait sur un interrupteur mort.
+  const libelle = libelleEtatSource(etat);
   const Icon = isProviderDiscoveryItem(item)
     ? SOURCE_CONTROL_PROVIDER_ICONS[item.kind]
     : VCS_ICONS[item.kind];
 
   if (!Icon) {
-    return <span className={cn("size-2 shrink-0 rounded-full", dotClassName)} aria-hidden />;
+    return (
+      <span
+        className={cn("size-2 shrink-0 rounded-full", dotClassName)}
+        role="img"
+        aria-label={libelle}
+        title={libelle}
+      />
+    );
   }
 
   return (
@@ -204,7 +229,9 @@ function SourceControlItemMark({
           "pointer-events-none absolute -left-0.5 -top-0.5 size-2 rounded-full ring-2 ring-background",
           dotClassName,
         )}
-        aria-hidden
+        role="img"
+        aria-label={libelle}
+        title={libelle}
       />
     </span>
   );
@@ -273,9 +300,6 @@ function DiscoveryItemRow({
   readonly children?: ReactNode;
 }) {
   const version = optionLabel(item.version);
-  const enabled = isProviderDiscoveryItem(item)
-    ? item.status === "available" && item.auth.status === "authenticated"
-    : item.status === "available" && item.implemented;
   const auth = isProviderDiscoveryItem(item) ? item.auth : null;
   const authStatus = auth ? authPresentation(auth) : null;
   const authAccount = auth ? optionLabel(auth.account) : null;
@@ -328,9 +352,20 @@ function DiscoveryItemRow({
                 />
               </Button>
             ) : null}
-            {!isVcsNotReady(item) ? (
-              <Switch checked={enabled} disabled aria-label={`${item.label} availability`} />
-            ) : null}
+            {/*
+              L'INTERRUPTEUR MORT EST PARTI, et rien ne le remplace ici.
+
+              Il était `disabled` en permanence : il ne réglait pas la
+              disponibilité, il la RAPPORTAIT. Un contrôle qu'on ne peut pas
+              actionner, dessiné comme un contrôle, promet un geste qui
+              n'existe pas — et sur un écran de Réglages c'est la promesse la
+              plus crédible qui soit.
+
+              L'état n'est pas perdu pour autant : il vit désormais sur la
+              pastille, qui le NOMME (« Available », « Not signed in », « Not
+              found on this machine », « Not supported yet ») au lieu de le
+              coder en couleur seule.
+            */}
           </div>
         </div>
       </div>
