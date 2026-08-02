@@ -3,6 +3,7 @@ import { describe, expect, it } from "vite-plus/test";
 import {
   ajouterRond,
   deplacerFigure,
+  normaliserAuGabarit,
   orientationDe,
   poserFigure,
   poserSelonCouleurs,
@@ -309,6 +310,44 @@ describe("la figure de la toile", () => {
     dansLaToile(recale);
     recale.forEach((point, index) => {
       expect(angle(point)).toBeCloseTo(angle(ancien[index]!), 6);
+    });
+  });
+
+  it("pose SERRÉ même quand la dominante vient d'une teinte claire", () => {
+    // Le 02/08 sur la 0.0.80 : partir d'un blanc (rayon de teinte 0,39)
+    // posait duo et trio au BORD — ronds pâles, délavés. Arc pose toujours
+    // serré et vif ; le glissé élargit ensuite. Le rayon de pose est donc le
+    // rayon VISIBLE, jamais celui hérité de la dominante.
+    const loin = poserFigure(0.89, 0.5, 1); // r = 0,39, comme un blanc
+    const duo = ajouterRond(loin, 3);
+    expect(rayon(duo[0]!)).toBeLessThan(0.15);
+    const trio = ajouterRond(duo, 3);
+    expect(rayon(trio[0]!)).toBeLessThan(0.15);
+    expect(Math.min(...ecarts(trio))).toBeGreaterThan(0.09);
+  });
+
+  it("MIGRE un thème enregistré sous les anciens modèles vers le gabarit", () => {
+    // Vu sur les captures du 02/08 (0.0.80) : un duo SAUVEGARDÉ à 112° avec
+    // des rayons inégaux (57 et 71 px) — une géométrie qu'aucun chemin de
+    // pose ne produit plus, mais que la lecture affichait telle quelle.
+    const ancien: Point[] = [
+      { x: 0.5 + 0.081, y: 0.5 + 0.051 },
+      { x: 0.5 - 0.088, y: 0.5 + 0.048 },
+    ];
+    const migre = normaliserAuGabarit(ancien);
+    expect(migre).toHaveLength(2);
+    memeRayon(migre);
+    expect(ecartsAngulaires(migre).map(Math.round)).toEqual([180, 180]);
+    // la dominante garde son angle : la teinte du thème survit
+    expect(angle(migre[0]!)).toBeCloseTo(angle(ancien[0]!), 6);
+  });
+
+  it("laisse un thème déjà au gabarit STRICTEMENT intact", () => {
+    const propre = poserFigure(0.72, 0.5, 3);
+    const repasse = normaliserAuGabarit(propre);
+    repasse.forEach((point, index) => {
+      expect(point.x).toBeCloseTo(propre[index]!.x, 9);
+      expect(point.y).toBeCloseTo(propre[index]!.y, 9);
     });
   });
 

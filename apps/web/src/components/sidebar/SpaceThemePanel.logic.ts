@@ -418,9 +418,14 @@ export function ajouterRond(points: ReadonlyArray<Point>, max: number): Point[] 
   // Le gabarit d'Arc pour N+1, ancré sur l'angle de la dominante : passer de
   // deux à trois REDISTRIBUE la figure (paire à 60° + un en face) — c'est ce
   // que ses captures montrent, pas une insertion dans un vide.
+  //
+  // Le rayon de pose est le rayon VISIBLE, PAS celui de la dominante : hérité,
+  // une dominante blanche (rayon de teinte 0,39) posait des ronds au bord —
+  // pâles, délavés, « totalement pas comme Arc » (02/08). Arc pose toujours
+  // SERRÉ et vif (ses duos/trios naissent à 30-70 px) ; le glissé élargit
+  // ensuite si on veut du pâle.
   const angles = anglesDuGabarit(angleDe(points[0]!), points.length + 1);
-  const rayon = Math.max(rayonDe(points), rayonPourRendreVisible(angles));
-  return angles.map((angle) => surLeCercle(angle, rayon));
+  return angles.map((angle) => surLeCercle(angle, rayonPourRendreVisible(angles)));
 }
 
 /**
@@ -443,6 +448,25 @@ export function poserSelonCouleurs(couleurs: ReadonlyArray<string>): Point[] {
   return angles.map((angle) => surLeCercle(angle, rayon));
 }
 
+/**
+ * RAMÈNE un thème enregistré sur le gabarit d'Arc — la migration qui manquait.
+ *
+ * Le 02/08, les captures d'Enzo (0.0.80) montraient un duo à 112° aux rayons
+ * INÉGAUX (57 et 71 px) : une géométrie que plus aucun chemin de pose ne
+ * produit. Elle venait d'un thème SAUVEGARDÉ sous les modèles d'avant,
+ * affiché tel quel — la pose avait été corrigée, la LECTURE jamais. Et comme
+ * le glissé conserve les angles, le vieux 112° survivait à tout.
+ *
+ * On garde l'angle et le rayon de la dominante (la teinte du thème) et les
+ * COULEURS de chacun ; seuls les angles des suivants se recalent au gabarit.
+ */
+export function normaliserAuGabarit(points: ReadonlyArray<Point>): Point[] {
+  if (points.length === 0) return [];
+  const angles = anglesDuGabarit(angleDe(points[0]!), points.length);
+  const rayon = Math.max(rayonDe(points), rayonPourRendreVisible(angles));
+  return angles.map((angle) => surLeCercle(angle, rayon));
+}
+
 /** Retire le dernier rond. Les rescapés gardent leur angle ET leur rayon. */
 export function retirerRond(points: ReadonlyArray<Point>): Point[] {
   if (points.length <= 1) return [...points];
@@ -461,9 +485,14 @@ export function poserFigure(x: number, y: number, count: number): Point[] {
   const vise = Math.hypot(dx, dy);
   const angle = vise < 1e-9 ? ORIENTATION_DEFAUT : Math.atan2(dy, dx);
   // Le gabarit d'Arc, ancré sur l'angle visé — plus jamais un étalement à
-  // angles égaux, qu'aucune de ses captures ne montre.
+  // angles égaux, qu'aucune de ses captures ne montre. À plusieurs ronds, le
+  // rayon de pose est le rayon visible (serré, vif — voir `ajouterRond`) ;
+  // seul un rond SEUL respecte la distance visée, c'est sa couleur.
   const angles = anglesDuGabarit(angle, Math.max(1, count));
-  const rayon = Math.max(Math.min(RAYON_MAXI, vise), rayonPourRendreVisible(angles));
+  const rayon =
+    count <= 1
+      ? Math.max(Math.min(RAYON_MAXI, vise), rayonPourRendreVisible(angles))
+      : rayonPourRendreVisible(angles);
   return angles.map((valeur) => surLeCercle(valeur, rayon));
 }
 
