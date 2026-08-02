@@ -52,6 +52,32 @@ const CHEMINS_HERITES = [
   `${NOM_AMONT} (Alpha)`,
 ] as const;
 
+/**
+ * La même marque, écrite avec un TIRET — la forme qui sert aux noms de
+ * fichiers, et celle que le premier garde laissait passer.
+ *
+ * Trouvée le 02/08 en cherchant autre chose : `artifactName` valait
+ * « T3-Code-${version}-${arch}.${ext} », donc le DMG s'appelait encore comme
+ * l'amont alors que l'app affichait Raptor. Le garde ne voyait rien : il
+ * cherchait « T3 Code » avec une espace.
+ */
+const NOM_AMONT_TIRET = ["T3", "Code"].join("-");
+
+/**
+ * LE NOM DU FICHIER D'ARTEFACT, et c'est une exception ASSUMÉE.
+ *
+ * Ce n'est pas de la marque affichée : c'est de la plomberie, et six endroits
+ * en dépendent — `scripts/t3-maj-amont.sh`, les gabarits de
+ * `release-smoke.ts` et `merge-update-manifests.test.ts`, plus le script
+ * `~/.local/bin/t3-maj` qui vit HORS du dépôt et qu'un renommage casserait
+ * sans qu'aucun test ne rougisse.
+ *
+ * Le renommer demande de bouger les six ensemble, dans le bon ordre. Tant que
+ * ce n'est pas fait, on le NOMME ici plutôt que de laisser croire que le
+ * débranding est complet — une exception écrite vaut mieux qu'un trou muet.
+ */
+const ARTEFACT_HERITE = `artifactName: "${NOM_AMONT_TIRET}-\${version}-\${arch}.\${ext}"`;
+
 /** Les arbres qui produisent ce que l'utilisateur LIT. */
 const ARBRES = ["apps/web/src", "apps/desktop/src"] as const;
 const FICHIERS_ISOLES = ["scripts/build-desktop-artifact.ts"] as const;
@@ -121,6 +147,53 @@ describe("la marque de Raptor", () => {
             `jamais la recopier. Si c'est un chemin de données hérité, ajoute-le à ` +
             `CHEMINS_HERITES avec la raison.`,
     ).toEqual([]);
+  });
+
+  it("refuse aussi la forme à TIRET, celle des noms de fichiers", () => {
+    // Le premier garde ne cherchait que « T3 Code » avec une espace, et la
+    // forme à tiret lui échappait entièrement. Une seule occurrence existe
+    // aujourd'hui — le nom d'artefact — et elle est nommée ci-dessus avec sa
+    // raison. Toute AUTRE fait tomber ce test.
+    const racine = process.cwd();
+    const cibles = [
+      ...ARBRES.flatMap((arbre) => fichiersSources(NodePath.join(racine, arbre))),
+      ...FICHIERS_ISOLES.map((fichier) => NodePath.join(racine, fichier)),
+    ];
+
+    const fautes: string[] = [];
+    for (const chemin of cibles) {
+      if (chemin.endsWith("marque.chaine.test.ts")) continue;
+      const lignes = NodeFS.readFileSync(chemin, "utf8").split("\n");
+      lignes.forEach((ligne, index) => {
+        if (!ligne.includes(NOM_AMONT_TIRET)) return;
+        if (ligne.includes(ARTEFACT_HERITE)) return;
+        fautes.push(`${chemin.slice(racine.length + 1)}:${index + 1} → ${ligne.trim()}`);
+      });
+    }
+
+    expect(
+      fautes,
+      fautes.length === 0
+        ? ""
+        : `La marque de l'amont revient sous sa forme à tiret dans ${fautes.length} ligne(s) :\n` +
+            `${fautes.join("\n")}\n\n` +
+            `Si c'est un nom de fichier d'artefact, il n'y en a qu'UN de légitime et il est ` +
+            `déjà nommé dans ARTEFACT_HERITE. Sinon, lis la marque depuis APP_BASE_NAME.`,
+    ).toEqual([]);
+  });
+
+  it("l'exception du nom d'artefact existe VRAIMENT — sinon elle ment", () => {
+    // Une exception qui ne correspond plus à rien est pire qu'aucune : elle
+    // ouvre une porte au nom d'un problème qui n'existe plus. Le jour où le
+    // renommage est fait, ce test tombe et la ligne doit disparaître.
+    const build = NodeFS.readFileSync(
+      NodePath.join(process.cwd(), "scripts/build-desktop-artifact.ts"),
+      "utf8",
+    );
+    expect(
+      build.includes(ARTEFACT_HERITE),
+      "L'artefact a été renommé — retire ARTEFACT_HERITE de ce fichier, l'exception n'a plus d'objet.",
+    ).toBe(true);
   });
 
   it("garde les chemins de données hérités, qui ne sont pas la marque", () => {
