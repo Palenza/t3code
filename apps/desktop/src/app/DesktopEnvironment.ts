@@ -78,10 +78,10 @@ export class DesktopEnvironment extends Context.Service<
 
 /** EXPORTÉ, et c'est le point : la marque doit avoir UNE source par processus.
  * Elle était recopiée en dur dans `DesktopLocalEnvironmentAuth`, qui annonçait
- * « T3 Code Desktop » pendant que l'app s'affichait « T3 Code (Raptor) » —
+ * un nom pendant que l'app en affichait un autre —
  * Enzo y a lu, à raison, que le fork se présentait sous le nom de l'amont. Une
  * marque recopiée diverge le jour où on la change ; celle-ci se lit. */
-export const APP_BASE_NAME = "T3 Code";
+export const APP_BASE_NAME = "Raptor";
 
 function resolveDesktopAppStageLabel(input: {
   readonly isDevelopment: boolean;
@@ -91,9 +91,11 @@ function resolveDesktopAppStageLabel(input: {
     return "Dev";
   }
 
-  // Le fork ne s'appelle plus « Alpha » : décision fondateur 29/07, son
-  // canal local est RAPTOR.
-  return isNightlyDesktopVersion(input.appVersion) ? "Nightly" : "Raptor";
+  // Décision fondateur 02/08 (remplace celle du 29/07) : l'app s'appelle
+  // Raptor, et une version publiée porte son nom NU. Le stade ne sert plus
+  // qu'à distinguer les builds — « Dev » ci-dessus, « Nightly » ici, et rien
+  // du tout pour une release.
+  return isNightlyDesktopVersion(input.appVersion) ? "Nightly" : "Release";
 }
 
 function resolveDesktopAppBranding(input: {
@@ -104,7 +106,16 @@ function resolveDesktopAppBranding(input: {
   return {
     baseName: APP_BASE_NAME,
     stageLabel,
-    displayName: `${APP_BASE_NAME} (${stageLabel})`,
+    // Même règle que le web (`formatAppDisplayName`) : le stade n'apparaît que
+    // s'il distingue quelque chose. Dupliquée ici plutôt qu'importée — le
+    // paquet bureau ne dépend pas du paquet web — et tenue par un test.
+    // Même règle que le web : le stade n'apparaît que s'il distingue
+    // quelque chose. Dupliquée ici — le paquet bureau ne dépend pas du
+    // paquet web — et tenue par un test.
+    displayName:
+      stageLabel === "Release" || stageLabel === "Raptor"
+        ? APP_BASE_NAME
+        : `${APP_BASE_NAME} (${stageLabel})`,
   };
 }
 
@@ -196,6 +207,13 @@ const make = Effect.fn("desktop.environment.make")(function* (
   // Le dossier hérité GAGNE sur le nouveau quand il existe (cf.
   // `resolveUserDataPath`). Donner à nightly l'héritage de stable la ferait
   // donc retomber dans les données qu'on vient de séparer — elle a le sien.
+  // CES TROIS NOMS NE SONT PAS LA MARQUE, CE SONT DES CHEMINS SUR LE DISQUE.
+  //
+  // `resolveUserDataPath` préfère le dossier hérité QUAND IL EXISTE. Les
+  // renommer au moment du changement de marque (02/08) aurait donc orphelin
+  // les données de toute installation antérieure : l'app se serait ouverte
+  // vierge, sans erreur, et « on a perdu mes fils » aurait été la seule trace.
+  // Ils décrivent l'histoire, pas l'identité — ils ne bougent pas.
   const legacyUserDataDirName = isDevelopment
     ? "T3 Code (Dev)"
     : estNightly

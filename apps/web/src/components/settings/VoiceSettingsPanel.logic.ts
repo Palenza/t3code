@@ -84,7 +84,7 @@ export interface DictionaryPasteResult {
 /**
  * Parses a plain-text list pasted by the user, one entry per line:
  *
- *   té trois code, pé trois -> T3 Code     (alias: spoken forms → replacement)
+ *   té trois code, pé trois -> Raptor     (alias: spoken forms → replacement)
  *   Palenza                                (bare word: term the recognizer should know)
  *
  * `->`, `=>`, `→`, `=` and a tab all work as the separator. Pasted entries

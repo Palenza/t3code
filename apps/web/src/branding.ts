@@ -16,14 +16,32 @@ export const HOSTED_APP_CHANNEL =
   hostedAppChannel === "latest" || hostedAppChannel === "nightly" ? hostedAppChannel : null;
 export const HOSTED_APP_CHANNEL_LABEL =
   HOSTED_APP_CHANNEL === "nightly" ? "Nightly" : HOSTED_APP_CHANNEL === "latest" ? "Latest" : null;
-// Fork identity (décision fondateur 29/07, révisée le soir même) : la marque
-// AFFICHÉE est T3 Code — le fork garde le nom amont — et son canal local
-// s'appelle RAPTOR (plus jamais « Alpha »).
-export const APP_BASE_NAME = "T3 Code";
+/**
+ * L'IDENTITÉ DE L'APP — une seule source, et c'est ici.
+ *
+ * Décision fondateur du 02/08/2026, qui REMPLACE celle du 29/07. L'ancienne
+ * disait que la marque affichée restait celle de l'amont et que « Raptor »
+ * n'était que le nom du canal local. La nouvelle, mot pour mot : « je veux me
+ * détacher absolument des mentions de l'amont. Moi c'est Raptor. » Raptor
+ * n'est plus un fork qui s'annonce sous le nom d'un autre, c'est son propre
+ * outil.
+ *
+ * Le nom de STADE ne sert plus qu'à distinguer les builds : « Dev » en
+ * développement, « Nightly » sur le canal de nuit, et RIEN sur une version
+ * publiée — le nom nu, comme toute app finie. C'est `formatAppDisplayName` qui
+ * applique cette règle, des deux côtés (web et bureau).
+ *
+ * Ce que ce renommage NE touche pas, volontairement : les dossiers de données
+ * (`userData` reste épinglé sur `t3code`, le serveur sur `~/.t3`) et les noms
+ * de paquets npm `@t3tools/*`. Les déplacer demande une migration ; les
+ * confondre avec un changement de marque, c'est perdre les fils d'Enzo pour un
+ * mot. Ils seront traités à part, avec leur migration.
+ */
+export const APP_BASE_NAME = "Raptor";
 export const APP_STAGE_LABEL =
   injectedDesktopAppBranding?.stageLabel ??
   HOSTED_APP_CHANNEL_LABEL ??
-  (import.meta.env.DEV ? "Dev" : "Raptor");
+  (import.meta.env.DEV ? "Dev" : "");
 export const APP_DISPLAY_NAME = formatAppDisplayName({
   baseName: APP_BASE_NAME,
   stageLabel: APP_STAGE_LABEL,

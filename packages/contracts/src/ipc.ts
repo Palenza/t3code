@@ -146,7 +146,16 @@ export type DesktopUpdateStatus =
 export type DesktopRuntimeArch = "arm64" | "x64" | "other";
 export type DesktopTheme = "light" | "dark" | "system";
 export type DesktopUpdateChannel = "latest" | "nightly";
-export type DesktopAppStageLabel = "Raptor" | "Dev" | "Nightly";
+/**
+ * Le stade d'un build — ce qui DISTINGUE une version, pas ce qui la nomme.
+ *
+ * « Release » est le stade d'une version publiée : elle s'affiche sous son nom
+ * nu (voir `formatAppDisplayName`). « Raptor » est conservé parce qu'il était
+ * le stade de release avant le changement de marque du 02/08 : un shell de
+ * bureau plus ancien peut encore l'envoyer, et le rejeter ferait échouer le
+ * décodage du branding au démarrage. Il s'affiche comme « Release ».
+ */
+export type DesktopAppStageLabel = "Release" | "Raptor" | "Dev" | "Nightly";
 
 export const DesktopUpdateStatusSchema = Schema.Literals([
   "disabled",
@@ -161,7 +170,7 @@ export const DesktopUpdateStatusSchema = Schema.Literals([
 export const DesktopRuntimeArchSchema = Schema.Literals(["arm64", "x64", "other"]);
 export const DesktopThemeSchema = Schema.Literals(["light", "dark", "system"]);
 export const DesktopUpdateChannelSchema = Schema.Literals(["latest", "nightly"]);
-export const DesktopAppStageLabelSchema = Schema.Literals(["Raptor", "Dev", "Nightly"]);
+export const DesktopAppStageLabelSchema = Schema.Literals(["Release", "Raptor", "Dev", "Nightly"]);
 
 export interface DesktopAppBranding {
   baseName: string;

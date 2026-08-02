@@ -1,6 +1,6 @@
 // @effect-diagnostics nodeBuiltinImport:off - Ce garde LIT le source pour vérifier qu un état de glissé est bien relâché : il lui faut le disque brut, pas une couche Effect.
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import * as NodeFS from "node:fs";
+import * as NodePath from "node:path";
 import { describe, expect, it } from "vite-plus/test";
 
 /**
@@ -19,8 +19,8 @@ import { describe, expect, it } from "vite-plus/test";
  * perte de capture. Retirer l'un d'eux refait le bug ; ce test le dira.
  */
 
-const SOURCE = readFileSync(
-  join(process.cwd(), "apps/web/src/components/sidebar/SpaceThemePanel.tsx"),
+const SOURCE = NodeFS.readFileSync(
+  NodePath.join(process.cwd(), "apps/web/src/components/sidebar/SpaceThemePanel.tsx"),
   "utf8",
 );
 

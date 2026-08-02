@@ -692,7 +692,7 @@ export function VoiceSettingsPanel() {
 
       <SettingsSection title="Corriger les mots que la dictée écorche">
         <p className="px-3 pb-3 text-[13px] text-muted-foreground sm:px-4">
-          La dictée entend « té trois code » quand vous dites T3 Code ? Ajoutez la correction ici et
+          La dictée entend « té trois code » quand vous dites Raptor ? Ajoutez la correction ici et
           elle s'appliquera toute seule. « Respecter les majuscules » n'agit que si la casse compte
           pour vous ; « accepter les à-peu-près » rattrape aussi les variantes proches.
         </p>

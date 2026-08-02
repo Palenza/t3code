@@ -54,10 +54,10 @@ export function aviserOuSeTaire(input: {
   // tour fini, lui, a déjà rendu son travail. Et jamais deux avis d'un coup —
   // deux notifications simultanées, c'est la moitié qui ne sera pas lue.
   if (input.apres.approbationsEnAttente > input.avant.approbationsEnAttente) {
-    return { titre: "Approbation attendue", corps: "T3 Code attend ton feu vert pour continuer." };
+    return { titre: "Approbation attendue", corps: "Raptor attend ton feu vert pour continuer." };
   }
   if (input.apres.saisiesEnAttente > input.avant.saisiesEnAttente) {
-    return { titre: "Saisie attendue", corps: "T3 Code a besoin d'une réponse de ta part." };
+    return { titre: "Saisie attendue", corps: "Raptor a besoin d'une réponse de ta part." };
   }
   // APPARITION de l'erreur, pas sa présence : sans ça, une erreur affichée
   // re-sonnerait à chaque re-rendu tant qu'elle reste à l'écran.
@@ -67,7 +67,7 @@ export function aviserOuSeTaire(input: {
   // RETOMBÉE du tour, pas son arrêt : au repos, `tourEnCours` est faux en
   // permanence — notifier là-dessus sonnerait sans fin.
   if (input.avant.tourEnCours && !input.apres.tourEnCours) {
-    return { titre: "Réponse prête", corps: "T3 Code a fini de travailler." };
+    return { titre: "Réponse prête", corps: "Raptor a fini de travailler." };
   }
   return null;
 }

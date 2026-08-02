@@ -1,6 +1,6 @@
 // @effect-diagnostics nodeBuiltinImport:off - Ce garde LIT le source pour vérifier qu une propriété reste désactivée : il lui faut le disque brut, pas une couche Effect.
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import * as NodeFS from "node:fs";
+import * as NodePath from "node:path";
 import { describe, expect, it } from "vite-plus/test";
 
 /**
@@ -21,9 +21,9 @@ import { describe, expect, it } from "vite-plus/test";
  * n'a relue.
  */
 
-const ICI = join(process.cwd(), "apps/web/src/components/chat");
+const ICI = NodePath.join(process.cwd(), "apps/web/src/components/chat");
 
-const lire = (fichier: string): string => readFileSync(join(ICI, fichier), "utf8");
+const lire = (fichier: string): string => NodeFS.readFileSync(NodePath.join(ICI, fichier), "utf8");
 
 /** Les deux endroits où un logo de fournisseur est posé sur une surface. */
 const SURFACES = [

@@ -126,7 +126,7 @@ describe("parseDictionaryPaste", () => {
   it("parses aliases with any separator and terms from bare words", () => {
     const { entries, rejected } = parseDictionaryPaste(
       [
-        "té trois code, pé trois -> T3 Code",
+        "raptore, rapetore -> Raptor",
         "fable cinq => Fable 5",
         "palennza = Palenza",
         "cécé tableau\tcc-tableau",
@@ -137,7 +137,7 @@ describe("parseDictionaryPaste", () => {
     );
     expect(rejected).toEqual([]);
     expect(entries.map((entry) => [entry.type, entry.originals, entry.replacement])).toEqual([
-      ["alias", ["té trois code", "pé trois"], "T3 Code"],
+      ["alias", ["raptore", "rapetore"], "Raptor"],
       ["alias", ["fable cinq"], "Fable 5"],
       ["alias", ["palennza"], "Palenza"],
       ["alias", ["cécé tableau"], "cc-tableau"],

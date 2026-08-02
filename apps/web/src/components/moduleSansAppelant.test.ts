@@ -1,6 +1,6 @@
 // @effect-diagnostics nodeBuiltinImport:off - Ce garde SCANNE l arbre de fichiers pour trouver les composants exportés sans appelant : il lui faut le disque brut, pas une couche Effect.
-import { readdirSync, readFileSync, statSync } from "node:fs";
-import { join, relative } from "node:path";
+import * as NodeFS from "node:fs";
+import * as NodePath from "node:path";
 
 import { describe, expect, it } from "vite-plus/test";
 
@@ -26,16 +26,16 @@ import { describe, expect, it } from "vite-plus/test";
  */
 
 const RACINE = new URL("..", import.meta.url).pathname;
-const COMPOSANTS = join(RACINE, "components");
+const COMPOSANTS = NodePath.join(RACINE, "components");
 
 /** Ceux qui n'ont légitimement aucun importateur, avec la raison. */
 const SANS_APPELANT_ASSUME: Readonly<Record<string, string>> = {};
 
 function fichiersSources(dossier: string): string[] {
   const sortie: string[] = [];
-  for (const entree of readdirSync(dossier)) {
-    const chemin = join(dossier, entree);
-    if (statSync(chemin).isDirectory()) {
+  for (const entree of NodeFS.readdirSync(dossier)) {
+    const chemin = NodePath.join(dossier, entree);
+    if (NodeFS.statSync(chemin).isDirectory()) {
       sortie.push(...fichiersSources(chemin));
       continue;
     }
@@ -47,11 +47,11 @@ function fichiersSources(dossier: string): string[] {
 }
 
 function toutLeSource(): string {
-  const racines = ["components", "routes", "state", "hooks"].map((d) => join(RACINE, d));
+  const racines = ["components", "routes", "state", "hooks"].map((d) => NodePath.join(RACINE, d));
   let texte = "";
   for (const racine of racines) {
     try {
-      for (const f of fichiersSources(racine)) texte += readFileSync(f, "utf8");
+      for (const f of fichiersSources(racine)) texte += NodeFS.readFileSync(f, "utf8");
     } catch {
       // Un dossier absent n'est pas une panne : on scanne ce qui existe.
     }
@@ -62,14 +62,14 @@ function toutLeSource(): string {
 describe("aucun composant exporté ne reste sans appelant", () => {
   it("chaque panneau de réglages est importé quelque part", () => {
     const source = toutLeSource();
-    const panneaux = fichiersSources(join(COMPOSANTS, "settings")).filter((f) =>
-      readFileSync(f, "utf8").includes("export function "),
+    const panneaux = fichiersSources(NodePath.join(COMPOSANTS, "settings")).filter((f) =>
+      NodeFS.readFileSync(f, "utf8").includes("export function "),
     );
 
     const orphelins: string[] = [];
     for (const chemin of panneaux) {
       const nom = chemin.split("/").pop()?.replace(".tsx", "") ?? "";
-      const relatif = relative(RACINE, chemin);
+      const relatif = NodePath.relative(RACINE, chemin);
       if (SANS_APPELANT_ASSUME[nom] !== undefined) continue;
       // Un import cite le NOM du fichier : `from "./SkillsSettingsPanel"`.
       const cite = source.split(`/${nom}"`).length - 1 + (source.split(`"./${nom}"`).length - 1);

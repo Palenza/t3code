@@ -27,9 +27,9 @@
  * serait lui livrer un artefact dont on ne sait rien.
  */
 
-import { execFileSync } from "node:child_process";
-import { existsSync, readdirSync, statSync } from "node:fs";
-import { basename, join } from "node:path";
+import * as NodeChildProcess from "node:child_process";
+import * as NodeFS from "node:fs";
+import * as NodePath from "node:path";
 
 const CODES = {
   dmgIntrouvable: 2,
@@ -48,7 +48,9 @@ function echouer(code: number, message: string): never {
 /** Silencieux par nature : démonter un volume déjà absent n'est pas une erreur. */
 function demonter(point: string): void {
   try {
-    execFileSync("hdiutil", ["detach", point, "-quiet", "-force"], { stdio: "ignore" });
+    NodeChildProcess.execFileSync("hdiutil", ["detach", point, "-quiet", "-force"], {
+      stdio: "ignore",
+    });
   } catch {
     // Rien à démonter, ou déjà parti.
   }
@@ -60,25 +62,28 @@ const [dmg, ...marqueurs] = arguments_.filter((valeur) => valeur !== "--ouvrir")
 if (dmg === undefined) {
   echouer(CODES.dmgIntrouvable, "usage : verifier-dmg.ts <chemin.dmg> [marqueur ...]");
 }
-if (!existsSync(dmg)) {
+if (!NodeFS.existsSync(dmg)) {
   echouer(CODES.dmgIntrouvable, `DMG introuvable : ${dmg}`);
 }
 
-const versionAttendue = /-(\d+\.\d+\.\d+)-/u.exec(basename(dmg))?.[1];
+const versionAttendue = /-(\d+\.\d+\.\d+)-/u.exec(NodePath.basename(dmg))?.[1];
 if (versionAttendue === undefined) {
-  echouer(CODES.dmgIntrouvable, `le nom « ${basename(dmg)} » ne porte pas de version lisible`);
+  echouer(
+    CODES.dmgIntrouvable,
+    `le nom « ${NodePath.basename(dmg)} » ne porte pas de version lisible`,
+  );
 }
 
 // 1 · Les restes. Un montage de DMG est en lecture seule : le démonter ne peut
 //     rien détruire, et c'est ce qui rend la suite lisible.
-for (const entree of readdirSync("/Volumes")) {
+for (const entree of NodeFS.readdirSync("/Volumes")) {
   if (!entree.includes(versionAttendue)) continue;
   console.log(`… démontage d'un reste : /Volumes/${entree}`);
-  demonter(join("/Volumes", entree));
+  demonter(NodePath.join("/Volumes", entree));
 }
 
 // 2 · Monter UNE fois, et croire hdiutil sur le point de montage.
-const sortie = execFileSync("hdiutil", ["attach", "-nobrowse", "-readonly", dmg], {
+const sortie = NodeChildProcess.execFileSync("hdiutil", ["attach", "-nobrowse", "-readonly", dmg], {
   encoding: "utf8",
 });
 const point = sortie
@@ -86,7 +91,7 @@ const point = sortie
   .map((ligne) => ligne.split("\t").at(-1)?.trim() ?? "")
   .filter((chemin) => chemin.startsWith("/Volumes/"))
   .at(-1);
-if (point === undefined || !existsSync(point)) {
+if (point === undefined || !NodeFS.existsSync(point)) {
   echouer(CODES.montageImpossible, "le montage n'a rendu aucun point de montage utilisable");
 }
 // On démonte en partant — SAUF si on doit laisser la fenêtre à l'écran : le
@@ -96,16 +101,16 @@ process.on("exit", (code) => {
   demonter(point);
 });
 
-const app = readdirSync(point)
+const app = NodeFS.readdirSync(point)
   .filter((entree) => entree.endsWith(".app"))
-  .map((entree) => join(point, entree))
-  .find((chemin) => statSync(chemin).isDirectory());
+  .map((entree) => NodePath.join(point, entree))
+  .find((chemin) => NodeFS.statSync(chemin).isDirectory());
 if (app === undefined) {
   echouer(CODES.aucuneApp, `aucune application dans ${point}`);
 }
 
-const plist = join(app, "Contents", "Info.plist");
-if (!existsSync(plist)) {
+const plist = NodePath.join(app, "Contents", "Info.plist");
+if (!NodeFS.existsSync(plist)) {
   echouer(
     CODES.volumeIncomplet,
     `VOLUME INCOMPLET : ${point} porte l'app mais pas son Info.plist.\n` +
@@ -113,13 +118,17 @@ if (!existsSync(plist)) {
   );
 }
 
-const version = execFileSync("plutil", ["-extract", "CFBundleShortVersionString", "raw", plist], {
-  encoding: "utf8",
-}).trim();
-const binaire = join(app, "Contents", "MacOS", basename(app, ".app"));
+const version = NodeChildProcess.execFileSync(
+  "plutil",
+  ["-extract", "CFBundleShortVersionString", "raw", plist],
+  {
+    encoding: "utf8",
+  },
+).trim();
+const binaire = NodePath.join(app, "Contents", "MacOS", NodePath.basename(app, ".app"));
 let archs = "?";
 try {
-  archs = execFileSync("lipo", ["-archs", binaire], { encoding: "utf8" }).trim();
+  archs = NodeChildProcess.execFileSync("lipo", ["-archs", binaire], { encoding: "utf8" }).trim();
 } catch {
   // `lipo` refuse un binaire non universel selon la version : on le dit, on ne ment pas.
 }
@@ -137,13 +146,13 @@ if (version !== versionAttendue) {
 
 // 3 · Les marqueurs : la seule preuve que le binaire contient ce qu'on croit y
 //     avoir mis. `strings` sur l'asar, parce que c'est ce que le binaire EMBARQUE.
-const asar = join(app, "Contents", "Resources", "app.asar");
+const asar = NodePath.join(app, "Contents", "Resources", "app.asar");
 
 let manquants = 0;
 for (const marqueur of marqueurs) {
   let compte = 0;
   try {
-    const trouve = execFileSync("bash", [
+    const trouve = NodeChildProcess.execFileSync("bash", [
       "-c",
       `strings -a ${JSON.stringify(asar)} | grep -c -- ${JSON.stringify(marqueur)}`,
     ]);
@@ -167,6 +176,6 @@ console.log("✓ artefact vérifié");
 if (ouvrirEnsuite) {
   // Après la vérification, jamais avant : ouvrir un artefact dont on ne sait
   // rien, c'est livrer à l'aveugle.
-  execFileSync("open", [dmg]);
+  NodeChildProcess.execFileSync("open", [dmg]);
   console.log("→ fenêtre du DMG ouverte à l'écran");
 }
