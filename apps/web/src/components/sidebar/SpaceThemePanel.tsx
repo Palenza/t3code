@@ -15,11 +15,10 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import {
   ajouterRond,
   degradeDePastille,
+  deplacerFigure,
+  glisserSatellite,
   normaliserAuGabarit,
   poserFigure,
-  poursuivre,
-  saisirRond,
-  type PriseDeRond,
   poserSelonCouleurs,
   retirerRond,
   stopsAvecCouleurs,
@@ -281,20 +280,25 @@ export function SpaceThemePanel({ spaceId }: { readonly spaceId?: string } = {})
    * IMAGE : la boucle rAF tourne en continu pendant la prise, même doigt
    * immobile — c'est là que la convergence se voit.
    */
-  const priseRef = useRef<PriseDeRond | null>(null);
+  /** L'index du rond saisi — 0 = dominante (l'anneau tourne avec elle),
+   * sinon un satellite (il coulisse seul sur l'anneau). Verdict arc2.mov :
+   * rotation rigide sans retard, satellites indépendants. */
+  const indexSaisiRef = useRef(0);
   const currentRef = useRef(current);
   currentRef.current = current;
-  const pasDePoursuite = useCallback(() => {
+  const pasDeGlisse = useCallback(() => {
     const canvas = canvasRef.current;
-    const prise = priseRef.current;
     const cible = cibleRef.current;
-    if (canvas === null || prise === null || cible === null || !draggingRef.current) return;
+    if (canvas === null || cible === null || !draggingRef.current) return;
     const rect = canvas.getBoundingClientRect();
     const x = Math.max(0, Math.min(1, (cible.x - rect.left) / rect.width));
     const y = Math.max(0, Math.min(1, (cible.y - rect.top) / rect.height));
     const etat = currentRef.current;
     const points = etat.stops.map((stop) => ({ x: stop.x, y: stop.y }));
-    apply({ ...etat, stops: stopsDepuisPoints(poursuivre(points, prise, x, y)) });
+    const index = indexSaisiRef.current;
+    const suivants =
+      index === 0 ? deplacerFigure(points, x, y) : glisserSatellite(points, index, x, y);
+    apply({ ...etat, stops: stopsDepuisPoints(suivants) });
   }, [apply]);
 
   /**
@@ -327,27 +331,23 @@ export function SpaceThemePanel({ spaceId }: { readonly spaceId?: string } = {})
       draggingRef.current = true;
       setEnGlisse(true);
       cibleRef.current = { x: clientX, y: clientY };
-      priseRef.current = saisirRond(
-        currentRef.current.stops.map((stop) => ({ x: stop.x, y: stop.y })),
-        index,
-      );
+      indexSaisiRef.current = index;
       const boucle = () => {
         if (!draggingRef.current) {
           imageRef.current = null;
           return;
         }
-        pasDePoursuite();
+        pasDeGlisse();
         imageRef.current = window.requestAnimationFrame(boucle);
       };
       if (imageRef.current === null) imageRef.current = window.requestAnimationFrame(boucle);
     },
-    [pasDePoursuite],
+    [pasDeGlisse],
   );
 
   const finDeGlisse = useCallback(() => {
     draggingRef.current = false;
     setEnGlisse(false);
-    priseRef.current = null;
     if (imageRef.current !== null) {
       window.cancelAnimationFrame(imageRef.current);
       imageRef.current = null;
@@ -458,8 +458,7 @@ export function SpaceThemePanel({ spaceId }: { readonly spaceId?: string } = {})
           const x = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
           const y = Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height));
           const points = current.stops.map((stop) => ({ x: stop.x, y: stop.y }));
-          const prise = saisirRond(points, 0);
-          apply({ ...current, stops: stopsDepuisPoints(poursuivre(points, prise, x, y, 1)) });
+          apply({ ...current, stops: stopsDepuisPoints(deplacerFigure(points, x, y)) });
         }}
       >
         <div className="absolute inset-x-0 top-3 flex items-center justify-center">
