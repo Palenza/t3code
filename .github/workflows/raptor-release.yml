@@ -153,6 +153,14 @@ jobs:
           **Cette release ne s'installe pas toute seule.** L'auto-mise-à-jour
           exige une app signée ; il faut télécharger le DMG et glisser l'app
           dans Applications.
+
+          **Si tu avais « T3 Code (Raptor).app »** — l'app s'appelle désormais
+          « Raptor.app », donc la nouvelle se pose À CÔTÉ de l'ancienne au lieu
+          de la remplacer. Rien n'est perdu : les deux lisent exactement les
+          mêmes données (`~/Library/Application Support/t3code` et `~/.t3`,
+          inchangés). Mais ouvrir l'ancienne par erreur donne l'impression que
+          tout a disparu — **mets-la à la corbeille une fois la nouvelle
+          installée.**
           NOTES
 
           if gh release view "$TAG" >/dev/null 2>&1; then
