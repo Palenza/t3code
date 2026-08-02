@@ -272,6 +272,29 @@ export function wheelColorAt(x: number, y: number): string {
   return hslToHex(hue, sat, light);
 }
 
+/**
+ * LE DÉGRADÉ D'UNE PASTILLE DE NUANCIER — ce qui les fait ressembler à des
+ * pierres plutôt qu'à des gommettes.
+ *
+ * Comparaison à 2× des deux nuanciers, sur les captures du 02/08 : chez Arc
+ * chaque pastille est un DISQUE EN DÉGRADÉ (crème→blanc, orange→magenta,
+ * or→jaune→orange) avec un liseré plus sombre ; chez nous c'étaient des
+ * aplats à bord net. Une couleur unie dit « voici un code hexadécimal » ; un
+ * disque qui module dit « voici une matière ».
+ *
+ * On dérive les deux bouts de la couleur elle-même — teinte tournée de ±12°,
+ * clarté de ±7 — plutôt que d'inventer une seconde couleur par pastille : les
+ * 45 tons du nuancier sont RELEVÉS sur Arc, et une valeur inventée à côté
+ * d'une valeur mesurée finirait par passer pour mesurée.
+ */
+export function degradeDePastille(hex: string): readonly [string, string] {
+  const { h, s, l } = hexToHsl(hex);
+  return [
+    hslToHex(h - 12, s, Math.min(100, l + 7)),
+    hslToHex(h + 12, s, Math.max(0, l - 7)),
+  ] as const;
+}
+
 /** L'inverse : où poser un rond pour obtenir (au plus près) cette couleur. */
 export function wheelPositionOf(hex: string): Point {
   const { h, l } = hexToHsl(hex);

@@ -1,3 +1,4 @@
+// @effect-diagnostics nodeBuiltinImport:off - Ce garde LIT le source pour vérifier qu une propriété reste désactivée : il lui faut le disque brut, pas une couche Effect.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vite-plus/test";

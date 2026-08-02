@@ -14,6 +14,7 @@ import {
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import {
   ajouterRond,
+  degradeDePastille,
   deplacerFigure,
   poserFigure,
   retirerRond,
@@ -528,20 +529,27 @@ export function SpaceThemePanel({ spaceId }: { readonly spaceId?: string } = {})
                   className="flex items-center justify-between"
                   style={{ width: `${100 / NOMBRE_DE_PAGES}%` }}
                 >
-                  {page.tons.map((color) => (
-                    <button
-                      key={color}
-                      type="button"
-                      aria-label={`${page.nom} — ${color}`}
-                      tabIndex={swatchPage === index ? 0 : -1}
-                      onClick={() => applySolid(color)}
-                      // La pastille montre la couleur qu'elle POSE — pas une
-                      // version assombrie d'elle-même : le jaune doit donner
-                      // le jaune.
-                      className="size-6 cursor-pointer rounded-full ring-1 ring-black/10 transition-transform hover:scale-110"
-                      style={{ backgroundColor: color }}
-                    />
-                  ))}
+                  {page.tons.map((color) => {
+                    const [clair, sombre] = degradeDePastille(color);
+                    return (
+                      <button
+                        key={color}
+                        type="button"
+                        aria-label={`${page.nom} — ${color}`}
+                        tabIndex={swatchPage === index ? 0 : -1}
+                        onClick={() => applySolid(color)}
+                        // La pastille montre la couleur qu'elle POSE — un
+                        // dégradé CENTRÉ sur elle, jamais une autre couleur :
+                        // le jaune doit donner le jaune. Les deux bouts sont
+                        // dérivés du ton lui-même (voir `degradeDePastille`),
+                        // et le liseré intérieur est celui d'Arc.
+                        className="size-6 cursor-pointer rounded-full shadow-[inset_0_0_0_1px_rgba(0,0,0,0.16)] transition-transform hover:scale-110"
+                        style={{
+                          background: `linear-gradient(135deg, ${clair} 0%, ${sombre} 100%)`,
+                        }}
+                      />
+                    );
+                  })}
                 </div>
               ))}
               <div
