@@ -15,7 +15,28 @@
  * Longest edge kept when an image has to be re-encoded. Sized so a typical
  * retina screenshot (3024px wide) stays legible rather than being halved.
  */
-const MAX_DIMENSION = 2048;
+const MAX_DIMENSION = 2000;
+
+/**
+ * LE PLAFOND EN PIXELS DU FIL — et il n'a rien à voir avec le poids.
+ *
+ * L'API refuse une image dont un côté dépasse **2 000 px** dès que la requête
+ * en contient PLUSIEURS : « At least one of the image dimensions exceed max
+ * allowed size for many-image requests: 2000 pixels ». Le seuil se resserre
+ * donc à mesure que la conversation accumule des captures — les premières
+ * passent, les suivantes sont rejetées, sans que rien n'ait changé du côté de
+ * l'image.
+ *
+ * Or `compressImageToByteLimit` rendait tel quel tout fichier sous les 10 Mo.
+ * Une capture Retina de 3 600 px pèse ~1 Mo : elle passait donc INTACTE, à
+ * 3 600 px de large, et se faisait refuser plus tard dans le fil. Le poids
+ * était sous contrôle, la dimension n'était contrôlée nulle part.
+ *
+ * 2 000 et pas 2 048 : l'ancien plafond du ré-encodage était lui-même
+ * AU-DESSUS de la limite, donc même le chemin de secours produisait des
+ * images refusées.
+ */
+export const MAX_WIRE_DIMENSION = 2000;
 /** Base64 budget for a single stashed image (~975KB of binary). */
 export const MAX_STASH_IMAGE_DATA_URL_CHARS = 1_300_000;
 /**
@@ -305,15 +326,43 @@ export async function compressImageForStash(
  * `MAX_COMPRESSIBLE_SOURCE_BYTES` are refused outright — decoding them is
  * the risk, so no amount of output budget makes them safe.
  */
+/**
+ * Un côté de l'image dépasse-t-il le plafond du fil ?
+ *
+ * En cas de doute — pas de `createImageBitmap`, fichier illisible — on répond
+ * NON : mieux vaut laisser passer une image qui sera peut-être refusée que
+ * ré-encoder à l'aveugle une image qui allait très bien.
+ */
+async function depasseLaDimensionDuFil(file: File): Promise<boolean> {
+  if (typeof createImageBitmap !== "function") return false;
+  let bitmap: ImageBitmap | null = null;
+  try {
+    bitmap = await createImageBitmap(file);
+    return Math.max(bitmap.width, bitmap.height) > MAX_WIRE_DIMENSION;
+  } catch {
+    return false;
+  } finally {
+    bitmap?.close?.();
+  }
+}
+
 export async function compressImageToByteLimit(
   file: File,
   maxBytes: number,
 ): Promise<CompressImageFileResult> {
-  if (file.size <= maxBytes) {
-    return { ok: true, file, recompressed: false };
-  }
+  // LE REFUS AVANT LA MESURE. Mesurer les pixels demande de DÉCODER, et
+  // décoder une source énorme fait sauter l'onglet — c'est précisément ce que
+  // `MAX_COMPRESSIBLE_SOURCE_BYTES` empêche. Une première version mesurait
+  // d'abord : elle rouvrait le trou que ce garde bouche. (Un test l'a
+  // attrapée sur-le-champ.)
   if (file.size > MAX_COMPRESSIBLE_SOURCE_BYTES) {
     return { ok: false, reason: "too-large" };
+  }
+  // DEUX plafonds, pas un : le poids ET la dimension. Un fichier léger mais
+  // large passait ici sans être touché, et se faisait refuser par l'API une
+  // fois le fil chargé d'images.
+  if (file.size <= maxBytes && !(await depasseLaDimensionDuFil(file))) {
+    return { ok: true, file, recompressed: false };
   }
   // The re-encode loop budgets in data-URL characters. Base64 turns 3 bytes
   // into 4 chars; flooring keeps the budget a hair conservative instead of

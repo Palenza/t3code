@@ -407,3 +407,37 @@ describe("l'attente des transitoires est une PRÉDICTION, pas une constante", ()
     assert.strictEqual(attenteHeures(sante), 12);
   });
 });
+
+describe("les 2 pannes non reconnues du 31/07", () => {
+  // L'app les avait signalées elle-même (« 2 pannes non reconnues ») : elles
+  // tombaient en « transitoire », donc le pool basculait de compte — alors
+  // qu'aucune ne vient du compte, et que le suivant échouera pareil.
+  it("une session introuvable NE fait PAS basculer de compte", () => {
+    const verdict = classerEchec({
+      message: "No conversation found with session ID: d9b0e2ac-c145-4228-9c7a-47cd5a8fdf9b",
+      maintenant: 0,
+    });
+    assert.strictEqual(verdict.nature, "notre-faute");
+    assert.strictEqual(verdict.reconnu, true);
+  });
+
+  it("un diagnostic d'état incohérent NE fait PAS basculer non plus", () => {
+    const verdict = classerEchec({
+      message: "[ede_diagnostic] result_type=user last_content_type=n/a stop_reason=tool_use",
+      maintenant: 0,
+    });
+    assert.strictEqual(verdict.nature, "notre-faute");
+    assert.strictEqual(verdict.reconnu, true);
+  });
+
+  it("un adaptateur fermé non plus, même annoncé en 5xx", () => {
+    // Le piège : un 5xx serait classé « transitoire » plus bas. Le motif de
+    // session cassée doit passer AVANT.
+    const verdict = classerEchec({
+      code: 500,
+      message: "ProviderAdapterSessionClosedError: claudeAgent adapter thread is closed: 902afe28",
+      maintenant: 0,
+    });
+    assert.strictEqual(verdict.nature, "notre-faute");
+  });
+});

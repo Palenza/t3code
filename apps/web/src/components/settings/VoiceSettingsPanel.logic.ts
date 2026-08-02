@@ -84,7 +84,7 @@ export interface DictionaryPasteResult {
 /**
  * Parses a plain-text list pasted by the user, one entry per line:
  *
- *   té trois code, pé trois -> T3 Code     (alias: spoken forms → replacement)
+ *   té trois code, pé trois -> Raptor     (alias: spoken forms → replacement)
  *   Palenza                                (bare word: term the recognizer should know)
  *
  * `->`, `=>`, `→`, `=` and a tab all work as the separator. Pasted entries
@@ -174,4 +174,29 @@ export function dictionaryEquals(
   right: ReadonlyArray<VoiceDictionaryEntry>,
 ): boolean {
   return JSON.stringify(left) === JSON.stringify(right);
+}
+
+/**
+ * LE DÉLAI AVANT QUE LE MOTEUR VOCAL SOIT TUÉ, LU DEPUIS UN CHAMP DE TEXTE.
+ *
+ * `voice.idleTimeoutMinutes` est appliqué pour de bon : au-delà de ce délai
+ * sans audio, le moteur est arrêté pour libérer la mémoire
+ * (`TranscriptionService.ts:306`), et le clip suivant paie de nouveau les
+ * ~7 s de chargement du modèle. Le réglage existait donc — sans aucun champ
+ * pour le toucher.
+ *
+ * Un champ de texte rend des choses qu'un `Int ≥ 1` refuse : le vide pendant
+ * la frappe, « 3.5 », « abc », un négatif. Écrire ça tel quel ferait rejeter
+ * le patch par le schéma — donc un réglage qui ne s'enregistre pas, sans que
+ * personne sache pourquoi. On refuse ICI, et le champ garde sa valeur.
+ *
+ * Rend `null` quand la saisie n'est pas encore un réglage valide.
+ */
+export function minutesDeVeilleValides(saisie: string): number | null {
+  const propre = saisie.trim();
+  if (propre.length === 0) return null;
+  if (!/^\d+$/.test(propre)) return null;
+  const minutes = Number(propre);
+  if (!Number.isInteger(minutes) || minutes < 1) return null;
+  return minutes;
 }

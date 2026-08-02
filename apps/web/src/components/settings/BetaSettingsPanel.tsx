@@ -8,6 +8,7 @@ import {
 import { Input } from "../ui/input";
 import { Switch } from "../ui/switch";
 import { SettingsPageContainer, SettingsRow, SettingsSection } from "./settingsLayout";
+import { searchableSetting } from "./settingsSearch";
 
 const AUTO_SETTLE_MIN_DAYS = 1;
 const AUTO_SETTLE_MAX_DAYS = 90;
@@ -64,28 +65,44 @@ export function BetaSettingsPanel() {
   return (
     <SettingsPageContainer>
       <SettingsSection title="Beta features">
-        <SettingsRow
-          title="Sidebar v2"
-          description="One flat thread list in creation order. Active work renders as rich cards; settled threads collapse to compact rows. Settling requires an up-to-date server — on older servers threads simply stay active. Switch back any time."
-          control={
-            <Switch
-              checked={sidebarV2Enabled}
-              // Touching the switch pins the choice, so a nightly build that
-              // defaults v2 on does not flip it back after the user opts out.
-              onCheckedChange={(checked) =>
-                updateSettings({
-                  sidebarV2Enabled: Boolean(checked),
-                  sidebarV2ConfiguredByUser: true,
-                })
-              }
-              aria-label="Enable the sidebar v2 beta"
-            />
-          }
-        />
+        {/* LA BASCULE NE S'AFFICHE QUE QUAND ELLE SERT ENCORE — 01/08.
+         *
+         * Décision fondateur : « on garde notre sidebar comme on l'a mise
+         * dès maintenant ». Le choix est fait, le présenter comme une option
+         * bêta à chaque ouverture des réglages est du bruit — et un réglage
+         * qu'on relit sans jamais y toucher apprend à survoler la page.
+         *
+         * Mais on ne la SUPPRIME pas, et c'est délibéré : ce matin même, un
+         * bouton retiré sur un état qui pouvait encore être « actif » a
+         * enfermé Enzo en mode plan pendant des heures. Même discipline ici —
+         * l'échappatoire reste visible exactement quand on en a besoin,
+         * c'est-à-dire si la v2 est désactivée. Rien n'est arraché non plus :
+         * l'amont tient encore cet échafaudage, le ripper nous coûterait un
+         * conflit à chacun de ses passages sur ce panneau. */}
+        {sidebarV2Enabled ? null : (
+          <SettingsRow
+            {...searchableSetting("sidebar-v2")}
+            description="One flat thread list in creation order. Active work renders as rich cards; settled threads collapse to compact rows. Settling requires an up-to-date server — on older servers threads simply stay active. Switch back any time."
+            control={
+              <Switch
+                checked={sidebarV2Enabled}
+                // Touching the switch pins the choice, so a nightly build that
+                // defaults v2 on does not flip it back after the user opts out.
+                onCheckedChange={(checked) =>
+                  updateSettings({
+                    sidebarV2Enabled: Boolean(checked),
+                    sidebarV2ConfiguredByUser: true,
+                  })
+                }
+                aria-label="Enable the sidebar v2 beta"
+              />
+            }
+          />
+        )}
         {sidebarV2Enabled ? (
           <>
             <SettingsRow
-              title="Auto-settle inactive threads"
+              title={searchableSetting("auto-settle-inactive-threads").title}
               description="Threads with no activity for this long settle automatically. Threads on merged or closed PRs always settle."
               control={
                 <Switch

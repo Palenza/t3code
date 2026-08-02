@@ -1212,6 +1212,52 @@ const jsonRequestBody = (value: unknown): string => {
   return JSON.stringify(value);
 };
 
+/**
+ * Attendre qu'un RAPPEL RÉSEAU ait rempli ce qu'on s'apprête à vérifier.
+ *
+ * ── Le mode de panne, et pourquoi il ne se voit qu'en charge ──────────────
+ *
+ * Un test qui monte un vrai serveur en face reçoit sa réponse dès que le
+ * serveur SOUS TEST a répondu — pas quand le serveur d'en face a fini de
+ * traiter. Ce qu'il pousse dans un tableau arrive sur un rappel de socket,
+ * plus tard, sur la boucle d'événements.
+ *
+ * Seul le test lancé isolément gagne cette course à tous les coups : mesuré,
+ * 12 passages isolés verts, et 1 échec sur ~5 suites complètes. Le rouge ne
+ * parle alors ni du code ni du test, mais de la charge de la machine — c'est
+ * exactement le rouge qui apprend à relancer au lieu de lire.
+ *
+ * ── Pourquoi un vrai minuteur, et pas `Effect.sleep` ─────────────────────
+ *
+ * `it.effect` installe une horloge de TEST : elle n'écoule rien toute seule,
+ * donc `Effect.sleep` attendrait jusqu'au dépassement de délai. Ce fichier
+ * porte déjà la note sur `itRacine.live` pour un cas voisin ; ici le besoin
+ * est plus étroit — aucune sémantique d'horloge, juste laisser tourner la
+ * boucle d'événements. Un `setTimeout` réel, hors d'Effect, suffit.
+ */
+const attendreQue = (
+  quoi: string,
+  condition: () => boolean,
+  limiteMs = 5_000,
+): Effect.Effect<void> =>
+  Effect.promise(async () => {
+    // Horloge RÉELLE assumée : l'horloge d'Effect est ici celle du TEST, qui
+    // n'avance pas toute seule — c'est tout le problème qu'on contourne.
+    // @effect-diagnostics-next-line globalDateInEffect:off
+    const fin = Date.now() + limiteMs;
+    while (!condition()) {
+      // @effect-diagnostics-next-line globalDateInEffect:off
+      if (Date.now() >= fin) {
+        // A7 : nommer la limite, sa valeur ET ce qu'on attendait. Sans ça, le
+        // dépassement ressemble à l'échec d'assertion qu'il vient remplacer.
+        throw new Error(`Attente dépassée après ${String(limiteMs)} ms : ${quoi}`);
+      }
+      // Minuteur RÉEL assumé, même raison : `Effect.sleep` n'écoulerait rien.
+      // @effect-diagnostics-next-line globalTimers:off
+      await new Promise((resoudre) => setTimeout(resoudre, 10));
+    }
+  });
+
 const responseJsonEffect = <A>(response: HttpClientResponse.HttpClientResponse) =>
   response.json.pipe(
     Effect.map((json) => json as A),
@@ -4110,6 +4156,16 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
 
       assert.equal(response.status, 204);
       assert.equal(response.headers["access-control-allow-origin"], "*");
+
+      // Le 204 vient de NOTRE serveur ; le collecteur d'en face pousse sur son
+      // propre rappel de socket. Vérifier `upstreamRequests` juste après la
+      // réponse, c'est courir contre la boucle d'événements — et la perdre
+      // environ une fois sur cinq quand la suite complète charge la machine.
+      yield* attendreQue(
+        "le collecteur amont a reçu l'export transféré",
+        () => upstreamRequests.length > 0,
+      );
+
       assert.deepEqual(localTraceRecords, [
         {
           type: "otlp-span",
@@ -6022,6 +6078,149 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
       assert.equal(items[1]?.kind, "event");
       assert.equal(items[1]?.kind === "event" ? items[1].event.sequence : null, 2);
     }).pipe(Effect.provide(NodeHttpServer.layerTest), TestClock.withLive),
+  );
+
+  it.effect("subscribeThread sends a fresh snapshot instead of replaying a large gap", () =>
+    Effect.gen(function* () {
+      let readEventsCalls = 0;
+      const thread = makeDefaultOrchestrationReadModel().threads[0]!;
+
+      yield* buildAppUnderTest({
+        layers: {
+          orchestrationEngine: {
+            // Head is far ahead of the client's afterSequence (gap > 1000).
+            latestSequence: Effect.succeed(100_000),
+            readEvents: () =>
+              Stream.sync(() => {
+                readEventsCalls += 1;
+                return {} as OrchestrationEvent;
+              }),
+          },
+          projectionSnapshotQuery: {
+            getThreadDetailSnapshot: () =>
+              Effect.succeed(Option.some({ snapshotSequence: 100_000, thread })),
+          },
+        },
+      });
+
+      const wsUrl = yield* getWsServerUrl("/ws");
+      const items = yield* Effect.scoped(
+        withWsRpcClient(wsUrl, (client) =>
+          client[ORCHESTRATION_WS_METHODS.subscribeThread]({
+            threadId: defaultThreadId,
+            afterSequence: 5,
+            requestCompletionMarker: true,
+          }).pipe(Stream.take(2), Stream.runCollect),
+        ),
+      );
+
+      const [first, second] = Array.from(items);
+      // Large gap => fresh thread snapshot, and the global replay never starts.
+      assert.equal(first?.kind, "snapshot");
+      if (first?.kind === "snapshot") {
+        assert.equal(first.snapshot.thread.id, defaultThreadId);
+        assert.equal(first.snapshot.snapshotSequence, 100_000);
+      }
+      assert.equal(second?.kind, "synchronized");
+      assert.equal(readEventsCalls, 0);
+    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+  );
+
+  it.effect("subscribeThread replaces a cursor ahead of the authoritative head", () =>
+    Effect.gen(function* () {
+      let readEventsCalls = 0;
+      const thread = makeDefaultOrchestrationReadModel().threads[0]!;
+
+      yield* buildAppUnderTest({
+        layers: {
+          orchestrationEngine: {
+            latestSequence: Effect.succeed(5),
+            readEvents: () =>
+              Stream.sync(() => {
+                readEventsCalls += 1;
+                return {} as OrchestrationEvent;
+              }),
+          },
+          projectionSnapshotQuery: {
+            getThreadDetailSnapshot: () =>
+              Effect.succeed(Option.some({ snapshotSequence: 5, thread })),
+          },
+        },
+      });
+
+      const wsUrl = yield* getWsServerUrl("/ws");
+      const first = yield* Effect.scoped(
+        withWsRpcClient(wsUrl, (client) =>
+          client[ORCHESTRATION_WS_METHODS.subscribeThread]({
+            threadId: defaultThreadId,
+            afterSequence: 10,
+          }).pipe(Stream.runHead),
+        ),
+      );
+
+      assert.equal(Option.getOrThrow(first).kind, "snapshot");
+      assert.equal(readEventsCalls, 0);
+    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+  );
+
+  it.effect("subscribeThread bounds catch-up replay to the captured head", () =>
+    Effect.gen(function* () {
+      let replayLimit: number | undefined;
+      const now = "2026-01-01T00:00:00.000Z";
+      const messageEvent = {
+        sequence: 3,
+        eventId: EventId.make("event-replay-message"),
+        aggregateKind: "thread",
+        aggregateId: defaultThreadId,
+        occurredAt: now,
+        commandId: null,
+        causationEventId: null,
+        correlationId: null,
+        metadata: {},
+        type: "thread.message-sent",
+        payload: {
+          threadId: defaultThreadId,
+          messageId: MessageId.make("message-replay"),
+          role: "user",
+          text: "Replayed message",
+          turnId: null,
+          streaming: false,
+          createdAt: now,
+          updatedAt: now,
+        },
+      } satisfies Extract<OrchestrationEvent, { type: "thread.message-sent" }>;
+
+      yield* buildAppUnderTest({
+        layers: {
+          orchestrationEngine: {
+            latestSequence: Effect.succeed(50),
+            readEvents: (_afterSequence, limit) => {
+              replayLimit = limit;
+              return Stream.make(messageEvent);
+            },
+          },
+        },
+      });
+
+      const wsUrl = yield* getWsServerUrl("/ws");
+      const items = yield* Effect.scoped(
+        withWsRpcClient(wsUrl, (client) =>
+          client[ORCHESTRATION_WS_METHODS.subscribeThread]({
+            threadId: defaultThreadId,
+            afterSequence: 0,
+            requestCompletionMarker: true,
+          }).pipe(Stream.take(2), Stream.runCollect),
+        ),
+      );
+
+      const [first, second] = Array.from(items);
+      assert.equal(first?.kind, "event");
+      assert.equal(first?.kind === "event" ? first.event.sequence : null, 3);
+      assert.equal(second?.kind, "synchronized");
+      // The replay is bounded to the head captured before the read, not
+      // Number.MAX_SAFE_INTEGER.
+      assert.equal(replayLimit, 50);
+    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
 
   it.effect("subscribeShell sends a fresh snapshot instead of replaying a large gap", () =>

@@ -1,14 +1,25 @@
 const NIGHTLY_SERVER_VERSION_PATTERN = /-nightly\.\d{8}\.\d+$/;
 
+/**
+ * Le nom affiché : le nom nu, et le stade entre parenthèses seulement quand il
+ * distingue vraiment quelque chose.
+ *
+ * Un stade VIDE rend désormais le nom nu, au même titre que « latest ». C'est
+ * la règle qui accompagne la décision du 02/08 (voir `branding.ts`) : une
+ * version publiée s'appelle « Raptor », pas « Raptor () ». Sans ce cas, le
+ * stade vide produisait une parenthèse orpheline — le genre de détail qui ne
+ * casse aucun test et se voit dans la barre de titre.
+ */
 export function formatAppDisplayName(input: {
   readonly baseName: string;
   readonly stageLabel: string;
 }): string {
-  if (input.stageLabel.trim().toLowerCase() === "latest") {
+  const stage = input.stageLabel.trim();
+  if (stage.length === 0 || stage.toLowerCase() === "latest") {
     return input.baseName;
   }
 
-  return `${input.baseName} (${input.stageLabel})`;
+  return `${input.baseName} (${stage})`;
 }
 
 /**

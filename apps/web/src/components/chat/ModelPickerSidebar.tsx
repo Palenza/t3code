@@ -1,5 +1,5 @@
 import { type ProviderInstanceId } from "@t3tools/contracts";
-import { memo, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { memo, useLayoutEffect, useRef, useState } from "react";
 import { SparklesIcon, StarIcon } from "lucide-react";
 import { ProviderInstanceIcon } from "./ProviderInstanceIcon";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
@@ -65,13 +65,6 @@ export const ModelPickerSidebar = memo(function ModelPickerSidebar(props: {
   const [hoveredInstanceId, setHoveredInstanceId] = useState<ProviderInstanceId | null>(null);
   const sidebarContentRef = useRef<HTMLDivElement>(null);
   const [selectedIndicatorTop, setSelectedIndicatorTop] = useState<number | null>(null);
-  const duplicateDriverCounts = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const entry of props.instanceEntries) {
-      counts.set(entry.driverKind, (counts.get(entry.driverKind) ?? 0) + 1);
-    }
-    return counts;
-  }, [props.instanceEntries]);
 
   useLayoutEffect(() => {
     const content = sidebarContentRef.current;
@@ -143,9 +136,6 @@ export const ModelPickerSidebar = memo(function ModelPickerSidebar(props: {
             const isSelected = props.selectedInstanceId === entry.instanceId;
             const isHovered = hoveredInstanceId === entry.instanceId;
             const showNewBadge = props.newBadgeInstanceIds?.has(entry.instanceId) ?? false;
-            const showInstanceBadge =
-              Boolean(entry.accentColor) || (duplicateDriverCounts.get(entry.driverKind) ?? 0) > 1;
-
             const tooltip = isUnavailable
               ? describeUnavailableInstance(entry)
               : isContextDisabled
@@ -184,15 +174,34 @@ export const ModelPickerSidebar = memo(function ModelPickerSidebar(props: {
                   driverKind={entry.driverKind}
                   displayName={entry.displayName}
                   accentColor={entry.accentColor}
-                  showBadge={showInstanceBadge}
+                  // Même décision que sur la gâchette du composeur (02/08) :
+                  // pas de disque collé sous le logo. Ici l'anneau de
+                  // sélection dit lequel est actif et l'info-bulle nomme le
+                  // compte ; la pastille n'ajoutait qu'un faux bouton.
+                  showBadge={false}
                   className="size-6"
                   iconClassName="size-5"
+                  // UN ANNEAU DE DÉCOUPE DOIT ÊTRE OPAQUE — corrigé le 01/08,
+                  // deuxième fois après la puce du composeur.
+                  //
+                  // L'état par défaut valait
+                  // `color-mix(in oklab, var(--muted) 30%, transparent)` : 30 %
+                  // opaque. Un anneau translucide ne découpe rien, il dépose un
+                  // film sur le logo — les « boutons fantômes au-dessus du logo
+                  // Claude » qu'Enzo a signalés plusieurs fois. Les deux autres
+                  // états étaient déjà opaques, c'est pourquoi seul celui-ci se
+                  // voyait.
+                  //
+                  // Les trois valeurs restent distinctes : l'anneau doit
+                  // reprendre la surface DERRIÈRE l'icône, et cette surface
+                  // change au survol. C'est l'intention qui était juste, une
+                  // seule valeur qui était fausse.
                   indicatorBackground={
                     isHovered && !isDisabled
                       ? "var(--muted)"
                       : isSelected
                         ? "var(--background)"
-                        : "color-mix(in oklab, var(--muted) 30%, transparent)"
+                        : "var(--background)"
                   }
                   {...(entry.accentColor
                     ? { badgeClassName: "h-3 min-w-3 px-0.5 text-[7px]" }

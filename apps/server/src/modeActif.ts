@@ -60,7 +60,9 @@ const relireModeSurDisque = Effect.fn("relireModeSurDisque")(function* () {
     if (config.driver !== "claudeAgent") continue;
     const brut = config.config;
     const homePath =
-      typeof brut === "object" && brut !== null && typeof (brut as { homePath?: unknown }).homePath === "string"
+      typeof brut === "object" &&
+      brut !== null &&
+      typeof (brut as { homePath?: unknown }).homePath === "string"
         ? (brut as { homePath: string }).homePath
         : "";
     if (homePath.trim().length === 0) continue;
@@ -128,7 +130,10 @@ export const modePoserRouteLayer = HttpRouter.add(
 
     const demande = yield* Effect.orElseSucceed(decodeDemande(yield* request.json), () => null);
     if (demande === null) {
-      return HttpServerResponse.jsonUnsafe({ pose: false, raison: "slug manquant" }, { status: 400 });
+      return HttpServerResponse.jsonUnsafe(
+        { pose: false, raison: "slug manquant" },
+        { status: 400 },
+      );
     }
     const mode = trouverMode(demande.slug);
     if (mode === undefined) {
@@ -152,7 +157,9 @@ export const modePoserRouteLayer = HttpRouter.add(
     for (const [cle, config] of vises) {
       const brut = config.config;
       const homePath =
-        typeof brut === "object" && brut !== null && typeof (brut as { homePath?: unknown }).homePath === "string"
+        typeof brut === "object" &&
+        brut !== null &&
+        typeof (brut as { homePath?: unknown }).homePath === "string"
           ? (brut as { homePath: string }).homePath
           : "";
       // Sans dossier propre, l'instance partage le `~/.claude` de l'humain :
@@ -161,7 +168,10 @@ export const modePoserRouteLayer = HttpRouter.add(
       const resolu = yield* resolveClaudeHomePath({ homePath });
       yield* appliquerModeAuHome(resolu, mode);
       appliques += 1;
-      yield* Effect.logInfo("mode posé", { instanceId: cle as ProviderInstanceId, mode: mode?.slug ?? "libre" });
+      yield* Effect.logInfo("mode posé", {
+        instanceId: cle as ProviderInstanceId,
+        mode: mode?.slug ?? "libre",
+      });
     }
 
     modeCourant = mode;

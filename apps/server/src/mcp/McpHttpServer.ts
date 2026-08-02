@@ -1,13 +1,20 @@
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
 import type * as Types from "effect/Types";
 import { McpSchema, McpServer, Tool } from "effect/unstable/ai";
-import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
+import {
+  FetchHttpClient,
+  HttpRouter,
+  HttpServerRequest,
+  HttpServerResponse,
+} from "effect/unstable/http";
 
 import packageJson from "../../package.json" with { type: "json" };
 import * as McpInvocationContext from "./McpInvocationContext.ts";
@@ -22,6 +29,26 @@ import {
   PreviewSnapshotToolkit,
   PreviewStandardToolkit,
 } from "./toolkits/preview/tools.ts";
+import { PaquetToolkitHandlersLive } from "./toolkits/paquet/handlers.ts";
+import { SuggestionsToolkitHandlersLive } from "./toolkits/securite/handlers.ts";
+import { SuggestionsToolkit } from "./toolkits/securite/tools.ts";
+import { PaquetToolkit } from "./toolkits/paquet/tools.ts";
+import { PreuveToolkitHandlersLive } from "./toolkits/preuve/handlers.ts";
+import { PreuveToolkit } from "./toolkits/preuve/tools.ts";
+import { SanteToolkitHandlersLive } from "./toolkits/sante/handlers.ts";
+import { SanteToolkit } from "./toolkits/sante/tools.ts";
+import { PreuveStoreLive } from "../preuve/PreuveStore.ts";
+import { DetteToolkitHandlersLive } from "./toolkits/persistance/handlers.ts";
+import { DetteToolkit } from "./toolkits/persistance/tools.ts";
+import { DetteStoreLive } from "../persistance/DetteStore.ts";
+import { UsageSkillsToolkitHandlersLive } from "./toolkits/skills/handlers.ts";
+import { UsageSkillsToolkit } from "./toolkits/skills/tools.ts";
+import { ApprentissageStoreLive } from "../skills/ApprentissageStore.ts";
+import { RefusStoreLive } from "../securite/RefusStore.ts";
+import { UsageStoreLive } from "../skills/UsageStore.ts";
+import { RappelToolkitHandlersLive } from "./toolkits/rappel/handlers.ts";
+import { RappelToolkit } from "./toolkits/rappel/tools.ts";
+import { RappelStoreLive } from "../rappel/RappelStore.ts";
 import { RepoToolkitHandlersLive } from "./toolkits/repo/handlers.ts";
 import { RepoToolkit } from "./toolkits/repo/tools.ts";
 
@@ -132,6 +159,12 @@ const previewSnapshotFailure = <E>(cause: Cause.Cause<E>) => {
 const registerPreviewSnapshot = Effect.fn("McpHttpServer.registerPreviewSnapshot")(function* () {
   const server = yield* McpServer.McpServer;
   const broker = yield* PreviewAutomationBroker.PreviewAutomationBroker;
+  // `preview_snapshot` est enregistré À LA MAIN ici : il ne reçoit que ce
+  // qu'on lui fournit explicitement. La porte de sortie écrit l'intégral sur
+  // disque au-dessus du plafond — sans ces deux services, l'outil qui produit
+  // les plus grosses sorties du lot serait le seul à ne pas pouvoir déborder.
+  const fileSystem = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
   const built = yield* PreviewSnapshotToolkit;
   const tool = PreviewSnapshotTool;
   yield* server.addTool({
@@ -163,6 +196,8 @@ const registerPreviewSnapshot = Effect.fn("McpHttpServer.registerPreviewSnapshot
           Effect.flatMap(Effect.fromOption),
           Effect.provideService(PreviewAutomationBroker.PreviewAutomationBroker, broker),
           Effect.provideService(McpInvocationContext.McpInvocationContext, invocation),
+          Effect.provideService(FileSystem.FileSystem, fileSystem),
+          Effect.provideService(Path.Path, path),
           Effect.matchCauseEffect({
             onFailure: previewSnapshotFailure,
             onSuccess: ({ encodedResult }) => {
@@ -226,6 +261,77 @@ const RepoToolkitRegistrationLive = McpServer.toolkit(RepoToolkit).pipe(
   Layer.provide(RepoToolkitHandlersLive),
 );
 
+/**
+ * Le rappel de conversations (chantier n°5, absorption Hermès) : lecture
+ * seule, aucune capacité MCP à exiger — il ne lit que notre propre base.
+ */
+const RappelToolkitRegistrationLive = McpServer.toolkit(RappelToolkit).pipe(
+  Layer.provide(RappelToolkitHandlersLive),
+  Layer.provide(RappelStoreLive),
+);
+
+/**
+ * Le registre de preuve (chantier n°22) : lecture seule du flux d'activité
+ * que T3 enregistre déjà — il n'écrit rien et ne lance rien.
+ */
+const PreuveToolkitRegistrationLive = McpServer.toolkit(PreuveToolkit).pipe(
+  Layer.provide(PreuveToolkitHandlersLive),
+  Layer.provide(PreuveStoreLive),
+);
+
+/**
+ * L'usage des skills (chantier n°2) : lecture seule, elle aussi. Elle ne
+ * touche jamais aux dossiers de skills — y écrire déclencherait un
+ * `reloadSkills()` à chaque appel.
+ */
+const UsageSkillsToolkitRegistrationLive = McpServer.toolkit(UsageSkillsToolkit).pipe(
+  Layer.provide(UsageSkillsToolkitHandlersLive),
+  Layer.provide(UsageStoreLive),
+  Layer.provide(ApprentissageStoreLive),
+);
+
+/**
+ * La dette de persistance (chantier n°9) : lecture seule du même flux. Elle
+ * dit ce qui a été établi et n'existe nulle part — avant que le compactage
+ * l'emporte.
+ */
+const DetteToolkitRegistrationLive = McpServer.toolkit(DetteToolkit).pipe(
+  Layer.provide(DetteToolkitHandlersLive),
+  Layer.provide(DetteStoreLive),
+);
+
+/**
+ * Le doctor (chantier n°13) et sa bouche. Le module de diagnostic existait,
+ * complet et testé, sans AUCUN appelant — donc muet. Le jour du branchement,
+ * il avait déjà quelque chose de vrai à dire : `thread_messages_fts` manquait
+ * aux deux bases de la machine.
+ */
+const SanteToolkitRegistrationLive = McpServer.toolkit(SanteToolkit).pipe(
+  Layer.provide(SanteToolkitHandlersLive),
+);
+
+/**
+ * Le contrôle anti-malware sur les paquets (chantier n°15). Lecture seule,
+ * réseau sortant vers OSV uniquement, fail-open BRUYANT : une absence de
+ * réponse ne se rend jamais comme un « rien trouvé ».
+ */
+const PaquetToolkitRegistrationLive = McpServer.toolkit(PaquetToolkit).pipe(
+  Layer.provide(PaquetToolkitHandlersLive),
+  Layer.provide(FetchHttpClient.layer),
+);
+
+/**
+ * Les autorisations suggérées (chantier n°12) — le seul outil de la maison
+ * qui propose d'OUVRIR une frontière de sécurité. D'où l'inversion : il
+ * exige un motif établi sur plusieurs jours, refuse les commandes
+ * destructrices quel que soit leur compteur, et quand il ne propose rien,
+ * ses raisons SONT le résultat.
+ */
+const SuggestionsToolkitRegistrationLive = McpServer.toolkit(SuggestionsToolkit).pipe(
+  Layer.provide(SuggestionsToolkitHandlersLive),
+  Layer.provide(RefusStoreLive),
+);
+
 const McpTransportLive = McpServer.layerHttp({
   name: "T3 Code",
   version: packageJson.version,
@@ -235,4 +341,11 @@ const McpTransportLive = McpServer.layerHttp({
 export const layer = Layer.mergeAll(
   PreviewToolkitRegistrationLive,
   RepoToolkitRegistrationLive,
+  RappelToolkitRegistrationLive,
+  PreuveToolkitRegistrationLive,
+  UsageSkillsToolkitRegistrationLive,
+  DetteToolkitRegistrationLive,
+  SanteToolkitRegistrationLive,
+  PaquetToolkitRegistrationLive,
+  SuggestionsToolkitRegistrationLive,
 ).pipe(Layer.provideMerge(McpTransportLive));

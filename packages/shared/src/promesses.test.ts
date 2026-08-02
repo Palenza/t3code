@@ -12,10 +12,7 @@ describe("extraction des promesses", () => {
       "Reste à brancher le socle sur l'orchestration pour que la bascule soit réelle. J'enchaîne.",
     ];
     for (const reponse of vraies) {
-      assert.ok(
-        extrairePromesses(reponse).length > 0,
-        `non détectée : « ${reponse} »`,
-      );
+      assert.ok(extrairePromesses(reponse).length > 0, `non détectée : « ${reponse} »`);
     }
   });
 
@@ -42,10 +39,7 @@ describe("extraction des promesses", () => {
   });
 
   it("« au lieu de » et « plutôt que de » n'engagent à rien", () => {
-    assert.deepStrictEqual(
-      extrairePromesses("Au lieu de construire la mémoire, on l'adopte."),
-      [],
-    );
+    assert.deepStrictEqual(extrairePromesses("Au lieu de construire la mémoire, on l'adopte."), []);
   });
 
   it("une condition n'est pas un engagement", () => {
@@ -61,7 +55,7 @@ describe("extraction des promesses", () => {
     const reponse = [
       "Voici le module :",
       "```ts",
-      '// je vais chercher les candidats',
+      "// je vais chercher les candidats",
       'const message = "je vais tout casser";',
       "```",
       "C'est fini.",
@@ -86,10 +80,7 @@ describe("promesse tenue", () => {
   it("une promesse suivie du travail correspondant est close", () => {
     const [promesse] = extrairePromesses("Je branche le pool.");
     assert.ok(promesse);
-    assert.strictEqual(
-      promesseTenue(promesse, ["feat(pool): le relais est BRANCHÉ"]),
-      true,
-    );
+    assert.strictEqual(promesseTenue(promesse, ["feat(pool): le relais est BRANCHÉ"]), true);
   });
 
   it("une promesse sans trace du travail reste ouverte", () => {
@@ -99,5 +90,34 @@ describe("promesse tenue", () => {
       promesseTenue(promesse, ["docs: mise à jour du README", "chore: nettoyage"]),
       false,
     );
+  });
+});
+
+describe("les duplications du 31/07 — 20 promesses en une session", () => {
+  it("UNE promesse par phrase, même à plusieurs verbes", () => {
+    // La cause exacte : la clé de dédup était `phrase|verbe`. Cette phrase
+    // sortait DEUX fois, à l'identique, dans la colonne.
+    const p = extrairePromesses(
+      "Je vérifie que tu peux retirer celles déjà en mémoire, et j'enchaîne sur le vocal.",
+    );
+    assert.strictEqual(p.length, 1);
+  });
+
+  it("trois verbes dans une phrase ne font pas trois promesses", () => {
+    const p = extrairePromesses("Je vérifie, j'attaque le scroll, et je commence par là.");
+    assert.strictEqual(p.length, 1);
+  });
+
+  it("un verbe CITÉ n'engage à rien — on rapporte, on ne promet pas", () => {
+    // Relire ses propres promesses en fabriquait de nouvelles : la boucle.
+    const p = extrairePromesses(
+      "Regarde-les — ce sont mes phrases de cette session : « Je vérifie », « J'attaque tout », « Je commence par le scroll ».",
+    );
+    assert.strictEqual(p.length, 0);
+  });
+
+  it("mais une vraie promesse à côté d'une citation survit", () => {
+    const p = extrairePromesses("Tu avais dit « je vérifie » ; maintenant j'attaque le scroll.");
+    assert.strictEqual(p.length, 1);
   });
 });

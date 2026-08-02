@@ -60,6 +60,7 @@ import {
   downloadKey,
   formatModelBytes,
   indexDownloadStates,
+  minutesDeVeilleValides,
   modelSearchMatches,
   modelSizeLabel,
   resolveDisplayedModelTarget,
@@ -343,7 +344,27 @@ export function VoiceSettingsPanel() {
     () => [...new Set(selectedModel?.capabilities.languages ?? FALLBACK_LANGUAGES)].toSorted(),
     [selectedModel],
   );
-  const filtered = catalog.filter((model) => modelSearchMatches(model, query));
+  // UN SEUL MODÈLE OFFERT — décision fondateur du 01/08 : « ne laisse que ce
+  // modèle, on en a trop pour rien dans VOICE ».
+  //
+  // Le catalogue en compte 68. Ce n'est PAS un menu de ce qu'on propose : c'est
+  // un miroir GÉNÉRÉ de ce que publie transcribe.cpp, et un test vérifie son
+  // exhaustivité (`catalog.test.ts`). Le réduire à la source casse l'invariant
+  // — essayé le 01/08, 18 tests rouges. On filtre donc à l'AFFICHAGE : la
+  // source reste complète, l'offre devient courte. On ne ment pas sur ce qui
+  // existe, on choisit ce qu'on montre.
+  //
+  // Parakeet TDT 0.6B v3 : meilleur taux d'erreur mesuré que Whisper large-v3
+  // (6,32 % contre 7,44 % sur l'Open ASR Leaderboard) pour un quart de la
+  // taille, rapide sur CPU simple, sans hallucination de silence, et le
+  // français est dans ses 25 langues (vérifié dans le catalogue).
+  //
+  // Une RECHERCHE explicite continue de tout voir : cacher une correspondance
+  // à quelqu'un qui la cherche, c'est une recherche cassée. Le filtre ne vaut
+  // que pour la liste au repos.
+  const MODELE_OFFERT = "parakeet-tdt-0.6b-v3";
+  const offerts = query.trim().length > 0 ? catalog : catalog.filter((m) => m.id === MODELE_OFFERT);
+  const filtered = offerts.filter((model) => modelSearchMatches(model, query));
   const featured = filtered.filter((model) => model.featured);
   const allModels = filtered.filter((model) => !model.featured);
   const downloadedBytes = downloadStates
@@ -531,7 +552,9 @@ export function VoiceSettingsPanel() {
                 <Select
                   items={engineItems}
                   value={settings.voice.engine}
-                  onValueChange={(engine) => engine && patchVoice({ engine: engine as VoiceEngine })}
+                  onValueChange={(engine) =>
+                    engine && patchVoice({ engine: engine as VoiceEngine })
+                  }
                 >
                   <SelectTrigger size="sm" className="w-56" aria-label="Moteur de reconnaissance">
                     <SelectValue />
@@ -546,6 +569,58 @@ export function VoiceSettingsPanel() {
                     </SelectGroup>
                   </SelectContent>
                 </Select>
+              }
+            />
+            {/*
+              DEUX RÉGLAGES QUE LE SERVEUR APPLIQUAIT DÉJÀ, SANS QU'ON PUISSE
+              LES TOUCHER. Ils vivaient dans le schéma, le serveur les lisait
+              (`TranscriptionService.ts:100` et `:306`), et aucun champ ne les
+              atteignait. Un réglage effectif et inatteignable est le cousin
+              silencieux du contrôle décoratif : l'un promet sans agir, l'autre
+              agit sans le dire.
+            */}
+            <SettingsRow
+              title="Garder le moteur chaud"
+              description="Après ce nombre de minutes sans dictée, le moteur est arrêté pour libérer la mémoire — et la dictée suivante attend de nouveau son chargement. Augmentez si vous dictez par à-coups."
+              control={
+                <Input
+                  type="number"
+                  min={1}
+                  className="w-24"
+                  aria-label="Minutes avant l'arrêt du moteur vocal"
+                  defaultValue={String(settings.voice.idleTimeoutMinutes)}
+                  onBlur={(evenement) => {
+                    const minutes = minutesDeVeilleValides(evenement.currentTarget.value);
+                    // Une saisie invalide ne part PAS au serveur — le schéma la
+                    // rejetterait, et le réglage semblerait s'être enregistré.
+                    if (minutes === null) {
+                      evenement.currentTarget.value = String(settings.voice.idleTimeoutMinutes);
+                      return;
+                    }
+                    if (minutes !== settings.voice.idleTimeoutMinutes) {
+                      patchVoice({ idleTimeoutMinutes: minutes });
+                    }
+                  }}
+                />
+              }
+            />
+            <SettingsRow
+              title="Chemin du moteur"
+              description="Laissez vide pour utiliser le moteur fourni avec l'app. Ne renseignez un chemin que si vous avez installé le vôtre ailleurs."
+              control={
+                <Input
+                  type="text"
+                  className="w-64"
+                  placeholder="(fourni avec l'app)"
+                  aria-label="Chemin du moteur de reconnaissance vocale"
+                  defaultValue={settings.voice.sidecarPath}
+                  onBlur={(evenement) => {
+                    const chemin = evenement.currentTarget.value.trim();
+                    if (chemin !== settings.voice.sidecarPath) {
+                      patchVoice({ sidecarPath: chemin });
+                    }
+                  }}
+                />
               }
             />
           </div>
@@ -670,9 +745,9 @@ export function VoiceSettingsPanel() {
 
       <SettingsSection title="Corriger les mots que la dictée écorche">
         <p className="px-3 pb-3 text-[13px] text-muted-foreground sm:px-4">
-          La dictée entend « té trois code » quand vous dites T3 Code ? Ajoutez la correction ici
-          et elle s'appliquera toute seule. « Respecter les majuscules » n'agit que si la casse
-          compte pour vous ; « accepter les à-peu-près » rattrape aussi les variantes proches.
+          La dictée entend « té trois code » quand vous dites Raptor ? Ajoutez la correction ici et
+          elle s'appliquera toute seule. « Respecter les majuscules » n'agit que si la casse compte
+          pour vous ; « accepter les à-peu-près » rattrape aussi les variantes proches.
         </p>
         <div className="px-3 sm:px-4">
           <VoiceDictionarySection

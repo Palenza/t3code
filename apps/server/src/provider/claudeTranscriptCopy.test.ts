@@ -43,18 +43,16 @@ describe("claudeTranscriptCopy", () => {
     );
     // Default instance: empty homePath resolves to the OS home directory,
     // where the CLI keeps transcripts under ~/.claude/projects.
-    expect(claudeProjectsRoot("/Users/enzo", "/Users/enzo")).toBe(
-      "/Users/enzo/.claude/projects",
-    );
+    expect(claudeProjectsRoot("/Users/enzo", "/Users/enzo")).toBe("/Users/enzo/.claude/projects");
   });
 
   it("munges the cwd exactly like the CLI's project folders", () => {
     expect(mungeClaudeProjectDirName("/Users/enzo/Documents/Palenza")).toBe(
       "-Users-enzo-Documents-Palenza",
     );
-    expect(
-      mungeClaudeProjectDirName("/Users/enzo/Documents/Palenza/.claude/worktrees/x-1"),
-    ).toBe("-Users-enzo-Documents-Palenza--claude-worktrees-x-1");
+    expect(mungeClaudeProjectDirName("/Users/enzo/Documents/Palenza/.claude/worktrees/x-1")).toBe(
+      "-Users-enzo-Documents-Palenza--claude-worktrees-x-1",
+    );
   });
 });
 

@@ -1,4 +1,5 @@
 import {
+  REASONING_ACTIVITY_KIND,
   type EnvironmentId,
   type MessageId,
   type ScopedThreadRef,
@@ -51,6 +52,7 @@ import {
   MousePointerClickIcon,
   PaintbrushIcon,
   MinusIcon,
+  SparklesIcon,
   SquarePenIcon,
   TerminalIcon,
   Undo2Icon,
@@ -132,6 +134,14 @@ interface TimelineRowSharedState {
   activeThreadEnvironmentId: EnvironmentId;
   onRevertUserMessage: (messageId: MessageId) => void;
   onImageExpand: (preview: ExpandedImagePreview) => void;
+  /**
+   * TOUTES les images du fil, dans l'ordre d'envoi — pas seulement celles du
+   * message cliqué. L'agrandissement savait déjà défiler (flèches, clavier,
+   * compteur), mais on ne lui donnait que les images d'UN message : ouvrir une
+   * capture envoyée seule, c'était ouvrir une galerie de un. Or on envoie ses
+   * captures au fil de la conversation, pas en lot.
+   */
+  toutesLesImagesDuFil: ReadonlyArray<{ id: string; name: string; previewUrl?: string }>;
   onOpenTurnDiff: (turnId: TurnId, filePath?: string) => void;
   onToggleTurnFold: (turnId: TurnId) => void;
   onToggleWorkGroup: (groupId: string, anchorElement?: HTMLElement) => void;
@@ -223,6 +233,26 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   const [expandedTurnIds, setExpandedTurnIds] = useState<ReadonlySet<TurnId>>(new Set());
   const [expandedWorkGroupIds, setExpandedWorkGroupIds] = useState<ReadonlySet<string>>(new Set());
   const [minimapStripMap] = useState(() => new Map<string, HTMLSpanElement>());
+  /**
+   * Es-tu encore collé au bas du fil ? C'est la SEULE chose qui autorise la
+   * liste à te ramener en bas quand du contenu arrive. Vrai au départ (on
+   * ouvre un fil à sa fin), faux dès que tu remontes.
+   */
+  const [ancreEnBas, setAncreEnBas] = useState(true);
+
+  /**
+   * CHANGER DE FIL RÉARME L'ANCRAGE.
+   *
+   * Sans ça : tu remontes lire dans le fil A (l'ancrage se coupe, c'est le
+   * but), tu passes au fil B — et l'ancrage y arrive DÉJÀ coupé, alors que
+   * B s'ouvre à sa fin. Le parent, lui, remet bien son propre suivi à
+   * « colle en bas » sur changement de fil ; c'était le seul état à ne pas
+   * suivre. Un fil neuf commence toujours collé au bas : c'est là qu'on
+   * l'ouvre, et rien ne dit encore qu'on veut lire ailleurs.
+   */
+  useEffect(() => {
+    setAncreEnBas(true);
+  }, [routeThreadKey]);
 
   const onToggleTurnFold = useCallback((turnId: TurnId) => {
     setExpandedTurnIds((existing) => {
@@ -360,6 +390,10 @@ export const MessagesTimeline = memo(function MessagesTimeline({
     const isAtEnd = resolveTimelineIsAtEnd(state);
     if (isAtEnd !== undefined) {
       onIsAtEndChange(isAtEnd);
+      // Le seul état qui décide de l'ancrage : suis-je encore en bas ?
+      // On n'écrit que sur BASCULE — un setState par évènement de scroll
+      // re-rendrait la liste entière à chaque pixel.
+      setAncreEnBas((precedent) => (precedent === isAtEnd ? precedent : isAtEnd));
     }
     if (!state || minimapItems.length === 0) {
       return;
@@ -415,6 +449,30 @@ export const MessagesTimeline = memo(function MessagesTimeline({
     };
   }, [timelineViewportElement, rows.length]);
 
+  /**
+   * La galerie du FIL : toutes les images envoyées, dans l'ordre, dédupliquées.
+   * Calculée une fois ici plutôt que dans chaque ligne — c'est la même liste
+   * pour tout le monde, et elle sert au défilement de l'agrandissement.
+   */
+  const toutesLesImagesDuFil = useMemo(() => {
+    const vues = new Set<string>();
+    const galerie: Array<{ id: string; name: string; previewUrl?: string }> = [];
+    for (const entree of timelineEntries) {
+      const message = (entree as { message?: { attachments?: ReadonlyArray<unknown> } }).message;
+      for (const brut of message?.attachments ?? []) {
+        const piece = brut as { id?: unknown; name?: unknown; previewUrl?: unknown };
+        if (typeof piece.id !== "string" || typeof piece.name !== "string") continue;
+        if (typeof piece.previewUrl !== "string") continue;
+        // Les annotations d'aperçu ne sont pas des captures que tu as envoyées.
+        if (piece.name.startsWith("preview-annotation-")) continue;
+        if (vues.has(piece.id)) continue;
+        vues.add(piece.id);
+        galerie.push({ id: piece.id, name: piece.name, previewUrl: piece.previewUrl });
+      }
+    }
+    return galerie;
+  }, [timelineEntries]);
+
   const sharedState = useMemo<TimelineRowSharedState>(
     () => ({
       timestampFormat,
@@ -427,6 +485,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
       activeThreadEnvironmentId,
       onRevertUserMessage,
       onImageExpand,
+      toutesLesImagesDuFil,
       onOpenTurnDiff,
       onToggleTurnFold,
       onToggleWorkGroup,
@@ -441,6 +500,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
       activeThreadEnvironmentId,
       onRevertUserMessage,
       onImageExpand,
+      toutesLesImagesDuFil,
       onOpenTurnDiff,
       onToggleTurnFold,
       onToggleWorkGroup,
@@ -494,8 +554,17 @@ export const MessagesTimeline = memo(function MessagesTimeline({
             initialScrollAtEnd
             {...(anchoredEndSpace ? { anchoredEndSpace } : {})}
             contentInsetEndAdjustment={contentInsetEndAdjustment}
+            // L'ANCRAGE NE S'ARME QUE SI TU ES DÉJÀ EN BAS.
+            //
+            // Il était armé en permanence sur `dataChange` : chaque jeton qui
+            // arrivait rappelait la liste à la fin, où que tu sois. Tu remontais
+            // lire une réponse, l'agent écrivait un mot plus bas, et la vue te
+            // ramenait de force. Impossible de lire pendant que ça travaille.
+            //
+            // Remonter le fil est une DÉCISION : elle coupe l'ancrage, et rien
+            // ne le rétablit tant que tu n'es pas redescendu toi-même au bas.
             maintainScrollAtEnd={
-              anchoredEndSpace
+              anchoredEndSpace || !ancreEnBas
                 ? false
                 : {
                     animated: false,
@@ -904,7 +973,13 @@ function UserTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "message" 
                     className="h-full w-full cursor-zoom-in"
                     aria-label={`Preview ${image.name}`}
                     onClick={() => {
-                      const preview = buildExpandedImagePreview(regularImages, image.id);
+                      // On ouvre sur la galerie du FIL ENTIER : le clic pose
+                      // sur l'image visée, les flèches parcourent tout ce que
+                      // tu as envoyé. Repli sur les images du message si
+                      // celle-ci n'y figure pas (message en cours d'envoi).
+                      const preview =
+                        buildExpandedImagePreview(ctx.toutesLesImagesDuFil, image.id) ??
+                        buildExpandedImagePreview(regularImages, image.id);
                       if (!preview) return;
                       ctx.onImageExpand(preview);
                     }}
@@ -1751,6 +1826,7 @@ function formatWorkingTimerNow(startIso: string): string {
 
 type WorkEntryIconName =
   | "bot"
+  | "sparkles"
   | "check"
   | "circle-alert"
   | "eye"
@@ -1767,6 +1843,8 @@ function WorkEntryIconSvg({ name, className }: { name: WorkEntryIconName; classN
   switch (name) {
     case "bot":
       return <BotIcon className={className} aria-hidden />;
+    case "sparkles":
+      return <SparklesIcon className={className} aria-hidden />;
     case "check":
       return <CheckIcon className={className} aria-hidden />;
     case "circle-alert":
@@ -1874,6 +1952,12 @@ function buildToolCallExpandedBody(
 }
 
 function workEntryIconName(workEntry: TimelineWorkEntry): WorkEntryIconName {
+  // La réflexion du modèle, reconnue à son `kind` et non à son ton : « info »
+  // est partagé avec d'autres lignes, et « thinking » appartient déjà aux
+  // sous-agents (il porte l'icône bot).
+  if (workEntry.sourceActivityKind === REASONING_ACTIVITY_KIND) {
+    return "sparkles";
+  }
   if (
     workEntry.sourceActivityKind === "user-input.requested" ||
     workEntry.sourceActivityKind === "user-input.resolved"

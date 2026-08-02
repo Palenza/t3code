@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import {
+  ACCENT_PAR_DEFAUT,
   makeSidebarThemeFromColors,
+  sidebarThemeAccent,
+  desepinglerApparence,
   sidebarThemeInk,
   resolveSidebarTheme,
   resolveSidebarThemeAppearance,
@@ -106,10 +109,35 @@ describe("makeSidebarThemeFromColors", () => {
 });
 
 describe("sidebarThemeGrainOpacity", () => {
+  // Golden RÉÉCRIT SCIEMMENT le 31/07, à la fin de l'enquête et pas à son
+  // début : la molette de grain « ne faisait pas de grain » (reproche
+  // fondateur). Cause — le bruit brut se serre autour du gris moyen et
+  // `mix-blend-overlay` sur du gris moyen est quasi l'identité ; en plus, la
+  // course linéaire rendait les six premiers crans indistinguables de zéro.
+  // Le bruit est maintenant étalé en contraste et la course suit une
+  // puissance 0,75 jusqu'à 0,42. Ce qui est TESTÉ reste l'invariant, pas la
+  // constante : zéro donne zéro, ça ne dépasse jamais le plafond, et ça
+  // MONTE cran après cran.
   it("caps the grain veil", () => {
     expect(sidebarThemeGrainOpacity(theme({ grain: 0 }))).toBe(0);
-    expect(sidebarThemeGrainOpacity(theme({ grain: 1 }))).toBe(0.35);
-    expect(sidebarThemeGrainOpacity(theme({ grain: 0.5 }))).toBeCloseTo(0.18, 2);
+    expect(sidebarThemeGrainOpacity(theme({ grain: 1 }))).toBe(0.42);
+    expect(sidebarThemeGrainOpacity(theme({ grain: 0.5 }))).toBeCloseTo(0.25, 2);
+    expect(sidebarThemeGrainOpacity(theme({ grain: 2 }))).toBe(0.42);
+  });
+
+  it("monte à CHAQUE cran de la molette — sinon la molette ment", () => {
+    // 20 crans mesurés sur la capture Arc ; la valeur d'un cran est
+    // index/19. Un palier plat quelque part = un cran qui ne fait rien.
+    const crans = Array.from({ length: 20 }, (_, index) =>
+      sidebarThemeGrainOpacity(theme({ grain: index / 19 })),
+    );
+    for (const [index, valeur] of crans.entries()) {
+      if (index === 0) continue;
+      expect(valeur).toBeGreaterThan(crans[index - 1]!);
+    }
+    // Et le premier cran non nul se VOIT déjà (l'ancienne course linéaire le
+    // posait à 0,018 — indiscernable de rien).
+    expect(crans[1]!).toBeGreaterThan(0.04);
   });
 });
 
@@ -145,5 +173,46 @@ describe("sidebarThemeInk", () => {
   it("follows the blend base when no valid stop exists", () => {
     expect(sidebarThemeInk(theme({ stops: [] }), "dark")).toBe("light-ink");
     expect(sidebarThemeInk(theme({ stops: [], appearance: "light" }), "light")).toBe("dark-ink");
+  });
+});
+
+describe("sidebarThemeAccent", () => {
+  // « Si quelqu'un change la palette de couleur, ça change aussi la palette de
+  // ses notifs » — la règle en un test.
+  it("prend la DOMINANTE du thème : les notifs parlent la couleur de l'espace", () => {
+    expect(sidebarThemeAccent(makeSidebarThemeFromColors(["#4caf7d", "#5db3f0"]))).toBe("#4caf7d");
+  });
+
+  it("retombe sur le bleu de « Working » quand il n'y a pas de thème", () => {
+    expect(sidebarThemeAccent(null)).toBe(ACCENT_PAR_DEFAUT);
+    expect(sidebarThemeAccent(undefined)).toBe(ACCENT_PAR_DEFAUT);
+    expect(sidebarThemeAccent(theme({ stops: [] }))).toBe(ACCENT_PAR_DEFAUT);
+  });
+
+  it("ignore une pastille de couleur invalide plutôt que de la peindre", () => {
+    const abime = theme({
+      stops: [
+        { color: "pas-une-couleur", x: 0.5, y: 0.5 },
+        { color: "#5db3f0", x: 0.5, y: 0.5 },
+      ],
+    });
+    expect(sidebarThemeAccent(abime)).toBe("#5db3f0");
+  });
+
+  it("dépingle l'apparence héritée du mode nuit, et ne touche pas le reste", () => {
+    // Le bouton lune est parti le 31/07 ; les enregistrements qu'il a écrits
+    // sont restés. Sans ce dépinglage, un thème sauvé en nuit garde une base
+    // nocturne pour toujours, sans plus aucun bouton pour le défaire.
+    const epingle = theme({ appearance: "dark", intensity: 0.8, grain: 0.4 });
+    const soigne = desepinglerApparence(epingle);
+    expect(soigne.appearance).toBe("auto");
+    expect(soigne.intensity).toBe(0.8);
+    expect(soigne.grain).toBe(0.4);
+    expect(soigne.stops).toEqual(epingle.stops);
+
+    // Déjà sain : on rend l'objet TEL QUEL, pas une copie — un thème inchangé
+    // ne doit pas provoquer de re-rendu à chaque hydratation.
+    const sain = theme();
+    expect(desepinglerApparence(sain)).toBe(sain);
   });
 });

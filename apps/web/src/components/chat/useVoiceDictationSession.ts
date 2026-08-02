@@ -11,6 +11,7 @@ import { createVoiceTranscriber } from "~/voice/transcriberFactory";
 import type { DictationTranscriber } from "~/voice/types";
 import { applyAliases, voicePromptTerms } from "@t3tools/voice-core";
 import { toastManager } from "../ui/toast";
+import { deposerBrouillonDeDictee } from "./brouillonDeDictee";
 
 export type VoiceDictationState = "idle" | "starting" | "recording" | "stopping" | "error";
 
@@ -220,10 +221,45 @@ export function useVoiceDictationSession(props: {
     requestStop({ commit: false });
   }, [cancelStartup, requestStop]);
 
+  /**
+   * LA DICTÉE MEURT AVEC LE COMPOSEUR — et il faut au moins que ça se VOIE.
+   *
+   * Ce nettoyage annule la capture au démontage, `commit: false` : le texte est
+   * JETÉ, pas posé. Or ouvrir les réglages démonte le composeur. Enzo dicte,
+   * clique sur Réglages, revient — et tout ce qu'il a dit a disparu sans qu'un
+   * seul signal ne le dise (01/08).
+   *
+   * Le vrai remède est de sortir la session du composeur pour qu'elle survive à
+   * la navigation, comme le peek de la barre latérale vit déjà dans un magasin
+   * global. C'est un DÉPLACEMENT, pas une ligne, et il n'a pas sa place en fin
+   * de session.
+   *
+   * Ce qu'on fait ici, c'est refuser le silence : une perte annoncée se
+   * re-dicte, une perte muette se découvre trop tard. Le garde ne prévient que
+   * s'il y avait vraiment quelque chose à perdre — sinon ce serait du bruit à
+   * chaque changement de page.
+   */
   useEffect(
     () => () => {
+      const texteEnCours = renderAliasedTranscriptBuffer(
+        segmentsRef.current,
+        dictionaryRef.current,
+      ).trim();
       cancelStartup();
       requestStop({ commit: false, sendStop: false });
+      if (texteEnCours.length > 0) {
+        // LES MOTS SURVIVENT, MÊME SI LA CAPTURE MEURT. Déposés ici, repris
+        // par le prochain composeur monté (`brouillonDeDictee`). C'est la
+        // moitié VÉRIFIABLE du problème — l'autre, faire continuer le micro,
+        // demande un déplacement qu'aucun test ne peut couvrir.
+        deposerBrouillonDeDictee(texteEnCours);
+        toastManager.add({
+          type: "warning",
+          title: "Dictée interrompue",
+          description:
+            "Quitter le chat arrête l'enregistrement. Ce que tu avais dicté est gardé et te sera rendu en revenant sur le fil.",
+        });
+      }
     },
     [cancelStartup, requestStop],
   );

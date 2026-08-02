@@ -4,6 +4,16 @@ export const SET_THEME_CHANNEL = "desktop:set-theme";
 export const CONTEXT_MENU_CHANNEL = "desktop:context-menu";
 export const OPEN_EXTERNAL_CHANNEL = "desktop:open-external";
 export const MENU_ACTION_CHANNEL = "desktop:menu-action";
+/**
+ * « L'application s'en va » — émis au tout début de `before-quit`, AVANT que
+ * le serveur local commence à s'éteindre.
+ *
+ * Sans lui, le rendu continue de sonder un serveur qu'on est en train de
+ * couler et affiche « Failed to connect » pendant la fermeture : une
+ * extinction VOULUE rapportée comme une panne. Ce canal ne réveille ni ne
+ * révèle la fenêtre — il ne fait que la faire taire.
+ */
+export const APP_QUITTING_CHANNEL = "desktop:app-quitting";
 export const GET_WINDOW_FULLSCREEN_STATE_CHANNEL = "desktop:get-window-fullscreen-state";
 export const WINDOW_FULLSCREEN_STATE_CHANNEL = "desktop:window-fullscreen-state";
 export const UPDATE_STATE_CHANNEL = "desktop:update-state";

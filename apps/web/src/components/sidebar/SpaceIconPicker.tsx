@@ -1117,7 +1117,9 @@ export function SpaceIconPicker({
                       onClick={() => onChange(entree.valeur)}
                       className={cn(
                         "flex aspect-square cursor-pointer items-center justify-center rounded-md text-[17px] transition-colors",
-                        valeur === entree.valeur ? "bg-accent ring-1 ring-ring" : "hover:bg-accent/60",
+                        valeur === entree.valeur
+                          ? "bg-accent ring-1 ring-ring"
+                          : "hover:bg-accent/60",
                       )}
                     >
                       {entree.valeur}

@@ -18,6 +18,12 @@ import {
 } from "@t3tools/shared/backgroundActivitySettings";
 
 import { usePrimarySettings, useUpdatePrimarySettings } from "../../hooks/useSettings";
+import {
+  etatDeLaSource,
+  libelleEtatSource,
+  pastilleEtatSource,
+  type EtatSource,
+} from "./SourceControlSettings.logic";
 import { cn } from "../../lib/utils";
 import { usePrimaryEnvironment } from "../../state/environments";
 import { useEnvironmentQuery } from "../../state/query";
@@ -41,7 +47,7 @@ import {
   NumberFieldIncrement,
   NumberFieldInput,
 } from "../ui/number-field";
-import { Switch } from "../ui/switch";
+import { Popover, PopoverPopup, PopoverTrigger } from "../ui/popover";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import {
   AzureDevOpsIcon,
@@ -55,6 +61,7 @@ import {
 import { RedactedSensitiveText } from "./RedactedSensitiveText";
 import { SourceControlWritingSettingsSection } from "./SourceControlWritingSettings";
 import { SettingResetButton, SettingsPageContainer, SettingsSection } from "./settingsLayout";
+import { searchableSetting } from "./settingsSearch";
 
 const EMPTY_DISCOVERY_RESULT: SourceControlDiscoveryResult = {
   versionControlSystems: [],
@@ -117,8 +124,15 @@ function backgroundActivityOverrideSettings(
 
 function BackgroundPolicyTooltip({ children }: { readonly children: string }) {
   return (
-    <Tooltip>
-      <TooltipTrigger
+    /*
+      Même correction qu'en `SettingsPanels.tsx` : un `TooltipTrigger` sans
+      `onClick` ouvre au survol et ignore le clic. Le `Popover` répond aux deux.
+    */
+    <Popover>
+      <PopoverTrigger
+        openOnHover
+        delay={250}
+        closeDelay={100}
         render={
           <button
             type="button"
@@ -129,10 +143,10 @@ function BackgroundPolicyTooltip({ children }: { readonly children: string }) {
           </button>
         }
       />
-      <TooltipPopup side="top" className="max-w-72">
+      <PopoverPopup side="top" tooltipStyle className="max-w-72 whitespace-normal">
         {children}
-      </TooltipPopup>
-    </Tooltip>
+      </PopoverPopup>
+    </Popover>
   );
 }
 
@@ -174,11 +188,20 @@ function RedactedAccount(props: { readonly account: string | null }) {
   );
 }
 
-function itemStatusDot(item: VcsDiscoveryItem | SourceControlProviderDiscoveryItem): string {
-  if (isVcsNotReady(item)) return "bg-muted-foreground/35";
-  if (item.status !== "available") return "bg-warning";
-  if (isProviderDiscoveryItem(item) && item.auth.status !== "authenticated") return "bg-warning";
-  return "bg-success";
+/**
+ * L'état d'une ligne, calculé une seule fois et NOMMÉ.
+ *
+ * La version d'avant rendait directement une classe de couleur, ce qui rendait
+ * impossible d'en tirer un libellé : « warning » recouvrait à la fois « l'outil
+ * est absent » et « l'outil est là mais personne n'est connecté ». Deux causes,
+ * deux réparations différentes, une seule teinte.
+ */
+function etatDeLItem(item: VcsDiscoveryItem | SourceControlProviderDiscoveryItem): EtatSource {
+  return etatDeLaSource({
+    prisEnCharge: !isVcsNotReady(item),
+    disponible: item.status === "available",
+    authentifie: isProviderDiscoveryItem(item) ? item.auth.status === "authenticated" : null,
+  });
 }
 
 function SourceControlItemMark({
@@ -186,13 +209,24 @@ function SourceControlItemMark({
 }: {
   readonly item: VcsDiscoveryItem | SourceControlProviderDiscoveryItem;
 }) {
-  const dotClassName = itemStatusDot(item);
+  const etat = etatDeLItem(item);
+  const dotClassName = pastilleEtatSource(etat);
+  // La pastille n'est plus muette : elle PORTE l'état. Avant, elle était
+  // `aria-hidden` et l'unique nom de cet état vivait sur un interrupteur mort.
+  const libelle = libelleEtatSource(etat);
   const Icon = isProviderDiscoveryItem(item)
     ? SOURCE_CONTROL_PROVIDER_ICONS[item.kind]
     : VCS_ICONS[item.kind];
 
   if (!Icon) {
-    return <span className={cn("size-2 shrink-0 rounded-full", dotClassName)} aria-hidden />;
+    return (
+      <span
+        className={cn("size-2 shrink-0 rounded-full", dotClassName)}
+        role="img"
+        aria-label={libelle}
+        title={libelle}
+      />
+    );
   }
 
   return (
@@ -203,7 +237,9 @@ function SourceControlItemMark({
           "pointer-events-none absolute -left-0.5 -top-0.5 size-2 rounded-full ring-2 ring-background",
           dotClassName,
         )}
-        aria-hidden
+        role="img"
+        aria-label={libelle}
+        title={libelle}
       />
     </span>
   );
@@ -272,9 +308,6 @@ function DiscoveryItemRow({
   readonly children?: ReactNode;
 }) {
   const version = optionLabel(item.version);
-  const enabled = isProviderDiscoveryItem(item)
-    ? item.status === "available" && item.auth.status === "authenticated"
-    : item.status === "available" && item.implemented;
   const auth = isProviderDiscoveryItem(item) ? item.auth : null;
   const authStatus = auth ? authPresentation(auth) : null;
   const authAccount = auth ? optionLabel(auth.account) : null;
@@ -327,9 +360,20 @@ function DiscoveryItemRow({
                 />
               </Button>
             ) : null}
-            {!isVcsNotReady(item) ? (
-              <Switch checked={enabled} disabled aria-label={`${item.label} availability`} />
-            ) : null}
+            {/*
+              L'INTERRUPTEUR MORT EST PARTI, et rien ne le remplace ici.
+
+              Il était `disabled` en permanence : il ne réglait pas la
+              disponibilité, il la RAPPORTAIT. Un contrôle qu'on ne peut pas
+              actionner, dessiné comme un contrôle, promet un geste qui
+              n'existe pas — et sur un écran de Réglages c'est la promesse la
+              plus crédible qui soit.
+
+              L'état n'est pas perdu pour autant : il vit désormais sur la
+              pastille, qui le NOMME (« Available », « Not signed in », « Not
+              found on this machine », « Not supported yet ») au lieu de le
+              coder en couleur seule.
+            */}
           </div>
         </div>
       </div>
@@ -474,7 +518,7 @@ function EmptySourceControlDiscovery({
   const hasError = error !== null;
 
   return (
-    <SettingsSection title="Server environment">
+    <SettingsSection id={searchableSetting("source-control").id} title="Server environment">
       <Empty className="min-h-88">
         <EmptyMedia variant="icon">
           <GitPullRequestIcon />
@@ -517,8 +561,8 @@ export function SourceControlSettingsPanel() {
         }),
   );
   const result = discovery.data ?? EMPTY_DISCOVERY_RESULT;
-  const hasDiscoveryItems =
-    result.versionControlSystems.length > 0 || result.sourceControlProviders.length > 0;
+  const hasVersionControlSystems = result.versionControlSystems.length > 0;
+  const hasDiscoveryItems = hasVersionControlSystems || result.sourceControlProviders.length > 0;
   const isInitialScanPending = discovery.isPending && discovery.data === null;
   const handleScan = () => {
     discovery.refresh();
@@ -552,8 +596,12 @@ export function SourceControlSettingsPanel() {
         </>
       ) : hasDiscoveryItems ? (
         <>
-          {result.versionControlSystems.length > 0 ? (
-            <SettingsSection title="Version Control" headerAction={scanButton}>
+          {hasVersionControlSystems ? (
+            <SettingsSection
+              id={searchableSetting("source-control").id}
+              title="Version Control"
+              headerAction={scanButton}
+            >
               {result.versionControlSystems.map((item) => (
                 <DiscoveryItemRow key={`vcs:${item.kind}`} item={item}>
                   {item.kind === "git" ? <GitFetchIntervalSettings /> : undefined}
@@ -564,8 +612,9 @@ export function SourceControlSettingsPanel() {
 
           {result.sourceControlProviders.length > 0 ? (
             <SettingsSection
+              id={hasVersionControlSystems ? undefined : searchableSetting("source-control").id}
               title="Source Control Providers"
-              headerAction={result.versionControlSystems.length === 0 ? scanButton : null}
+              headerAction={hasVersionControlSystems ? null : scanButton}
             >
               {result.sourceControlProviders.map((item) => (
                 <DiscoveryItemRow key={`provider:${item.kind}`} item={item} />

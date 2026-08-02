@@ -267,7 +267,9 @@ export const makeGrokTextGeneration = Effect.fn("makeGrokTextGeneration")(functi
       const known = new Set(input.threads.map((thread) => thread.id));
       const used = new Set<string>();
       const groups = (generated.groups ?? []).flatMap((group) => {
-        const name = String(group.name ?? "").trim().slice(0, 40);
+        const name = String(group.name ?? "")
+          .trim()
+          .slice(0, 40);
         const threadIds = (group.threadIds ?? []).filter((id) => {
           if (!known.has(id) || used.has(id)) return false;
           used.add(id);

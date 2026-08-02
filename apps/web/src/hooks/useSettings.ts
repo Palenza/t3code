@@ -25,6 +25,7 @@ import {
   type UnifiedSettings,
 } from "@t3tools/contracts/settings";
 import { safeErrorLogAttributes } from "@t3tools/client-runtime/errors";
+import { toastManager } from "../components/ui/toast";
 import { APP_STAGE_LABEL } from "~/branding";
 import { resolveSidebarV2Enabled } from "~/branding.logic";
 import { ensureLocalApi } from "~/localApi";
@@ -168,6 +169,28 @@ function splitPatch(patch: UnifiedSettingsPatch): {
   };
 }
 
+/**
+ * Les clés de réglage serveur qui seraient PERDUES par cet enregistrement.
+ *
+ * Sans environnement joint, un patch serveur n'a nulle part où aller. La
+ * version d'avant se contentait de ne rien faire : l'interrupteur basculait à
+ * l'écran, l'utilisateur croyait avoir réglé quelque chose, et rien n'était
+ * écrit. C'est la pire panne d'un écran de Réglages, parce qu'elle ressemble
+ * exactement à un succès — ni rouge, ni exception, ni trace.
+ *
+ * Rendre la règle explicite ET pure permet de l'éprouver : le hook, lui, ne
+ * fait plus que crier ce que cette fonction lui dit.
+ */
+export function clesDeReglagePerdues(input: {
+  readonly serverPatch: ServerSettingsPatch;
+  readonly environmentId: EnvironmentId | null;
+}): ReadonlyArray<string> {
+  const cles = Object.keys(input.serverPatch);
+  if (cles.length === 0) return [];
+  if (input.environmentId) return [];
+  return cles;
+}
+
 // ── Hooks ────────────────────────────────────────────────────────────
 
 /**
@@ -294,13 +317,25 @@ function useUpdateSettingsTarget(environmentId: EnvironmentId | null) {
     (patch: UnifiedSettingsPatch) => {
       const { serverPatch, clientPatch } = splitPatch(patch);
 
-      if (Object.keys(serverPatch).length > 0) {
-        if (environmentId) {
-          void persistServerSettings({
-            environmentId,
-            input: { patch: serverPatch },
-          });
-        }
+      const perdues = clesDeReglagePerdues({ serverPatch, environmentId });
+      if (perdues.length > 0) {
+        // On crie des DEUX côtés : à l'écran pour celui qui vient de cliquer,
+        // dans le journal pour celui qui enquêtera plus tard. Et le message
+        // NOMME les réglages concernés — « ça n'a pas marché » ne se répare pas.
+        const cles = perdues.join(", ");
+        console.error("settings: server patch dropped, no environment attached", { cles });
+        toastManager.add({
+          type: "error",
+          title: "Setting not saved",
+          description:
+            `No environment is attached, so this setting could not be stored on the server ` +
+            `(${cles}). Connect an environment and try again.`,
+        });
+      } else if (Object.keys(serverPatch).length > 0 && environmentId) {
+        void persistServerSettings({
+          environmentId,
+          input: { patch: serverPatch },
+        });
       }
       if (Object.keys(clientPatch).length > 0) {
         persistClientSettings({

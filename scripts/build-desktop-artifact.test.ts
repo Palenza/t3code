@@ -98,18 +98,19 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
   });
 
   it("switches desktop packaging product names to nightly for nightly builds", () => {
-    // Le nom stable N'EST PAS écrit en dur ici. Il l'était — « T3 Code
-    // (Alpha) » — et ce golden est resté rouge à partir du jour où le fork a
-    // été renommé « T3 Code (Raptor) » dans son manifeste. Un golden qui
-    // recopie une marque recasse à chaque renommage, sans rien protéger : ce
-    // que ce test doit garantir, c'est la BASCULE de canal, pas l'orthographe
-    // du nom. Le nom stable a sa source de vérité, le manifeste ; le nom
-    // nightly, lui, est bien écrit en dur dans le résolveur, donc il se vérifie
-    // au littéral.
+    // Le nom stable N'EST PAS écrit en dur ici, et la leçon s'est répétée.
+    // Il l'était — « T3 Code (Alpha) » — et ce golden a rougi au premier
+    // renommage. On l'a alors branché sur le manifeste, sa source de vérité.
+    // Le nom NIGHTLY, lui, est resté au littéral parce qu'il est écrit en dur
+    // dans le résolveur — et c'est LUI qui a rougi au débranding du 02/08.
+    //
+    // Ce que ce test doit garantir est la BASCULE de canal, pas l'orthographe
+    // d'une marque. Les deux littéraux restants ne sont donc là que pour
+    // prouver que stable ≠ nightly.
     const stable = resolveDesktopProductName("0.0.17");
-    assert.equal(stable, desktopPackageJson.productName ?? "T3 Code");
-    assert.notEqual(stable, "T3 Code (Nightly)");
-    assert.equal(resolveDesktopProductName("0.0.17-nightly.20260413.42"), "T3 Code (Nightly)");
+    assert.equal(stable, desktopPackageJson.productName ?? "Raptor");
+    assert.notEqual(stable, "Raptor (Nightly)");
+    assert.equal(resolveDesktopProductName("0.0.17-nightly.20260413.42"), "Raptor (Nightly)");
   });
 
   it("switches desktop packaging icons to the nightly artwork for nightly versions", () => {
@@ -417,7 +418,7 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
       // Linux must register the renderer schemes so the generated .desktop
       // entry advertises MimeType=x-scheme-handler/t3code; for OAuth deep links.
       assert.deepStrictEqual((linux.linux as Record<string, unknown>).protocols, [
-        { name: "T3 Code", schemes: ["t3code", "t3code-dev"] },
+        { name: "Raptor", schemes: ["t3code", "t3code-dev"] },
       ]);
       for (const config of [mac, linux, win]) {
         assert.deepStrictEqual(config.electronLanguages, DESKTOP_ELECTRON_LANGUAGES);
@@ -600,10 +601,10 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
       assert.equal(mac.provisioningProfile, "/tmp/t3code.provisionprofile");
       assert.deepStrictEqual(mac.extendInfo, {
         NSMicrophoneUsageDescription:
-          "T3 Code uses the microphone only while you are actively dictating a message.",
+          "Raptor uses the microphone only while you are actively dictating a message.",
       });
       assert.deepStrictEqual(mac.protocols, [
-        { name: "T3 Code", schemes: ["t3code", "t3code-dev"] },
+        { name: "Raptor", schemes: ["t3code", "t3code-dev"] },
       ]);
     }).pipe(Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnv({ env: {} })))),
   );

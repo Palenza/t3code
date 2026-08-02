@@ -74,7 +74,15 @@ export const VoiceRecordingOverlay = memo(function VoiceRecordingOverlay(props: 
             onClick={props.onStop}
           >
             Stop
-            <ShortcutKeycaps shortcut={props.stopShortcutLabel} />
+            {/* ENTRÉE, ET RIEN D'AUTRE — 01/08.
+             *
+             * La barre annonçait `⌥⇧R`. J'y ai d'abord ajouté ⏎ en tête, en
+             * gardant le raccourci « pour ceux qui l'ont appris ». Enzo a
+             * tranché : « il faut l'enlever, il faut juste Entrée et c'est
+             * réglé ». Il a raison — deux gestes pour une action, c'est une
+             * question posée à chaque dictée. Un seul geste ne se choisit pas,
+             * il s'exécute. */}
+            <Keycap>⏎</Keycap>
           </Button>
 
           <Button

@@ -15,7 +15,12 @@ import { cn } from "../../lib/utils";
 import { useSidebarSpacesStore, type SidebarSpace } from "../../sidebarSpacesStore";
 import { useProjects, useThreadShells } from "../../state/entities";
 import { ProjectFavicon } from "../ProjectFavicon";
-import { makeSidebarThemeFromColors, sidebarThemeBackground } from "../../sidebarThemeStore";
+import {
+  makeSidebarThemeFromColors,
+  sidebarThemeBackground,
+  useSidebarThemeStore,
+} from "../../sidebarThemeStore";
+import { useTheme } from "../../hooks/useTheme";
 import { SpaceIcon, SpaceIconPicker } from "./SpaceIconPicker";
 import { SpaceThemePanel } from "./SpaceThemePanel";
 
@@ -36,6 +41,10 @@ const PAS_COLONNE = 240 + 24;
 
 export function SpacesBoard({ onFermer }: { onFermer: () => void }) {
   const spaces = useSidebarSpacesStore((state) => state.spaces);
+  // Le thème que la palette écrit quand aucun espace n'est actif — c'est-à-dire
+  // exactement quand on est dans « Tous », donc devant ce tableau.
+  const themeParDefaut = useSidebarThemeStore((state) => state.theme);
+  const { resolvedTheme } = useTheme();
   const assignments = useSidebarSpacesStore((state) => state.assignments);
   const renameSpace = useSidebarSpacesStore((state) => state.renameSpace);
   const deleteSpace = useSidebarSpacesStore((state) => state.deleteSpace);
@@ -222,9 +231,21 @@ export function SpacesBoard({ onFermer }: { onFermer: () => void }) {
     <div className="flex h-full items-start gap-6 overflow-x-auto px-6 pt-[87px] pb-6">
       {spaces.map((space) => {
         const fils = filsDe(space.id);
+        // LA MÊME RÉSOLUTION QUE LE VOILE DE LA COLONNE : espace > défaut >
+        // gris. Le tableau sautait de l'espace au GRIS, sans passer par le
+        // défaut — or la palette du bas de colonne, quand on est dans « Tous »,
+        // écrit précisément dans ce défaut. Les couleurs choisies là n'avaient
+        // donc aucun endroit où se voir, et le tableau restait gris : « ça ne
+        // retient rien ». Elles étaient bien enregistrées, jamais relues.
+        //
+        // Et l'apparence suit le thème de l'app au lieu d'être clouée à
+        // « dark » : un tableau en nuit sur une app en clair est le même
+        // défaut que celui de la carte de couleurs.
         const fond =
-          sidebarThemeBackground(space.theme ?? makeSidebarThemeFromColors(["#8a8f98"]), "dark") ??
-          undefined;
+          sidebarThemeBackground(
+            space.theme ?? themeParDefaut ?? makeSidebarThemeFromColors(["#8a8f98"]),
+            resolvedTheme,
+          ) ?? undefined;
         const tenue = glisse?.id === space.id;
         return (
           <div

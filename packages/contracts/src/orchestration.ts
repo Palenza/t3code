@@ -304,6 +304,21 @@ export const OrchestrationCheckpointSummary = Schema.Struct({
 });
 export type OrchestrationCheckpointSummary = typeof OrchestrationCheckpointSummary.Type;
 
+/**
+ * Le `kind` de l'activité qui porte la réflexion du modèle.
+ *
+ * Il vit ICI parce que deux camps le lisent : le serveur, qui l'écrit depuis
+ * les deltas `reasoning_text`, et le web, qui s'y accroche pour choisir
+ * l'icône et le corps repliable. Une chaîne recopiée des deux côtés serait
+ * une mine — le jour où l'un change, l'autre cesse d'afficher sans une erreur.
+ *
+ * Ce n'est PAS une valeur d'énumération : `kind` est une chaîne ouverte, et
+ * c'est exactement ce qui permet d'ajouter cette ligne sans élargir un schéma
+ * ni migrer une base. Le ton, lui, reste `info` — « thinking » est déjà pris
+ * côté client par les sous-agents.
+ */
+export const REASONING_ACTIVITY_KIND = "reasoning.updated";
+
 export const OrchestrationThreadActivityTone = Schema.Literals([
   "info",
   "tool",

@@ -100,18 +100,16 @@ export const inheritSharedMcpServers = Effect.fn("inheritSharedMcpServers")(func
     });
     return;
   }
-  yield* fileSystem
-    .writeFileString(targetFile, `${serialized}\n`)
-    .pipe(
-      Effect.tap(() =>
-        Effect.logInfo("claude instance inherited shared MCP servers", {
-          homePath,
-          inherited,
-        }),
-      ),
-      Effect.tapError((cause) =>
-        Effect.logWarning("claude MCP inheritance failed", { homePath, cause }),
-      ),
-      Effect.orElseSucceed(() => undefined),
-    );
+  yield* fileSystem.writeFileString(targetFile, `${serialized}\n`).pipe(
+    Effect.tap(() =>
+      Effect.logInfo("claude instance inherited shared MCP servers", {
+        homePath,
+        inherited,
+      }),
+    ),
+    Effect.tapError((cause) =>
+      Effect.logWarning("claude MCP inheritance failed", { homePath, cause }),
+    ),
+    Effect.orElseSucceed(() => undefined),
+  );
 });

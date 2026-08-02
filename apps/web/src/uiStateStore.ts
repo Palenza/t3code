@@ -27,6 +27,18 @@ export interface PersistedUiState {
   defaultAdvertisedEndpointKey?: string | null;
   threadChangedFilesExpansionVersion?: typeof THREAD_CHANGED_FILES_EXPANSION_VERSION;
   threadChangedFilesExpandedById?: Record<string, Record<string, boolean>>;
+  /**
+   * Le dernier fil OUVERT — « ça doit toujours se redémarrer là où tu as
+   * quitté » (fondateur, 31/07).
+   *
+   * Distinct de `threadLastVisitedAtById`, qui n'est PAS ce qu'il paraît :
+   * celui-là n'est écrit que lorsqu'un fil porte du nouveau, pour barrer le
+   * non-lu. Un fil qu'on rouvre sans qu'il ait bougé n'y laisse aucune trace.
+   * S'en servir pour la reprise, c'était faire dire à un signal ce qu'il ne
+   * dit pas — et donc rouvrir tôt ou tard le mauvais fil, sans qu'aucun test
+   * ne puisse le voir venir.
+   */
+  lastOpenedThreadKey?: string | null;
 }
 
 export interface UiProjectState {
@@ -37,6 +49,8 @@ export interface UiProjectState {
 export interface UiThreadState {
   threadLastVisitedAtById: Record<string, string>;
   threadChangedFilesExpandedById: Record<string, Record<string, boolean>>;
+  /** Le dernier fil ouvert, pour rouvrir là où on a quitté. */
+  lastOpenedThreadKey: string | null;
 }
 
 export interface UiEndpointState {
@@ -50,6 +64,7 @@ const initialState: UiState = {
   projectOrder: [],
   threadLastVisitedAtById: {},
   threadChangedFilesExpandedById: {},
+  lastOpenedThreadKey: null,
   defaultAdvertisedEndpointKey: null,
 };
 
@@ -126,6 +141,10 @@ export function parsePersistedState(parsed: PersistedUiState): UiState {
     projectExpandedById,
     projectOrder,
     threadLastVisitedAtById: sanitizeTimestampRecord(parsed.threadLastVisitedAtById),
+    lastOpenedThreadKey:
+      typeof parsed.lastOpenedThreadKey === "string" && parsed.lastOpenedThreadKey.length > 0
+        ? parsed.lastOpenedThreadKey
+        : null,
     threadChangedFilesExpandedById:
       parsed.threadChangedFilesExpansionVersion === THREAD_CHANGED_FILES_EXPANSION_VERSION
         ? sanitizePersistedThreadChangedFilesExpanded(parsed.threadChangedFilesExpandedById)
@@ -204,6 +223,7 @@ export function persistState(state: UiState): void {
         projectExpandedById,
         projectOrder: state.projectOrder,
         threadLastVisitedAtById: state.threadLastVisitedAtById,
+        lastOpenedThreadKey: state.lastOpenedThreadKey,
         defaultAdvertisedEndpointKey: state.defaultAdvertisedEndpointKey,
         threadChangedFilesExpansionVersion: THREAD_CHANGED_FILES_EXPANSION_VERSION,
         threadChangedFilesExpandedById: state.threadChangedFilesExpandedById,
@@ -384,6 +404,8 @@ export function reorderProjects(
 interface UiStateStore extends UiState {
   markThreadVisited: (threadId: string, visitedAt: string) => void;
   markThreadUnread: (threadId: string, latestTurnCompletedAt: string | null | undefined) => void;
+  /** Noter le fil qu'on vient d'ouvrir, pour y revenir au prochain lancement. */
+  setLastOpenedThreadKey: (threadKey: string | null) => void;
   setThreadChangedFilesExpanded: (threadId: string, turnId: string, expanded: boolean) => void;
   setDefaultAdvertisedEndpointKey: (key: string | null) => void;
   setProjectExpanded: (projectIds: string | readonly string[], expanded: boolean) => void;
@@ -398,6 +420,10 @@ export const useUiStateStore = create<UiStateStore>((set) => ({
   ...readPersistedState(),
   markThreadVisited: (threadId, visitedAt) =>
     set((state) => markThreadVisited(state, threadId, visitedAt)),
+  setLastOpenedThreadKey: (threadKey) =>
+    set((state) =>
+      state.lastOpenedThreadKey === threadKey ? state : { lastOpenedThreadKey: threadKey },
+    ),
   markThreadUnread: (threadId, latestTurnCompletedAt) =>
     set((state) => markThreadUnread(state, threadId, latestTurnCompletedAt)),
   setThreadChangedFilesExpanded: (threadId, turnId, expanded) =>

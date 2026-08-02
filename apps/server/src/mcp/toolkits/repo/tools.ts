@@ -36,6 +36,8 @@ export const RepoMapResultat = Schema.Struct({
   lus: Schema.Number,
   caches: Schema.Number,
   ignoresTropGros: Schema.Number,
+  /** Ce que la porte de sortie a changé — caviardage, dépassement de plafond. */
+  note: Schema.optional(Schema.String),
 });
 
 export const RepoMapTool = Tool.make("repo_map", {

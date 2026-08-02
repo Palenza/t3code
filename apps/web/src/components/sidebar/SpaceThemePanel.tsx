@@ -1,57 +1,141 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import {
-  ChevronLeftIcon,
-  ChevronRightIcon,
-  MinusIcon,
-  MoonIcon,
-  PencilIcon,
-  PlusIcon,
-} from "lucide-react";
+import { ChevronLeftIcon, ChevronRightIcon, MinusIcon, PlusIcon } from "lucide-react";
 
 import { cn } from "../../lib/utils";
+import { useTheme } from "../../hooks/useTheme";
 import { useSidebarSpacesStore } from "../../sidebarSpacesStore";
 import {
   makeSidebarThemeFromColors,
-  SIDEBAR_THEME_GRAIN_URL,
   useSidebarThemeStore,
   type SidebarTheme,
-  type SidebarThemeStop,
 } from "../../sidebarThemeStore";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
+import {
+  ajouterRond,
+  deplacerFigure,
+  glisserSatellite,
+  normaliserAuGabarit,
+  poserFigure,
+  poserSelonCouleurs,
+  retirerRond,
+  stopsAvecCouleurs,
+  stopsDepuisPoints,
+  wheelColorAt,
+  wheelPositionOf,
+} from "./SpaceThemePanel.logic";
 
 /**
- * L'éditeur de thème d'Arc — recalé sur la MÉTROLOGIE du 30/07 soir :
- * 4 965 frames réelles à 120 Hz, résolution native, mesurées par programme
- * (scripts mesure_frames/mesure2/synthese, session du 30/07).
+ * L'éditeur de thème d'Arc.
  *
- * Ce que la mesure a tranché contre l'implémentation précédente :
+ * La géométrie de la toile vit dans `SpaceThemePanel.logic.ts`, avec les
+ * mesures qui l'ont établie : les ronds sont sur un cercle centré, le glissé
+ * fixe leur rayon commun et fait tourner l'anneau SANS toucher aux écarts
+ * angulaires, et le rayon descend jusqu'au centre — où le dégradé se referme
+ * en une couleur unie. Ici on ne fait que la peau : le verre, le nuancier, la
+ * vague, la molette.
  *
- * LE TRIO EST UN ASSEMBLAGE RIGIDE PENDANT LE GLISSÉ. Ratio de déplacement
- * satellite/dominante : médiane 0,98 (p10 0,80 · p90 1,12) sur 244 mesures.
- * Le retard élastique d'avant (transition left/top 75 ms) était une faute —
- * en glissé, AUCUNE transition ; les transitions ne servent que les sauts
- * discrets (clic nuancier, promotion).
- *
- * RAYON COMMUN, ANGLES PROPRES. Les trois ronds vivent à la même distance
- * du centre de la toile (rayons mesurés 107/108/115 puis 163/164/174 selon
- * l'instant), mais leurs écarts angulaires VARIENT (61°, 92°, 149° observés) :
- * le ±42° forcé d'avant n'existe pas. Chaque rond garde SON angle ; bouger
- * la dominante fixe l'angle de celle-ci et le rayon de tous.
+ * L'apparence claire/sombre du panneau suit le THÈME DE L'APP
+ * (`useTheme().resolvedTheme`), jamais la préférence système brute. La
+ * version précédente interrogeait `matchMedia("(prefers-color-scheme:dark)")`
+ * en direct : sur une app forcée en nuit avec un macOS en clair, le panneau
+ * se peignait en CLAIR par-dessus du noir — d'où les chevrons illisibles et
+ * les icônes qui « disparaissaient » au survol (elles s'assombrissaient vers
+ * le fond gris au lieu de s'éclaircir).
  */
 
 const MAX_ARC_STOPS = 3;
 
-/** Page 1 — couleurs unies, un rond = une dominante. */
-const SOLID_SWATCHES: ReadonlyArray<string> = [
-  "#f2ead9",
-  "#f2a3c0",
-  "#9b6fc3",
-  "#ef8a70",
-  "#fbd87f",
-  "#a5d977",
-  "#4fd1c5",
-  "#5b8def",
-  "#6b5b95",
+/**
+ * LES PAGES DE COULEURS UNIES — RELEVÉES sur Arc, pas choisies.
+ *
+ * On n'en avait qu'UNE, inventée à l'œil. Les captures d'Enzo du 02/08
+ * (07 h 15 → 07 h 18) montrent qu'Arc en a CINQ, et qu'il les feuillette avec
+ * les mêmes chevrons. Chaque ligne ci-dessous est la médiane du centre des
+ * neuf pastilles, échantillonnée sur la capture citée — aucune n'est devinée.
+ *
+ * La grise mérite un mot : ses neuf crans tombent sur des pourcentages ronds
+ * (100, 90, 80, 70, 50, 40, 20, 10, 0). Elle saute 60 et 30 — c'est ce que la
+ * mesure dit, on la recopie plutôt que de « corriger » leur choix.
+ */
+const PAGES_UNIES: ReadonlyArray<{ readonly nom: string; readonly tons: ReadonlyArray<string> }> = [
+  {
+    nom: "Vives",
+    // relevé ARC.mov 02/08 t=22-30 s — moitié basse des disques, pleine
+    // résolution. La première mesure (07.18.20) prenait la médiane du disque
+    // ENTIER : le reflet clair du haut délavait tout d'un cran.
+    tons: [
+      "#ece5dd",
+      "#ec8fb0",
+      "#996490",
+      "#ed525f",
+      "#fc774b",
+      "#f5cc4b",
+      "#2ae289",
+      "#5fb0d1",
+      "#585a7c",
+    ],
+  },
+  {
+    nom: "Claires",
+    // relevé 07.15.20 → 07.16.01 (stable sur neuf captures)
+    tons: [
+      "#f1f0e7",
+      "#e9bcaf",
+      "#ac8793",
+      "#e4b87f",
+      "#f1e579",
+      "#c5f082",
+      "#87e5e2",
+      "#9195da",
+      "#8c7c97",
+    ],
+  },
+  {
+    nom: "Pastel",
+    // relevé ARC.mov 02/08 t=46-68 s (même méthode)
+    tons: [
+      "#f2ecec",
+      "#fce5ee",
+      "#eccae6",
+      "#fec3c9",
+      "#fcdacb",
+      "#fdf6df",
+      "#d6fbe5",
+      "#d4eff9",
+      "#bbbddf",
+    ],
+  },
+  {
+    nom: "Profondes",
+    // relevé ARC.mov 02/08 t=72 s (même méthode)
+    tons: [
+      "#43314f",
+      "#5a2c4b",
+      "#833537",
+      "#a56036",
+      "#cfa751",
+      "#c4c498",
+      "#6d9e75",
+      "#1c563e",
+      "#203b5d",
+    ],
+  },
+  {
+    nom: "Gris",
+    // relevé ARC.mov 02/08 t=105 s (même méthode ; le blanc de tête gardé pur)
+    tons: [
+      "#ffffff",
+      "#e0e0e0",
+      "#c3c3c3",
+      "#a7a7a7",
+      "#737373",
+      "#595959",
+      "#2a2a2a",
+      "#161616",
+      "#000000",
+    ],
+  },
 ];
 
 /**
@@ -71,129 +155,46 @@ const GRADIENT_SWATCHES: ReadonlyArray<readonly [string, string, string]> = [
   ["#63638f", "#565683", "#4a4a70"],
 ];
 
+/** Les cinq pages unies d'Arc, plus la nôtre de dégradés préréglés. */
+const NOMBRE_DE_PAGES = PAGES_UNIES.length + 1;
+
 /** Tailles d'Arc (1 919 frames, σ 0) : dominante 34 css, satellites 20. */
 const STOP_SIZES_PX = [34, 20, 20] as const;
 
 /**
- * Deux apparences, plus trois : ordre fondateur du 30/07 — « le mode clair,
- * on va l'enlever, on garde le dark et l'automatique ».
+ * UN SEUL MODE — ordre fondateur du 31/07 : « on va aussi enlever le mode
+ * nuit, c'est moche ; on garde qu'un seul mode, celui avec les trois étoiles
+ * scintillantes ». Le 30/07 avait déjà retiré le mode clair. Il ne reste donc
+ * plus de CHOIX à faire : les étoiles ne sont plus un bouton, ce sont
+ * l'ENSEIGNE de ce que fait la carte — les couleurs suivent le thème de
+ * l'app. Le champ `appearance` reste dans le type (des thèmes enregistrés le
+ * portent encore) ; le panneau le remet à « auto » dès qu'il écrit.
  */
-const APPEARANCE_CHOICES = [
-  { value: "auto", label: "Suivre le système" },
-  { value: "dark", label: "Toujours sombre" },
-] as const;
-
-// ---------------------------------------------------------------- couleur
-// LA ROUE INVISIBLE (10 761 frames, vidéo précédente) : teinte = angle
-// autour du centre (hue ≈ angle − 5°), pleine au centre, pâle au bord.
-
-function hslToHex(h: number, s: number, l: number): string {
-  const hue = ((h % 360) + 360) % 360;
-  const sat = Math.max(0, Math.min(100, s)) / 100;
-  const light = Math.max(0, Math.min(100, l)) / 100;
-  const chroma = (1 - Math.abs(2 * light - 1)) * sat;
-  const x = chroma * (1 - Math.abs(((hue / 60) % 2) - 1));
-  const m = light - chroma / 2;
-  const [r, g, b] =
-    hue < 60
-      ? [chroma, x, 0]
-      : hue < 120
-        ? [x, chroma, 0]
-        : hue < 180
-          ? [0, chroma, x]
-          : hue < 240
-            ? [0, x, chroma]
-            : hue < 300
-              ? [x, 0, chroma]
-              : [chroma, 0, x];
-  const toHex = (channel: number) =>
-    Math.round((channel + m) * 255)
-      .toString(16)
-      .padStart(2, "0");
-  return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
-}
-
-function hexToHsl(hex: string): { h: number; s: number; l: number } {
-  const value = hex.replace("#", "");
-  const r = Number.parseInt(value.slice(0, 2), 16) / 255;
-  const g = Number.parseInt(value.slice(2, 4), 16) / 255;
-  const b = Number.parseInt(value.slice(4, 6), 16) / 255;
-  const max = Math.max(r, g, b);
-  const min = Math.min(r, g, b);
-  const l = (max + min) / 2;
-  if (max === min) return { h: 0, s: 0, l: l * 100 };
-  const d = max - min;
-  const s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
-  const h =
-    max === r
-      ? ((g - b) / d + (g < b ? 6 : 0)) * 60
-      : max === g
-        ? ((b - r) / d + 2) * 60
-        : ((r - g) / d + 4) * 60;
-  return { h, s: s * 100, l: l * 100 };
-}
-
-/** La couleur de la roue à une position de toile. */
-function wheelColorAt(x: number, y: number): string {
-  const dx = x - 0.5;
-  const dy = y - 0.5;
-  const hue = (Math.atan2(dy, dx) * 180) / Math.PI - 5;
-  const dist = Math.hypot(dx, dy);
-  const light = Math.min(86, 42 + dist * 75);
-  const sat = Math.max(55, 95 - dist * 55);
-  return hslToHex(hue, sat, light);
-}
-
-/** L'inverse : où poser un rond pour obtenir (au plus près) cette couleur. */
-function wheelPositionOf(hex: string): { x: number; y: number } {
-  const { h, l } = hexToHsl(hex);
-  const angle = ((h + 5) * Math.PI) / 180;
-  const distFromLight = (Math.min(86, Math.max(42, l)) - 42) / 75;
-  const dist = Math.min(0.44, Math.max(0.06, distFromLight));
-  return {
-    x: 0.5 + Math.cos(angle) * dist,
-    y: 0.5 + Math.sin(angle) * dist,
-  };
-}
-
-const clampToile = (value: number) => Math.max(0.04, Math.min(0.96, value));
-
-/** L'angle d'un arrêt autour du centre de la toile, en radians. */
-const angleDe = (stop: { x: number; y: number }) => Math.atan2(stop.y - 0.5, stop.x - 0.5);
+const MODE_TITRE = "Dynamique";
+const MODE_EXPLICATION = "Les couleurs suivent le thème de l'app.";
 
 /**
- * Replace le trio pour une dominante posée en (x, y) : le trio TOURNE ET
- * RESPIRE EN BLOC autour du centre de la toile. Chaque satellite garde son
- * ÉCART D'ANGLE relatif à la dominante (écarts variés mesurés : 61°, 92°,
- * 149° selon l'arrangement) ; tous partagent le rayon du pointeur. C'est la
- * seule loi compatible avec les DEUX mesures : équidistances au centre
- * conservées, et ratio de déplacement satellite/dominante ≈ 1 pendant le
- * glissé. Un satellite manquant naît à ±140° (écartements larges observés).
+ * Le socle, en chiffres NOMMÉS. La largeur du rail de la vague se DÉDUIT du
+ * reste : elle était écrite en dur (242) à côté de son calcul en commentaire,
+ * donc changer l'écart vague/molette déréglait silencieusement la longueur
+ * d'onde mesurée. Ici, c'est impossible.
  */
-function replacerTrio(
-  stops: ReadonlyArray<SidebarThemeStop>,
-  x: number,
-  y: number,
-  count: number,
-): SidebarThemeStop[] {
-  const rayon = Math.min(0.46, Math.hypot(x - 0.5, y - 0.5));
-  const angleDominante = Math.atan2(y - 0.5, x - 0.5);
-  const ancienne = stops[0];
-  const angleAncien = ancienne === undefined ? angleDominante : angleDe(ancienne);
-  return Array.from({ length: count }, (_, index) => {
-    const existant = stops[index];
-    const ecart =
-      index === 0
-        ? 0
-        : existant !== undefined
-          ? angleDe(existant) - angleAncien
-          : ((index === 1 ? 140 : -140) * Math.PI) / 180;
-    const angle = angleDominante + ecart;
-    const px = index === 0 ? clampToile(x) : clampToile(0.5 + Math.cos(angle) * rayon);
-    const py = index === 0 ? clampToile(y) : clampToile(0.5 + Math.sin(angle) * rayon);
-    return { color: wheelColorAt(px, py), x: px, y: py };
-  });
-}
+const PANNEAU_LARGEUR = 358;
+const SOCLE_PADDING_X = 16;
+/** L'écart entre la vague et la molette — l'ancien (12) les collait. */
+const ECART_VAGUE_MOLETTE = 20;
+const MOLETTE_TAILLE = 72;
+const RAIL_LARGEUR = PANNEAU_LARGEUR - 2 * SOCLE_PADDING_X - ECART_VAGUE_MOLETTE - MOLETTE_TAILLE;
+
+/**
+ * Le verre liquide n'ondule pas si l'utilisateur a demandé moins de
+ * mouvement. Lu une fois : le panneau se monte bien après le chargement, et
+ * une préférence d'accessibilité ne change pas en cours de glissé.
+ */
+const MOUVEMENT_REDUIT =
+  typeof window !== "undefined" && typeof window.matchMedia === "function"
+    ? window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    : false;
 
 /**
  * `spaceId` vise un espace PRÉCIS plutôt que l'espace courant (tableau des
@@ -206,10 +207,47 @@ export function SpaceThemePanel({ spaceId }: { readonly spaceId?: string } = {})
   const setSpaceTheme = useSidebarSpacesStore((state) => state.setSpaceTheme);
   const defaultTheme = useSidebarThemeStore((state) => state.theme);
   const setDefaultTheme = useSidebarThemeStore((state) => state.setTheme);
+  const { resolvedTheme } = useTheme();
 
   const activeSpace = spaces.find((space) => space.id === cibleId) ?? null;
-  const current: SidebarTheme =
+  const enregistre =
     (activeSpace ? activeSpace.theme : defaultTheme) ?? makeSidebarThemeFromColors(["#f2a3c0"]);
+  // Un seul mode : un thème enregistré avec une apparence ÉPINGLÉE (mode nuit
+  // d'avant le 31/07) est relu comme « auto », et repart en « auto » à la
+  // première retouche. Rien à migrer, rien qui reste coincé en nuit.
+  const themeAuto: SidebarTheme =
+    enregistre.appearance === "auto" ? enregistre : { ...enregistre, appearance: "auto" };
+  // MIGRATION À L'OUVERTURE, UNE FOIS PAR ESPACE (02/08, corrigé deux fois
+  // le même jour) : la première version normalisait dans un useMemo réactif
+  // — à CHAQUE rendu. Pendant un glissé, chaque position écrite était
+  // aussitôt re-clouée au gabarit à la relecture : la migration se battait
+  // contre le geste, et gagnait (visible sur raptor2.mov). Et mon premier
+  // correctif a été perdu par un remplacement silencieusement raté — attrapé
+  // par le vérificateur de DMG, marqueur absent du bundle. D'où l'assertion
+  // d'existence côté patch et le grep post-écriture, désormais.
+  const dejaMigreRef = useRef<string | null>(null);
+  const clefMigration = cibleId ?? "(defaut)";
+  const current: SidebarTheme = useMemo(() => {
+    if (dejaMigreRef.current === clefMigration) return themeAuto;
+    if (themeAuto.stops.length < 2) return themeAuto;
+    const points = themeAuto.stops.map((stop) => ({ x: stop.x, y: stop.y }));
+    const recales = normaliserAuGabarit(points);
+    const identiques = recales.every(
+      (point, index) =>
+        Math.abs(point.x - points[index]!.x) < 1e-6 && Math.abs(point.y - points[index]!.y) < 1e-6,
+    );
+    if (identiques) return themeAuto;
+    return {
+      ...themeAuto,
+      stops: stopsAvecCouleurs(
+        recales,
+        themeAuto.stops.map((stop) => stop.color),
+      ),
+    };
+  }, [themeAuto, clefMigration]);
+  useEffect(() => {
+    dejaMigreRef.current = clefMigration;
+  }, [clefMigration]);
   const apply = useCallback(
     (next: SidebarTheme) => {
       if (activeSpace) {
@@ -226,35 +264,115 @@ export function SpaceThemePanel({ spaceId }: { readonly spaceId?: string } = {})
   // ------------------------------------------------------------- la toile
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const draggingRef = useRef(false);
+  /** Satellite pressé mais pas encore bougé : promotion si relâché sur place. */
+  const enAttenteRef = useRef<{ index: number; x: number; y: number } | null>(null);
   // L'état ne sert que le STYLE : glissé = zéro transition (assemblage
   // rigide mesuré), saut discret = glissade 200 ms.
   const [enGlisse, setEnGlisse] = useState(false);
 
   const dominant = current.stops[0] ?? { color: wheelColorAt(0.62, 0.4), x: 0.62, y: 0.4 };
 
-  const moveGroup = useCallback(
-    (clientX: number, clientY: number) => {
-      const canvas = canvasRef.current;
-      if (canvas === null || !draggingRef.current) return;
-      const rect = canvas.getBoundingClientRect();
-      const x = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-      const y = Math.max(0, Math.min(1, (clientY - rect.top) / rect.height));
-      apply({ ...current, stops: replacerTrio(current.stops, x, y, current.stops.length) });
+  /**
+   * LA POURSUITE — la loi du déplacement d'Arc, jugée sur pièces le 02/08
+   * (11 652 images) : le rond SAISI suit le doigt, angle et rayon libres ;
+   * les autres le POURSUIVENT, rayon vers le sien, angle vers le sien plus
+   * leur décalage pris à la saisie. Les écarts respirent en mouvement et
+   * reconvergent à l'arrêt — exactement ce que la vidéo montre, et ce que ma
+   * rotation rigide d'hier ne faisait pas. Le pas de poursuite s'applique par
+   * IMAGE : la boucle rAF tourne en continu pendant la prise, même doigt
+   * immobile — c'est là que la convergence se voit.
+   */
+  /** L'index du rond saisi — 0 = dominante (l'anneau tourne avec elle),
+   * sinon un satellite (il coulisse seul sur l'anneau). Verdict arc2.mov :
+   * rotation rigide sans retard, satellites indépendants. */
+  const indexSaisiRef = useRef(0);
+  const currentRef = useRef(current);
+  currentRef.current = current;
+  const pasDeGlisse = useCallback(() => {
+    const canvas = canvasRef.current;
+    const cible = cibleRef.current;
+    if (canvas === null || cible === null || !draggingRef.current) return;
+    const rect = canvas.getBoundingClientRect();
+    const x = Math.max(0, Math.min(1, (cible.x - rect.left) / rect.width));
+    const y = Math.max(0, Math.min(1, (cible.y - rect.top) / rect.height));
+    const etat = currentRef.current;
+    const points = etat.stops.map((stop) => ({ x: stop.x, y: stop.y }));
+    const index = indexSaisiRef.current;
+    const suivants =
+      index === 0 ? deplacerFigure(points, x, y) : glisserSatellite(points, index, x, y);
+    apply({ ...etat, stops: stopsDepuisPoints(suivants) });
+  }, [apply]);
+
+  /**
+   * UNE MISE À JOUR PAR IMAGE, pas une par évènement — mesuré le 02/08.
+   *
+   * Reçu : sur 1 259 paires d'images consécutives d'un glissé filmé à 120 fps,
+   * 71,1 % des images ne bougeaient PAS, avec une médiane de 2 images figées
+   * entre deux mouvements. Cadence utile : 40 Hz. Arc, sur la même métrique et
+   * le même geste : 1 image figée, 60 Hz. On rate une image sur trois.
+   *
+   * La cause n'est pas la courbe, c'est le BUDGET : chaque `pointermove`
+   * écrivait dans le store, et le panneau est du verre liquide (filtre SVG +
+   * backdrop-filter) posé sur des cartes qui se repeignent. À 120 évènements
+   * par seconde, on demandait deux fois plus de peinture que l'écran n'en
+   * affiche, et on dépassait les 16,7 ms.
+   *
+   * On garde donc la DERNIÈRE position visée et on n'applique qu'une fois par
+   * image. Le rAF est légitime ici — contrairement à l'animation de la barre
+   * (leçon du 30/07 : une fenêtre cachée ne le tire pas) : un glissé n'existe
+   * que sous un pointeur, donc sous une fenêtre visible.
+   */
+  const cibleRef = useRef<{ x: number; y: number } | null>(null);
+  const imageRef = useRef<number | null>(null);
+  const viser = useCallback((clientX: number, clientY: number) => {
+    cibleRef.current = { x: clientX, y: clientY };
+  }, []);
+
+  const demarrerSaisie = useCallback(
+    (index: number, clientX: number, clientY: number) => {
+      draggingRef.current = true;
+      setEnGlisse(true);
+      cibleRef.current = { x: clientX, y: clientY };
+      indexSaisiRef.current = index;
+      const boucle = () => {
+        if (!draggingRef.current) {
+          imageRef.current = null;
+          return;
+        }
+        pasDeGlisse();
+        imageRef.current = window.requestAnimationFrame(boucle);
+      };
+      if (imageRef.current === null) imageRef.current = window.requestAnimationFrame(boucle);
     },
-    [apply, current],
+    [pasDeGlisse],
   );
 
   const finDeGlisse = useCallback(() => {
     draggingRef.current = false;
     setEnGlisse(false);
+    if (imageRef.current !== null) {
+      window.cancelAnimationFrame(imageRef.current);
+      imageRef.current = null;
+    }
+    cibleRef.current = null;
   }, []);
+
+  useEffect(
+    () => () => {
+      if (imageRef.current !== null) window.cancelAnimationFrame(imageRef.current);
+    },
+    [],
+  );
 
   const applySolid = useCallback(
     (color: string) => {
+      // UNE couleur unie = UN rond, avec la couleur EXACTE de la pastille.
+      // (Reproche fondateur : revenir des gradients aux unis laissait trois
+      // ronds ; « si je choisis le jaune, ça me met que le rond jaune ».)
       const position = wheelPositionOf(color);
       apply({
         ...current,
-        stops: replacerTrio(current.stops, position.x, position.y, current.stops.length),
+        stops: stopsAvecCouleurs(poserFigure(position.x, position.y, 1), [color]),
       });
     },
     [apply, current],
@@ -262,250 +380,408 @@ export function SpaceThemePanel({ spaceId }: { readonly spaceId?: string } = {})
 
   const applyGradient = useCallback(
     (trio: readonly [string, string, string]) => {
-      // Le gradient pose TROIS ronds d'un coup, ancrés sur le premier ton.
-      const position = wheelPositionOf(trio[0]);
-      apply({ ...current, stops: replacerTrio([], position.x, position.y, 3) });
+      // Un gradient = TROIS ronds, aux couleurs EXACTES du préréglage —
+      // chacun À L'ANGLE DE SA TEINTE (pose d'Arc, mesurée : ses trios font
+      // 37/40/283 d'écarts, les écarts de teinte du préréglage).
+      apply({ ...current, stops: stopsAvecCouleurs(poserSelonCouleurs(trio), trio) });
     },
     [apply, current],
   );
 
   const addStop = useCallback(() => {
     if (current.stops.length >= MAX_ARC_STOPS) return;
+    // Les ronds déjà là GARDENT leur couleur — ajouter un point ne doit pas
+    // repeindre le choix de l'utilisateur. Seul le nouveau se lit sur la
+    // roue, et il naît du côté pâle : « ça garde le plus blanc ».
     apply({
       ...current,
-      stops: replacerTrio(current.stops, dominant.x, dominant.y, current.stops.length + 1),
+      stops: stopsAvecCouleurs(
+        ajouterRond(current.stops, MAX_ARC_STOPS),
+        current.stops.map((stop) => stop.color),
+      ),
     });
-  }, [apply, current, dominant.x, dominant.y]);
+  }, [apply, current]);
   const removeStop = useCallback(() => {
     if (current.stops.length <= 1) return;
-    apply({
-      ...current,
-      stops: replacerTrio(current.stops, dominant.x, dominant.y, current.stops.length - 1),
-    });
-  }, [apply, current, dominant.x, dominant.y]);
+    // Les rescapés ne bougent pas : ils gardent position ET couleur, donc
+    // l'écart entre eux survit tel quel.
+    const restants = retirerRond(current.stops).length;
+    apply({ ...current, stops: current.stops.slice(0, restants) });
+  }, [apply, current]);
 
-  const isDarkCanvas =
-    current.appearance === "dark" ||
-    (current.appearance === "auto" &&
-      typeof window !== "undefined" &&
-      window.matchMedia("(prefers-color-scheme: dark)").matches);
+  // Plus de mode épinglé : la carte suit le thème de l'app, point. (Et
+  // JAMAIS `matchMedia` en direct — c'est ce qui peignait la carte en clair
+  // par-dessus une app en nuit quand le macOS, lui, était en clair.)
+  const isDarkCanvas = resolvedTheme === "dark";
 
   const mutedControl = isDarkCanvas
-    ? "text-white/50 hover:text-white/80"
-    : "text-neutral-400 hover:text-neutral-600";
+    ? "text-white/70 hover:bg-white/12 hover:text-white"
+    : "text-neutral-600 hover:bg-black/8 hover:text-neutral-900";
 
   // Glissé : rigide. Saut discret : glissade. (Mesure : ratio 0,98 en drag.)
+  /**
+   * LE VOYAGE DU ROND — relevé sur ARC.mov, pas supposé.
+   *
+   * Le commentaire que ce code portait jusqu'ici affirmait « mesuré sur
+   * ARC.mov : son rond apparaît là où sa teinte le place, il ne voyage pas »,
+   * et faisait remonter les boutons (clé React) pour obtenir un pop sur place.
+   * C'est faux. Suivi du rond dominant image par image sur ARC.mov autour du
+   * clic de pastille de t=43,475 s (108 images extraites à 120 fps, centroïde
+   * des taches saturées du canevas) :
+   *
+   *   départ      x = 471,6      (immobile jusqu'à 43,483)
+   *   dépassement x = 208,0      à t = 43,667
+   *   arrivée     x = 226,5      à t = 43,817
+   *
+   * soit 245,1 px de trajet net en 334 ms, avec un dépassement de 18,5 px
+   * (7,5 % du trajet) puis un retour. Le profil de vitesse ACCÉLÈRE avant de
+   * décélérer — 1,6 → 22,7 → 39,5 → 45,0 → 66,8 (pointe) → 32,7 → 16,4 → 9,9
+   * → 4,8 px/image. C'est un ressort, pas un ease-out : l'ancien
+   * `cubic-bezier(0.22,1,0.36,1)` part à pleine vitesse et n'a aucun
+   * dépassement.
+   *
+   * La courbe ci-dessous EST la mesure : chaque palier de `linear()` est un
+   * couple (avancement, temps) relevé sur la vidéo, avancement normalisé par
+   * les 245,1 px du trajet. On ne réinvente pas une approximation à la main.
+   */
+  const RESSORT_ARC =
+    "linear(0, 0.099 5.1%, 0.259 10.2%, 0.442 15%, 0.714 20.1%, 0.847 29.9%," +
+    " 0.945 32.6%, 1.011 37.4%, 1.051 42.5%, 1.071 47.6%, 1.076 55.1%," +
+    " 1.059 65%, 1.026 74.9%, 1.008 85%, 1.002 94.9%, 1)";
   const transitionRonds = enGlisse
     ? "none"
-    : "left 200ms cubic-bezier(0.22,1,0.36,1), top 200ms cubic-bezier(0.22,1,0.36,1), background-color 120ms";
+    : `left 334ms ${RESSORT_ARC}, top 334ms ${RESSORT_ARC}, background-color 120ms`;
 
   return (
     // 358 × 510 css MESURÉS (bords à ±1 px sur frame claire et sombre),
-    // coins larges. Verre mince : la toile laisse passer, le socle est laiteux.
+    // coins larges. Le panneau EST du verre liquide : il réfracte le fond
+    // (Chromium), et retombe sur un verre dépoli propre ailleurs.
     <div
       className={cn(
-        "flex w-[358px] flex-col overflow-hidden rounded-2xl backdrop-blur-2xl backdrop-saturate-150 transition-colors",
-        isDarkCanvas ? "bg-neutral-900/28" : "bg-white/28",
+        "t3-verre relative flex w-[358px] flex-col overflow-hidden rounded-2xl",
+        isDarkCanvas ? "t3-verre-nuit" : "t3-verre-jour",
       )}
     >
-      {/* La toile-palette : pointillée. Panneau total 510 css (mesure bords
-          13→1033 crop) ; la séparation toile/socle mesurée oscille entre 369
-          et 393 selon la frame — 372 tient les deux. */}
-      <div
-        ref={canvasRef}
-        className={cn(
-          "relative h-[372px] touch-none rounded-t-2xl bg-[radial-gradient(circle,var(--dot)_1px,transparent_1px)] bg-[size:9px_9px]",
-          isDarkCanvas
-            ? "[--dot:color-mix(in_oklab,white_22%,transparent)]"
-            : "[--dot:color-mix(in_oklab,black_18%,transparent)]",
-        )}
-        onPointerMove={(event) => {
-          if (draggingRef.current) moveGroup(event.clientX, event.clientY);
-        }}
-        onPointerUp={finDeGlisse}
-      >
-        <div className="absolute inset-x-0 top-3 flex items-center justify-center gap-2">
-          {APPEARANCE_CHOICES.map(({ value, label }) => (
-            <button
-              key={value}
-              type="button"
-              aria-label={label}
-              title={label}
-              onClick={() => apply({ ...current, appearance: value })}
-              className={cn(
-                "t3-etoiles flex size-7 cursor-pointer items-center justify-center rounded-lg transition-colors",
-                current.appearance === value
-                  ? isDarkCanvas
-                    ? "bg-white/15 text-white"
-                    : "bg-black/10 text-neutral-700"
-                  : mutedControl,
-              )}
-            >
-              {value === "auto" ? <EtoilesScintillantes /> : <MoonIcon className="size-4" />}
-            </button>
-          ))}
-        </div>
-        {current.stops.slice(1).map((stop, index) => {
-          const size = STOP_SIZES_PX[index + 1] ?? 20;
-          return (
-            <button
-              // L'index EST l'identité stable pendant le glissé (une clé
-              // couleur/position remonterait le bouton à chaque frame).
-              // eslint-disable-next-line react/no-array-index-key
-              key={index}
-              type="button"
-              aria-label={`Prendre cette couleur comme dominante`}
-              onPointerDown={(event) => {
-                // Promotion : le satellite DEVIENT la dominante, sur place —
-                // échange de rôles, pas de rotation du trio.
-                event.preventDefault();
-                event.stopPropagation();
-                const stops = [...current.stops];
-                const [promu] = stops.splice(index + 1, 1);
-                if (promu === undefined) return;
-                apply({ ...current, stops: [promu, ...stops] });
-              }}
-              className="absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer rounded-full shadow-sm ring-2 ring-white hover:scale-110"
-              style={{
-                left: `${stop.x * 100}%`,
-                top: `${stop.y * 100}%`,
-                width: size,
-                height: size,
-                backgroundColor: stop.color,
-                transition: transitionRonds,
-              }}
-            />
-          );
-        })}
-        <button
-          type="button"
-          aria-label="Mélanger — la position module la couleur, les satellites gardent leur angle"
-          onPointerDown={(event) => {
-            event.preventDefault();
-            draggingRef.current = true;
-            setEnGlisse(true);
-            try {
-              event.currentTarget.setPointerCapture(event.pointerId);
-            } catch {
-              // Sans capture, le drag vit tant que le pointeur survole.
-            }
-          }}
+      <VerreLiquideDefs />
+      {/* LA TOILE EST UNE CARTE ENCASTRÉE ET CARRÉE — mesuré sur ARC.mov.
+          Détection de la trame par énergie haute fréquence (la variance brute
+          ne marche pas : le verre laisse passer la page floutée, qui varie
+          partout) sur cmp/panneau/arc-t20.png :
+
+            Arc     trame x 21..694, y 24..695  →  337 × 336 css, donc CARRÉE,
+                    marges 10,5 css à gauche, 9,5 à droite, 12 en haut
+            Raptor  trame x 8..715, y 12..969   →  354 × 479 css, pleine
+                    largeur, pas carrée, marges 4 / 2 / 6
+
+          La toile touchait donc les bords du panneau alors qu'Arc la pose
+          comme une carte, avec de l'air autour et ses propres coins. C'était,
+          avec le disque plein de la molette, l'écart le plus visible des deux
+          panneaux. La hauteur totale de la zone (372 css) ne bouge pas : on
+          répartit 12 en haut, 337 de carte, le reste dessous. */}
+      <div className="px-[10px] pt-3 pb-[23px]">
+        <div
+          ref={canvasRef}
+          className={cn(
+            "relative h-[337px] touch-none overflow-hidden rounded-2xl bg-[radial-gradient(circle,var(--dot)_1px,transparent_1px)] bg-[size:4px_4px]",
+            isDarkCanvas
+              ? "bg-white/[0.03] [--dot:color-mix(in_oklab,white_10%,transparent)]"
+              : "bg-black/[0.03] [--dot:color-mix(in_oklab,black_18%,transparent)]",
+          )}
           onPointerMove={(event) => {
-            if (draggingRef.current) moveGroup(event.clientX, event.clientY);
+            if (draggingRef.current) viser(event.clientX, event.clientY);
           }}
           onPointerUp={finDeGlisse}
-          className="absolute -translate-x-1/2 -translate-y-1/2 cursor-grab rounded-full shadow-md ring-[3px] ring-white active:cursor-grabbing"
-          style={{
-            left: `${dominant.x * 100}%`,
-            top: `${dominant.y * 100}%`,
-            width: STOP_SIZES_PX[0],
-            height: STOP_SIZES_PX[0],
-            backgroundColor: dominant.color,
-            transition: transitionRonds,
+          onClick={(event) => {
+            // Le canevas lui-même prend le clic — « Tap to pick a color for
+            // this space », le libellé d'Arc. Un clic sec (pas un glissé, pas
+            // un rond : eux arrêtent la propagation) déplace la dominante là.
+            if (draggingRef.current || event.target !== event.currentTarget) return;
+            const rect = event.currentTarget.getBoundingClientRect();
+            const x = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
+            const y = Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height));
+            const points = current.stops.map((stop) => ({ x: stop.x, y: stop.y }));
+            apply({ ...current, stops: stopsDepuisPoints(deplacerFigure(points, x, y)) });
           }}
-        />
-        <div className="absolute inset-x-0 bottom-2.5 flex items-center justify-center gap-4">
+        >
+          <div className="absolute inset-x-0 top-3 flex items-center justify-center">
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <span
+                    aria-label={`${MODE_TITRE} — ${MODE_EXPLICATION}`}
+                    // LE ✨ EST UN BOUTON, avec son fond — mesuré sur ARC.mov.
+                    //
+                    // Chez Arc : carré arrondi PLEIN de 64 × 64 device (32 css),
+                    // rayon 17 device (8,5 css), qui assombrit le fond de 227,8
+                    // à 201,8 de luminance — un lavis d'environ 11 %. Il est là
+                    // EN PERMANENCE (rapport fond-bouton/toile entre 0,881 et
+                    // 0,918 sur 248 images couvrant les 124 s du clip) : c'est
+                    // l'état actif du mode.
+                    //
+                    // Chez Raptor : rien. Ligne de base à 15,07 de luminance sur
+                    // 249 images, c'est-à-dire exactement le fond du panneau. Il
+                    // n'y avait ni surface, ni état actif, ni cible de clic
+                    // dessinée — juste un glyphe posé sur le vide. Le mode étant
+                    // unique ici, le fond est toujours allumé, comme chez Arc.
+                    className={cn(
+                      "t3-etoiles flex size-8 items-center justify-center rounded-[9px]",
+                      isDarkCanvas
+                        ? "bg-white/10 text-white/85"
+                        : "bg-black/[0.11] text-neutral-700",
+                    )}
+                  >
+                    <EtoilesScintillantes />
+                  </span>
+                }
+              />
+              <TooltipPopup side="top">
+                {MODE_TITRE} — {MODE_EXPLICATION}
+              </TooltipPopup>
+            </Tooltip>
+          </div>
+          {current.stops.slice(1).map((stop, index) => {
+            const size = STOP_SIZES_PX[index + 1] ?? 20;
+            return (
+              <button
+                // L'index EST l'identité stable pendant le glissé (une clé
+                // couleur/position remonterait le bouton à chaque frame).
+                // eslint-disable-next-line react/no-array-index-key
+                key={index}
+                type="button"
+                aria-label={`Prendre cette couleur comme dominante`}
+                onPointerDown={(event) => {
+                  // SAISISSABLE — la vidéo du 02/08 montre Arc déplaçant
+                  // n'importe quel rond, pas seulement la dominante. Presser
+                  // ARME ; bouger de 4 px engage la poursuite de CE rond ;
+                  // relâcher sans bouger PROMEUT (le geste historique).
+                  event.preventDefault();
+                  event.stopPropagation();
+                  enAttenteRef.current = {
+                    index: index + 1,
+                    x: event.clientX,
+                    y: event.clientY,
+                  };
+                  try {
+                    event.currentTarget.setPointerCapture(event.pointerId);
+                  } catch {
+                    // Sans capture, le glissé vit tant que le pointeur survole.
+                  }
+                }}
+                onPointerMove={(event) => {
+                  const attente = enAttenteRef.current;
+                  if (attente !== null && !draggingRef.current) {
+                    if (Math.hypot(event.clientX - attente.x, event.clientY - attente.y) > 4) {
+                      demarrerSaisie(attente.index, event.clientX, event.clientY);
+                    }
+                    return;
+                  }
+                  if (draggingRef.current) viser(event.clientX, event.clientY);
+                }}
+                onPointerUp={(event) => {
+                  const attente = enAttenteRef.current;
+                  enAttenteRef.current = null;
+                  if (draggingRef.current) {
+                    finDeGlisse();
+                    return;
+                  }
+                  if (attente === null) return;
+                  // Promotion : le satellite DEVIENT la dominante, sur place —
+                  // échange de rôles, rien ne bouge.
+                  event.preventDefault();
+                  event.stopPropagation();
+                  const stops = [...current.stops];
+                  const [promu] = stops.splice(attente.index, 1);
+                  if (promu === undefined) return;
+                  apply({ ...current, stops: [promu, ...stops] });
+                }}
+                className="absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer rounded-full shadow-sm ring-2 ring-white hover:scale-110"
+                style={{
+                  left: `${stop.x * 100}%`,
+                  top: `${stop.y * 100}%`,
+                  width: size,
+                  height: size,
+                  backgroundColor: stop.color,
+                  transition: transitionRonds,
+                }}
+              />
+            );
+          })}
           <button
             type="button"
-            aria-label="Retirer un rond"
-            disabled={current.stops.length <= 1}
-            onClick={removeStop}
-            className={cn(
-              "flex size-6 cursor-pointer items-center justify-center rounded-md transition-colors disabled:cursor-default disabled:opacity-30",
-              mutedControl,
-            )}
-          >
-            <MinusIcon className="size-4" />
-          </button>
-          <button
-            type="button"
-            aria-label="Ajouter un rond"
-            disabled={current.stops.length >= MAX_ARC_STOPS}
-            onClick={addStop}
-            className={cn(
-              "flex size-6 cursor-pointer items-center justify-center rounded-md transition-colors disabled:cursor-default disabled:opacity-30",
-              mutedControl,
-            )}
-          >
-            <PlusIcon className="size-4" />
-          </button>
+            aria-label="Mélanger — loin du centre le thème pâlit et s'écarte, près du centre il devient vif et resserré"
+            onPointerDown={(event) => {
+              event.preventDefault();
+              demarrerSaisie(0, event.clientX, event.clientY);
+              try {
+                event.currentTarget.setPointerCapture(event.pointerId);
+              } catch {
+                // Sans capture, le drag vit tant que le pointeur survole.
+              }
+            }}
+            onPointerMove={(event) => {
+              if (draggingRef.current) viser(event.clientX, event.clientY);
+            }}
+            onPointerUp={finDeGlisse}
+            className="absolute -translate-x-1/2 -translate-y-1/2 cursor-grab rounded-full shadow-md ring-[3px] ring-white active:cursor-grabbing"
+            style={{
+              left: `${dominant.x * 100}%`,
+              top: `${dominant.y * 100}%`,
+              width: STOP_SIZES_PX[0],
+              height: STOP_SIZES_PX[0],
+              backgroundColor: dominant.color,
+              transition: transitionRonds,
+            }}
+          />
+          <div className="absolute inset-x-0 bottom-2.5 flex items-center justify-center gap-4">
+            <button
+              type="button"
+              aria-label="Retirer un rond"
+              disabled={current.stops.length <= 1}
+              onClick={removeStop}
+              className={cn(
+                "flex size-6 cursor-pointer items-center justify-center rounded-md transition-colors disabled:cursor-default disabled:opacity-35 disabled:hover:bg-transparent",
+                mutedControl,
+              )}
+            >
+              <MinusIcon className="size-4" />
+            </button>
+            <button
+              type="button"
+              aria-label="Ajouter un rond"
+              disabled={current.stops.length >= MAX_ARC_STOPS}
+              onClick={addStop}
+              className={cn(
+                "flex size-6 cursor-pointer items-center justify-center rounded-md transition-colors disabled:cursor-default disabled:opacity-35 disabled:hover:bg-transparent",
+                mutedControl,
+              )}
+            >
+              <PlusIcon className="size-4" />
+            </button>
+          </div>
         </div>
       </div>
 
       {/* Le SOCLE laiteux : nuancier + vague + molette. */}
-      <div className={cn("flex flex-col", isDarkCanvas ? "bg-neutral-900/45" : "bg-white/55")}>
+      <div className={cn("flex flex-col", isDarkCanvas ? "bg-neutral-900/40" : "bg-white/45")}>
         {/* Le nuancier GLISSE entre ses pages (mesure : ~300 ms par page). */}
-        <div className="flex items-center gap-1.5 px-3 pt-3 pb-1.5">
-          <button
-            type="button"
-            aria-label="Couleurs unies"
+        <div className="flex items-center gap-1 px-2.5 pt-3 pb-1.5">
+          <FlecheNuancier
+            direction="gauche"
+            libelle="Page précédente"
             disabled={swatchPage === 0}
-            onClick={() => setSwatchPage(0)}
-            className={cn(
-              "flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-md transition-colors disabled:cursor-default disabled:opacity-30",
-              mutedControl,
-            )}
-          >
-            <ChevronLeftIcon className="size-4" />
-          </button>
-          <div className="relative flex-1 overflow-hidden">
+            onClick={() => setSwatchPage((page) => Math.max(0, page - 1))}
+            muted={mutedControl}
+          />
+          {/* Le rembourrage EST la correction du rognage : les pastilles
+              grandissent de 10 % au survol (24 → 26,4 css) et l'anneau
+              ajoute 1 css ; sans ces 6 css de marge intérieure, le masque
+              qui fait glisser les pages leur coupait les bords. */}
+          <div className="relative flex-1 overflow-hidden py-1.5">
             <div
-              className="flex w-[200%] transition-transform duration-300 ease-[cubic-bezier(0.25,1,0.5,1)] motion-reduce:transition-none"
-              style={{ transform: swatchPage === 0 ? "translateX(0%)" : "translateX(-50%)" }}
+              className="flex transition-transform duration-300 ease-[cubic-bezier(0.25,1,0.5,1)] motion-reduce:transition-none"
+              style={{
+                width: `${NOMBRE_DE_PAGES * 100}%`,
+                transform: `translateX(-${(swatchPage * 100) / NOMBRE_DE_PAGES}%)`,
+              }}
             >
-              <div className="flex w-1/2 items-center justify-between">
-                {SOLID_SWATCHES.map((color) => (
-                  <button
-                    key={color}
-                    type="button"
-                    aria-label={`Couleur ${color}`}
-                    tabIndex={swatchPage === 0 ? 0 : -1}
-                    onClick={() => applySolid(color)}
-                    className="size-6 cursor-pointer rounded-full ring-1 ring-black/10 transition-transform hover:scale-110"
-                    style={{
-                      backgroundColor: isDarkCanvas
-                        ? `color-mix(in oklab, ${color} 72%, black)`
-                        : color,
-                    }}
-                  />
-                ))}
-              </div>
-              <div className="flex w-1/2 items-center justify-between">
+              {PAGES_UNIES.map((page, index) => (
+                <div
+                  key={page.nom}
+                  // Le rembourrage vit ICI et plus sur le masque : posé sur le
+                  // masque, il ouvrait une gouttière de 6 css où la première
+                  // pastille de la page VOISINE restait visible — la « 10e
+                  // pastille coupée » des captures du 02/08.
+                  className="flex items-center justify-between px-1.5"
+                  style={{ width: `${100 / NOMBRE_DE_PAGES}%` }}
+                >
+                  {page.tons.map((color) => {
+                    return (
+                      <button
+                        key={color}
+                        type="button"
+                        aria-label={`${page.nom} — ${color}`}
+                        tabIndex={swatchPage === index ? 0 : -1}
+                        onClick={() => applySolid(color)}
+                        // PLATE, et de la couleur EXACTE — mesuré sur ARC.mov.
+                        //
+                        // Traversée verticale de la pastille verte d'Arc
+                        // (cmp/panneau/arc-t20.png, 7e pastille) : #2AE289 de
+                        // y−18 à y+12 sans varier d'un bit, c'est-à-dire très
+                        // exactement le ton déclaré. Le dégradé 135° qu'on
+                        // peignait ici ne passait JAMAIS par ce ton : la même
+                        // traversée chez Raptor donnait #70E298 en haut et
+                        // #67E090 en bas, soit 35 % de saturation en moins et
+                        // 10° de teinte à côté. Une pastille est une référence
+                        // de couleur ; elle doit être la couleur.
+                        //
+                        // Le liseré intérieur d'Arc existe mais il est ténu :
+                        // au bord, #27CA78 contre #2AE289 au centre, soit ~10 %
+                        // d'assombrissement. Le 0,2 d'avant le doublait.
+                        // L'APPUI CREUSE, le survol ne fait RIEN — mesuré sur
+                        // ARC.mov, planche de 16 images à 60 i/s autour d'un
+                        // clic de pastille : le diamètre descend de 35,6 à
+                        // 31,3 px (facteur 0,880) puis remonte, le tout en
+                        // 117 ms — 50 ms de descente, 17 ms de palier au fond,
+                        // 50 ms de remontée. La mise à l'échelle est centrée
+                        // (le centre ne bouge pas d'un vingtième de pixel) et
+                        // la courbe décélère fortement à l'arrivée, sans
+                        // rebond. Sur la même planche, Raptor ne bougeait pas
+                        // d'un pixel : 0,19 px d'amplitude, soit le bruit de
+                        // mesure.
+                        //
+                        // Le `hover:scale-110` d'avant n'existe pas chez Arc :
+                        // à l'image qui précède l'appui, pointeur déjà posé sur
+                        // la pastille, elle mesure 35,55 px — sa taille de
+                        // repos exacte.
+                        className="size-6 cursor-pointer rounded-full shadow-[inset_0_0_0_2px_rgba(0,0,0,0.1)] transition-transform duration-[50ms] ease-[cubic-bezier(0.45,0,0.2,1)] active:scale-[0.88]"
+                        style={{ backgroundColor: color }}
+                      />
+                    );
+                  })}
+                </div>
+              ))}
+              <div
+                className="flex items-center justify-between px-1.5"
+                style={{ width: `${100 / NOMBRE_DE_PAGES}%` }}
+              >
                 {GRADIENT_SWATCHES.map((trio) => (
                   <button
                     key={trio.join("-")}
                     type="button"
-                    aria-label={`Gradient ${trio.join(", ")}`}
-                    tabIndex={swatchPage === 1 ? 0 : -1}
+                    aria-label={`Dégradé ${trio.join(", ")}`}
+                    tabIndex={swatchPage === PAGES_UNIES.length ? 0 : -1}
                     onClick={() => applyGradient(trio)}
                     // Le liseré d'Arc : un anneau INTÉRIEUR sombre du propre
                     // ton de la pastille (relevé sur zoom natif).
                     className="size-6 cursor-pointer rounded-full shadow-[inset_0_0_0_2px_rgba(0,0,0,0.14)] transition-transform hover:scale-110"
                     style={{
                       background: `linear-gradient(135deg, ${trio[0]} 0%, ${trio[1]} 50%, ${trio[2]} 100%)`,
-                      ...(isDarkCanvas ? { filter: "brightness(0.78)" } : {}),
                     }}
                   />
                 ))}
               </div>
             </div>
           </div>
-          <button
-            type="button"
-            aria-label="Gradients préréglés"
-            disabled={swatchPage === 1}
-            onClick={() => setSwatchPage(1)}
-            className={cn(
-              "flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-md transition-colors disabled:cursor-default disabled:opacity-30",
-              mutedControl,
-            )}
-          >
-            <ChevronRightIcon className="size-4" />
-          </button>
+          <FlecheNuancier
+            direction="droite"
+            libelle="Page suivante"
+            disabled={swatchPage === NOMBRE_DE_PAGES - 1}
+            onClick={() => setSwatchPage((page) => Math.min(NOMBRE_DE_PAGES - 1, page + 1))}
+            muted={mutedControl}
+          />
         </div>
 
-        {/* La vague d'intensité + la molette de grain. */}
-        <div className="flex items-center gap-3 px-4 pt-1.5 pb-4">
+        {/* La vague d'intensité + la molette de grain. L'écart vient de la
+            constante, pas d'une classe : c'est le même nombre qui décide de
+            l'espace ICI et de la largeur du rail LÀ-BAS. */}
+        <div
+          className="flex items-center pt-1.5 pb-4"
+          style={{
+            paddingLeft: SOCLE_PADDING_X,
+            paddingRight: SOCLE_PADDING_X,
+            gap: ECART_VAGUE_MOLETTE,
+          }}
+        >
           <IntensityWave
             dark={isDarkCanvas}
             value={current.intensity}
@@ -524,29 +800,133 @@ export function SpaceThemePanel({ spaceId }: { readonly spaceId?: string } = {})
 }
 
 /**
- * Les étoiles de l'apparence automatique — elles SCINTILLENT au survol
- * (mesure : bouffées de ~200 ms toutes les 0,5-1 s pendant 7,5 s de survol
- * observées sur la cellule de l'icône). Trois étoiles, délais décalés ;
- * l'animation vit dans index.css (`t3-etoile-scintille`).
+ * Le filtre de réfraction du verre liquide (feTurbulence → feDisplacementMap),
+ * technique vérifiée. L'id est constant : deux panneaux montés en même temps
+ * poseraient deux `<filter>` BYTE POUR BYTE identiques, le navigateur résout
+ * le premier — inerte. `@supports` (index.css) fait retomber Safari/Firefox
+ * sur un verre dépoli propre.
+ */
+function VerreLiquideDefs() {
+  return (
+    <svg width="0" height="0" aria-hidden className="absolute">
+      <filter
+        id="t3-verre-liquide"
+        x="-30%"
+        y="-30%"
+        width="160%"
+        height="160%"
+        colorInterpolationFilters="sRGB"
+      >
+        <feTurbulence
+          type="fractalNoise"
+          baseFrequency="0.008 0.010"
+          numOctaves={2}
+          seed={7}
+          result="bruit"
+        >
+          {MOUVEMENT_REDUIT ? null : (
+            <animate
+              attributeName="baseFrequency"
+              dur="18s"
+              values="0.008 0.010;0.012 0.008;0.008 0.010"
+              repeatCount="indefinite"
+            />
+          )}
+        </feTurbulence>
+        <feGaussianBlur in="bruit" stdDeviation="2.4" result="bruitDoux" />
+        <feDisplacementMap
+          in="SourceGraphic"
+          in2="bruitDoux"
+          scale={44}
+          xChannelSelector="R"
+          yChannelSelector="G"
+        />
+      </filter>
+    </svg>
+  );
+}
+
+/**
+ * Les flèches de page du nuancier. Elles étaient quasi invisibles : gris pâle
+ * sur socle pâle, et 30 % d'opacité une fois désactivées. Une commande qu'on
+ * ne voit pas est une commande qui n'existe pas — d'où la pastille au survol,
+ * le contraste plein et l'info-bulle qui dit où mène la flèche.
+ */
+function FlecheNuancier(props: {
+  direction: "gauche" | "droite";
+  libelle: string;
+  disabled: boolean;
+  muted: string;
+  onClick: () => void;
+}) {
+  const Icone = props.direction === "gauche" ? ChevronLeftIcon : ChevronRightIcon;
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <button
+            type="button"
+            aria-label={props.libelle}
+            disabled={props.disabled}
+            onClick={props.onClick}
+            className={cn(
+              "flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-lg transition-colors disabled:cursor-default disabled:opacity-30 disabled:hover:bg-transparent",
+              props.muted,
+            )}
+          >
+            <Icone className="size-[18px]" strokeWidth={2.25} />
+          </button>
+        }
+      />
+      <TooltipPopup side="top">{props.libelle}</TooltipPopup>
+    </Tooltip>
+  );
+}
+
+/**
+ * Les étoiles de l'apparence dynamique. Elles scintillent EN PERMANENCE
+ * (l'animation vit dans index.css) et le survol ne fait que les presser :
+ * l'ancienne version n'animait qu'au survol, en descendant à 35 % d'opacité —
+ * l'icône avait l'air de s'ÉTEINDRE quand on la visait.
  */
 function EtoilesScintillantes() {
   return (
-    <svg viewBox="0 0 16 16" className="size-4" aria-hidden>
-      <path
-        className="t3-etoile"
-        d="M6 1.2 7.3 4.2 10.3 5.5 7.3 6.8 6 9.8 4.7 6.8 1.7 5.5 4.7 4.2Z"
-        fill="currentColor"
-      />
-      <path
-        className="t3-etoile t3-etoile-2"
-        d="M11.8 6.6 12.6 8.4 14.4 9.2 12.6 10 11.8 11.8 11 10 9.2 9.2 11 8.4Z"
-        fill="currentColor"
-      />
-      <path
-        className="t3-etoile t3-etoile-3"
-        d="M7.6 10.8 8.2 12.2 9.6 12.8 8.2 13.4 7.6 14.8 7 13.4 5.6 12.8 7 12.2Z"
-        fill="currentColor"
-      />
+    // RETOURNÉ VERTICALEMENT — le dessin d'Arc, relevé au pixel.
+    //
+    // Composantes connexes des trois étoiles (seuil alpha 0,25) sur
+    // cmp/panneau/arc-t8.png contre raptor-t8.png, coordonnées dans le
+    // repère du panneau :
+    //
+    //   Arc     GRANDE y[101,117] · MOYENNE y[94,101] · PETITE y[87,89]
+    //           → grande EN BAS, petite EN HAUT
+    //   Raptor  GRANDE y[49,64]  · MOYENNE y[60,69]  · PETITE y[68,73]
+    //           → grande EN HAUT, petite EN BAS
+    //
+    // L'ordre horizontal est le même des deux côtés (grande à gauche,
+    // moyenne à droite) : seuls les y sont inversés. Chaque étoile étant
+    // symétrique par rapport à son propre axe horizontal, retourner le
+    // GROUPE suffit — les formes ne bougent pas, seules les places changent.
+    //
+    // La taille suit : boîte d'encre d'Arc 12 × 15,5 css contre 9 × 10,5 chez
+    // nous, soit ~1,4× — d'où 22 css au lieu de 16.
+    <svg viewBox="0 0 16 16" className="size-[22px]" aria-hidden>
+      <g transform="translate(0,16) scale(1,-1)">
+        <path
+          className="t3-etoile"
+          d="M6 1.2 7.3 4.2 10.3 5.5 7.3 6.8 6 9.8 4.7 6.8 1.7 5.5 4.7 4.2Z"
+          fill="currentColor"
+        />
+        <path
+          className="t3-etoile t3-etoile-2"
+          d="M11.8 6.6 12.6 8.4 14.4 9.2 12.6 10 11.8 11.8 11 10 9.2 9.2 11 8.4Z"
+          fill="currentColor"
+        />
+        <path
+          className="t3-etoile t3-etoile-3"
+          d="M7.6 10.8 8.2 12.2 9.6 12.8 8.2 13.4 7.6 14.8 7 13.4 5.6 12.8 7 12.2Z"
+          fill="currentColor"
+        />
+      </g>
     </svg>
   );
 }
@@ -574,9 +954,9 @@ function IntensityWave(props: { dark: boolean; value: number; onChange: (value: 
     const rect = rail.getBoundingClientRect();
     props.onChange(Math.max(0, Math.min(1, (clientX - rect.left) / rect.width)));
   };
-  // Largeur de rail = 358 − px-4 (32) − gap-3 (12) − molette (72) : le
-  // viewBox colle au rendu 1:1, la longueur d'onde reste 36 css, mesurée.
-  const LARGEUR = 242;
+  // Le viewBox colle au rendu 1:1, sinon la longueur d'onde mesurée (36 css)
+  // se déforme. La largeur vient de RAIL_LARGEUR, déduite du socle.
+  const LARGEUR = RAIL_LARGEUR;
   const HAUTEUR = 56;
   const [remplie, pale] = useMemo(() => {
     const valeur = Math.max(0, Math.min(1, props.value));
@@ -692,6 +1072,15 @@ function GrainDial(props: {
     const dy = clientY - (rect.top + rect.height / 2);
     return (Math.atan2(dy, dx) * 180) / Math.PI;
   };
+  // LE RELÂCHEMENT — la moitié qui manquait (02/08). `onPointerDown` posait
+  // la rotation, `onPointerMove` tournait tant qu'elle existait… et rien ne
+  // la remettait à null : après le premier clic, chaque SURVOL traînait la
+  // pilule, pour toujours. Trois portes de sortie : up, cancel, et perte de
+  // capture — il suffit d'en oublier une pour refaire le bug, et le garde
+  // `moletteRelachee.test.ts` les exige toutes les trois.
+  const relacherLaMolette = () => {
+    rotationRef.current = null;
+  };
   const poserCran = (prochain: number) => {
     const borne = ((prochain % CRANS) + CRANS) % CRANS;
     props.onChange(borne / (CRANS - 1));
@@ -701,6 +1090,10 @@ function GrainDial(props: {
     <div
       ref={rootRef}
       role="slider"
+      // Le picto seul ne dit pas ce qu'il fait — le titre l'explique,
+      // sans envelopper un contrôle À GLISSER dans un déclencheur
+      // d'info-bulle (qui lui volerait ses évènements de pointeur).
+      title={`Grain — ${notch === 0 ? "aucun" : `${notch} sur ${CRANS - 1}`}. Tourner la molette texture le fond ; le tour complet revient à zéro.`}
       aria-label="Grain de la texture — roue sans fin, le cran après le maximum revient à zéro"
       aria-valuemin={0}
       aria-valuemax={CRANS - 1}
@@ -723,6 +1116,9 @@ function GrainDial(props: {
           // Sans capture, la rotation vit tant que le pointeur survole.
         }
       }}
+      onPointerUp={relacherLaMolette}
+      onPointerCancel={relacherLaMolette}
+      onLostPointerCapture={relacherLaMolette}
       onPointerMove={(event) => {
         const rotation = rotationRef.current;
         if (rotation === null) return;
@@ -739,13 +1135,10 @@ function GrainDial(props: {
           poserCran(notch + crans);
         }
       }}
-      onPointerUp={() => {
-        rotationRef.current = null;
-      }}
       className="relative size-[72px] shrink-0 cursor-grab touch-none outline-none focus-visible:ring-2 focus-visible:ring-ring active:cursor-grabbing"
     >
-      {/* Les 20 crans : allumés jusqu'au cran courant, la pilule POSÉE sur
-          le cran courant, tangente à l'anneau. */}
+      {/* Les 20 crans : allumés jusqu'au cran courant, la pilule POSÉE
+                sur le cran courant, tangente à l'anneau. */}
       {Array.from({ length: CRANS }, (_, index) => {
         if (index === notch) return null;
         const allume = index < notch;
@@ -776,34 +1169,33 @@ function GrainDial(props: {
           transform: `translate(-50%, -50%) rotate(${notch * PAS - 90}deg) translateX(30px) rotate(90deg)`,
         }}
       />
-      {notch > 0 ? (
-        <span
-          aria-hidden
-          className="absolute top-1/2 left-1/2 size-10 -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-full ring-1 ring-black/15"
-          style={{
-            backgroundColor: `color-mix(in oklab, ${props.couleur} 52%, ${props.dark ? "#2a2e2c" : "#c9cdc9"})`,
-          }}
-        >
-          {/* L'aperçu vivant : le grain lui-même, dosé par la valeur. */}
-          <span
-            className="absolute inset-0 mix-blend-overlay"
-            style={{
-              backgroundImage: `url("${SIDEBAR_THEME_GRAIN_URL}")`,
-              opacity: 0.35 + 0.65 * props.value,
-            }}
-          />
-        </span>
-      ) : (
-        <span
-          aria-hidden
-          className={cn(
-            "absolute top-1/2 left-1/2 flex size-10 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full transition-colors",
-            props.dark ? "text-white/60" : "text-black/45",
-          )}
-        >
-          <PencilIcon className="size-3.5" />
-        </span>
-      )}
+      {/* Le disque central montre le GRAIN, dosé par le cran, sur une surface
+          NEUTRE. Il portait la couleur dominante (réponse au reproche du
+          31/07 : « on ne voyait ni la couleur, ni ce que la molette
+          ajoutait ») — mais la comparaison côte à côte du 02/08 a tranché :
+          chez Arc la molette est un anneau VIDE, et notre disque vert plein
+          était la différence la plus criante des deux panneaux. La couleur se
+          voit déjà partout (les ronds, la barre entière) ; le grain, lui, n'a
+          que cet endroit — on garde donc l'aperçu du grain, sur fond neutre. */}
+      {/* ANNEAU VIDE, pas disque plein — l'intérieur laisse voir le panneau.
+          Vérifié sur les découpes ×3 de la molette (cmp/molette/arc-t20.png
+          contre raptor-t20.png) : chez Arc on lit un simple CERCLE au trait
+          fin, et le fond du panneau transparaît au travers ; chez Raptor un
+          disque gris plein se détachait du fond. C'était, avec le canevas
+          collé aux bords, la différence la plus criante des deux panneaux.
+
+          L'aperçu de grain qui vivait ici disparaît donc. C'est une perte
+          assumée : il était utile (le grain n'a pas d'autre témoin), mais il
+          EST le remplissage, et la consigne est de faire exactement comme
+          Arc. Si le grain doit se voir, il faudra un témoin ailleurs — pas au
+          milieu de la molette. */}
+      <span
+        aria-hidden
+        className={cn(
+          "absolute top-1/2 left-1/2 size-10 -translate-x-1/2 -translate-y-1/2 rounded-full ring-1 transition-colors",
+          props.dark ? "ring-white/15" : "ring-black/15",
+        )}
+      />
     </div>
   );
 }

@@ -8,7 +8,6 @@ import {
   useSyncExternalStore,
   type CSSProperties,
   type ReactNode,
-  type WheelEvent as ReactWheelEvent,
 } from "react";
 import { useLocation, useNavigate } from "@tanstack/react-router";
 
@@ -20,6 +19,14 @@ import { primaryServerKeybindingsAtom } from "../state/server";
 import { useEnvironmentIdentificationMode, useSidebarV2Enabled } from "../hooks/useSettings";
 import ThreadSidebar from "./Sidebar";
 import { useSidebarSpacesStore } from "../sidebarSpacesStore";
+import { peutEncoreDefiler, seuilDuSwipe } from "../swipeEspaces";
+import {
+  SALVE_AU_REPOS,
+  SILENCE_FIN_DE_SALVE_MS,
+  surEvenement,
+  surSilence,
+  type EtatSalve,
+} from "../salveDeSwipe";
 import { SidebarEdgePeek, useSidebarPeekStore } from "./sidebar/SidebarEdgePeek";
 import { BibliothequeOverlay, useBibliothequeStore } from "./sidebar/BibliothequeOverlay";
 import { SidebarThemeWash } from "./sidebar/SidebarThemeWash";
@@ -146,12 +153,15 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
       : false;
   });
   const sidebarPeek = useSidebarPeekStore((store) => store.peek);
-  // Swipe deux doigts sur la sidebar (façon Arc) : le deltaX horizontal du
-  // trackpad cumule jusqu'au seuil, puis bascule d'espace — avec un temps
-  // mort pour qu'un long geste ne saute pas trois espaces d'un coup.
-  const spaceSwipeAccumRef = useRef(0);
-  const spaceSwipeLastFireRef = useRef(0);
-  const spaceSwipeSettleRef = useRef<number | null>(null);
+  // LE SWIPE EST UNE MACHINE À ÉTATS PURE (`salveDeSwipe.ts`, testée sur
+  // traces) — réécrite de zéro le 02/08 sur ordre fondateur : quatre
+  // correctifs successifs avaient laissé SEPT refs ici, et un état
+  // « verticale » sans aucune porte de sortie — un seul défilement du fil
+  // tuait le swipe jusqu'au redémarrage. Le composant ne garde que la salve
+  // et LE minuteur de silence qui la clôt ; toutes les règles (axe, seuil,
+  // pic, traîne) vivent dans la machine, sous test.
+  const salveRef = useRef<EtatSalve>(SALVE_AU_REPOS);
+  const silenceDeSalveRef = useRef<number | null>(null);
   // Le geste se VOIT pendant qu'il se fait. Avant, rien ne bougeait jusqu'au
   // seuil puis l'espace sautait d'un coup — « l'animation est très nulle, pas
   // fluide » (fondateur, 30/07). Désormais le contenu SUIT les doigts (offset
@@ -181,70 +191,127 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
       bascule();
       return;
     }
-    // Sortie du côté du geste, entrée par le côté opposé — 150 ms + 200 ms.
+    // PLUS D'ENTRÉE PAR LE CÔTÉ OPPOSÉ — 01/08, sur retour fondateur répété
+    // (« un rebond trop moche », « ça se décale et ça revient en place »).
+    //
+    // L'ancienne traversée sortait à +72 px, COUPAIT à −56 px, puis glissait
+    // jusqu'à 0. Ce retour depuis l'autre bord est précisément ce que l'œil
+    // lit comme un rebond : le contenu part d'un côté et revient de l'autre,
+    // deux mouvements contraires en 350 ms. La direction était pourtant juste
+    // — j'avais vérifié le signe, ce n'était pas un bug de sens.
+    //
+    // Désormais : on sort dans le sens du geste, et le nouvel espace apparaît
+    // À SA PLACE, en fondu. Un seul mouvement, aucun retour. Le geste reste
+    // lisible (la sortie suit les doigts), la lecture ne saute plus.
     inner.style.transition = "transform 150ms cubic-bezier(0.4, 0, 1, 1), opacity 150ms linear";
     inner.style.transform = `translateX(${direction * 72}px)`;
     inner.style.opacity = "0.25";
     window.setTimeout(() => {
       bascule();
       inner.style.transition = "none";
-      inner.style.transform = `translateX(${direction * -56}px)`;
-      // Reflow forcé : sans lui, le navigateur fusionne les deux écritures et
-      // l'entrée partirait du mauvais côté.
-      void inner.offsetWidth;
-      inner.style.transition =
-        "transform 200ms cubic-bezier(0.22, 1, 0.36, 1), opacity 200ms linear";
       inner.style.transform = "translateX(0px)";
+      // Reflow forcé : sans lui, le navigateur fusionne les deux écritures et
+      // le fondu partirait de l'opacité finale, donc ne se verrait pas.
+      void inner.offsetWidth;
+      inner.style.transition = "opacity 200ms linear";
       inner.style.opacity = "1";
     }, 150);
   };
-  const handleSidebarWheel = useCallback((event: ReactWheelEvent<HTMLDivElement>) => {
-    if (Math.abs(event.deltaX) <= Math.abs(event.deltaY)) {
-      if (spaceSwipeAccumRef.current !== 0) retomber(event.currentTarget);
-      spaceSwipeAccumRef.current = 0;
+  /**
+   * LE GESTE MARCHE AUSSI DANS LA ZONE DE TRAVAIL — décision fondateur 31/07.
+   *
+   * Il ne vivait que sur la barre latérale (`onWheel` posé sur elle seule) :
+   * il fallait viser une bande étroite pour changer d'espace. Un seul
+   * écouteur au niveau de la fenêtre couvre maintenant les deux surfaces,
+   * plutôt qu'un second gestionnaire jumeau qu'il faudrait garder aligné.
+   *
+   * Deux différences quand le geste vient de la zone de travail :
+   *  · ce qui peut ENCORE défiler sous le doigt garde le geste (blocs de
+   *    code, tableaux larges) — la règle vit dans `swipeEspaces.ts` ;
+   *  · le seuil est bien plus haut, pour que seul un geste voulu le touche.
+   *
+   * L'animation, elle, reste celle de la BARRE dans tous les cas : c'est
+   * elle qui change. On la retrouve donc par son attribut, et non dans la
+   * cible de l'évènement — sinon un geste depuis le chat chercherait le
+   * panneau de la barre à l'intérieur du chat, ne trouverait rien, et le
+   * changement d'espace se ferait sans la moindre animation.
+   */
+  const surLaMolette = useCallback((event: WheelEvent) => {
+    const depart = event.target instanceof Element ? event.target : null;
+    if (depart === null) return;
+    const barre = depart.closest<HTMLElement>("[data-app-sidebar]");
+    const zoneDeTravail = depart.closest<HTMLElement>("[data-slot=sidebar-inset]");
+    if (barre === null && zoneDeTravail === null) return;
+    const depuisLaBarre = barre !== null;
+
+    // Ce qui a encore de la course sous le doigt garde le geste. On
+    // s'arrête à la surface qu'on a reconnue : au-delà, on sortirait de
+    // notre domaine.
+    if (!depuisLaBarre) {
+      const limite = zoneDeTravail;
+      for (let noeud: Element | null = depart; noeud !== null; noeud = noeud.parentElement) {
+        if (peutEncoreDefiler(noeud, event.deltaX)) return;
+        if (noeud === limite) break;
+      }
+    }
+
+    const carte = document.querySelector<HTMLDivElement>("[data-app-sidebar]");
+    if (carte === null) return;
+
+    const [prochaine, sortie] = surEvenement(
+      salveRef.current,
+      event.deltaX,
+      event.deltaY,
+      seuilDuSwipe(depuisLaBarre),
+    );
+    salveRef.current = prochaine;
+
+    // LE minuteur : chaque évènement le réarme, le silence clôt la salve —
+    // quelle que soit sa phase. C'est la porte de sortie universelle qui
+    // manquait à l'ancien code.
+    if (silenceDeSalveRef.current !== null) window.clearTimeout(silenceDeSalveRef.current);
+    silenceDeSalveRef.current = window.setTimeout(() => {
+      silenceDeSalveRef.current = null;
+      const [repos, fin] = surSilence(salveRef.current);
+      salveRef.current = repos;
+      if (fin.type === "retomber") retomber(carte);
+    }, SILENCE_FIN_DE_SALVE_MS);
+
+    if (sortie.type === "suivre") {
+      suivreLeDoigt(carte, sortie.accumule);
       return;
     }
-    const now = Date.now();
-    if (now - spaceSwipeLastFireRef.current < 450) return;
-    spaceSwipeAccumRef.current += event.deltaX;
-    // Un geste qui s'arrête sans atteindre le seuil retombe en douceur.
-    if (spaceSwipeSettleRef.current !== null) window.clearTimeout(spaceSwipeSettleRef.current);
-    const cible = event.currentTarget;
-    spaceSwipeSettleRef.current = window.setTimeout(() => {
-      spaceSwipeAccumRef.current = 0;
-      retomber(cible);
-    }, 140);
-    if (Math.abs(spaceSwipeAccumRef.current) < 110) {
-      suivreLeDoigt(cible, spaceSwipeAccumRef.current);
-      return;
-    }
-    if (spaceSwipeSettleRef.current !== null) window.clearTimeout(spaceSwipeSettleRef.current);
-    // ATTENTION AU SIGNE. Avec le défilement naturel de macOS, deux doigts qui
-    // partent vers la DROITE produisent un deltaX NÉGATIF : le contenu suit les
-    // doigts, donc la fenêtre recule. Je lisais ce signe tel quel, et tout le
-    // geste marchait à l'envers. La variable porte désormais le sens PHYSIQUE
-    // du geste, pas le signe brut : +1 = les doigts vont vers la droite.
-    const versLaDroite = spaceSwipeAccumRef.current < 0 ? 1 : -1;
-    spaceSwipeAccumRef.current = 0;
-    spaceSwipeLastFireRef.current = now;
+    if (sortie.type !== "traverser") return;
+
     // Deux doigts vers la DROITE ouvrent la bibliothèque — mais SEULEMENT
     // depuis la vue principale. Depuis un espace, le même geste ramène
-    // d'abord vers « Tous » : sinon il faudrait deviner quand il navigue et
-    // quand il ouvre une fenêtre, et on sortirait de son rangement par
-    // surprise (précision fondateur 30/07). Le geste garde donc un seul
-    // sens : vers la droite on REMONTE — d'espace en espace jusqu'à la vue
-    // principale, puis d'un cran de plus jusqu'à la bibliothèque.
-    if (versLaDroite > 0 && useSidebarSpacesStore.getState().activeSpaceId === null) {
+    // d'abord vers « Tous » (précision fondateur 30/07) : vers la droite on
+    // REMONTE — d'espace en espace jusqu'à la vue principale, puis d'un
+    // cran de plus jusqu'à la bibliothèque.
+    if (sortie.versLaDroite > 0 && useSidebarSpacesStore.getState().activeSpaceId === null) {
       // La bibliothèque est un survol : la sidebar retombe pendant qu'il
-      // s'ouvre, pas de traversée — deux animations concurrentes se battraient.
-      retomber(cible);
+      // s'ouvre — deux animations concurrentes se battraient.
+      retomber(carte);
       useBibliothequeStore.getState().ouvrir("espaces");
       return;
     }
-    traverser(cible, versLaDroite, () => {
-      useSidebarSpacesStore.getState().cycleSpace(versLaDroite);
+    traverser(carte, sortie.versLaDroite, () => {
+      useSidebarSpacesStore.getState().cycleSpace(sortie.versLaDroite);
     });
   }, []);
+
+  useEffect(() => {
+    // `passive` : on ne coupe jamais le défilement natif — les blocs qui ont
+    // encore de la course l'ont déjà gardé plus haut, et laisser le navigateur
+    // faire évite toute saccade.
+    window.addEventListener("wheel", surLaMolette, { passive: true });
+    return () => {
+      window.removeEventListener("wheel", surLaMolette);
+      // Un minuteur de silence encore armé viserait une carte démontée.
+      if (silenceDeSalveRef.current !== null) window.clearTimeout(silenceDeSalveRef.current);
+      salveRef.current = SALVE_AU_REPOS;
+    };
+  }, [surLaMolette]);
 
   /**
    * ⌘⇧E — la SECONDE porte de la bibliothèque.
@@ -320,7 +387,6 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
         collapsible="offcanvas"
         data-app-sidebar=""
         data-sidebar-version={useSidebarV2Theme ? "v2" : "v1"}
-        onWheel={handleSidebarWheel}
         // `sidebar-inner` (the opaque bg-sidebar layer) must be its own
         // stacking context, otherwise the theme wash's -z-10 escapes to THIS
         // context and paints underneath that opaque background — invisible.

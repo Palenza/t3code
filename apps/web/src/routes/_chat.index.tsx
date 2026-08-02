@@ -1,9 +1,11 @@
 import { scopeProjectRef } from "@t3tools/client-runtime/environment";
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { LinkIcon, PlusIcon, RotateCcwIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { openCommandPalette } from "../commandPaletteBus";
+import { cibleDeReprise } from "../repriseDeSession";
+import { useUiStateStore } from "../uiStateStore";
 import { sortScopedProjectsForSidebar } from "../components/Sidebar.logic";
 import { Button } from "../components/ui/button";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "../components/ui/empty";
@@ -19,6 +21,13 @@ import { APP_DISPLAY_NAME } from "~/branding";
 import { hasCloudPublicConfig } from "~/cloud/publicConfig";
 import { cn } from "~/lib/utils";
 import { COLLAPSED_SIDEBAR_TITLEBAR_INSET_CLASS } from "~/workspaceTitlebar";
+
+/**
+ * Une seule reprise par lancement (module-level, pas un `ref`) : le verrou
+ * doit survivre au démontage de la route, sinon revenir à « / » le
+ * réarmerait et un clic « nouveau fil » rouvrirait l'ancien.
+ */
+let repriseTentee = false;
 
 function ChatIndexRouteView() {
   const { authGateState } = Route.useRouteContext();
@@ -41,8 +50,37 @@ function IndexDraftLanding() {
   const threads = useThreadShells();
   const bootstrapped = useAllEnvironmentShellsBootstrapped();
   const handleNewThread = useNewThreadHandler();
+  const navigate = useNavigate();
   const startingRef = useRef(false);
   const [startState, setStartState] = useState({ failed: false, retryRequest: 0 });
+
+  /**
+   * ON REPREND LÀ OÙ ON A QUITTÉ — une seule fois, au lancement.
+   *
+   * `repriseTentee` est un module-level : revenir à « / » à la main pendant
+   * la session doit continuer d'ouvrir un brouillon neuf. Sans ce verrou, le
+   * bouton « nouveau fil » renverrait sur l'ancien — on aurait remplacé un
+   * défaut par un autre, plus rageant encore puisqu'il désobéit à un clic.
+   *
+   * On attend `bootstrapped` : décider avant que les fils soient connus,
+   * c'est conclure « ce fil n'existe plus » sur une liste vide.
+   */
+  const derniereCle = useUiStateStore((state) => state.lastOpenedThreadKey);
+  const [repriseTranchee, setRepriseTranchee] = useState(repriseTentee);
+  useEffect(() => {
+    if (repriseTentee || !bootstrapped) return;
+    repriseTentee = true;
+    const cible = cibleDeReprise(derniereCle, threads);
+    if (cible === null) {
+      setRepriseTranchee(true);
+      return;
+    }
+    void navigate({
+      to: "/$environmentId/$threadId",
+      params: { environmentId: cible.environmentId, threadId: cible.threadId },
+      replace: true,
+    });
+  }, [bootstrapped, derniereCle, navigate, threads]);
 
   const mostRecentProject = useMemo(
     () =>
@@ -53,6 +91,11 @@ function IndexDraftLanding() {
   );
 
   useEffect(() => {
+    // Tant que la reprise n'est pas tranchée, on ne fabrique pas de brouillon :
+    // les deux effets se battraient pour la même destination.
+    if (!repriseTranchee) {
+      return;
+    }
     if (mostRecentProject === null || startingRef.current) {
       return;
     }

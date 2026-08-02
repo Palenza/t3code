@@ -71,12 +71,23 @@ export function deciderRelais(entree: EntreeRelais): DecisionRelais {
     maintenant: entree.maintenant,
   });
 
-  if (verdict.nature === "notre-faute") {
-    return {
-      type: "laisser",
-      raison: "La requête elle-même est invalide — la rejouer ailleurs donnerait la même erreur.",
-      verdict,
-    };
+  // LES ÉCHECS QU'UNE BASCULE NE RÉPARE PAS.
+  //
+  // Chacun a un remède, et aucun n'est « essayer un autre compte » — les
+  // rejouer ailleurs dépense le tour d'un second compte Max pour reproduire
+  // l'échec à l'identique. Classer sans agir ici ne servirait à rien : c'est
+  // le seul endroit où la nature devient une décision.
+  const SANS_BASCULE: Partial<Record<Verdict["nature"], string>> = {
+    "notre-faute":
+      "La requête elle-même est invalide — la rejouer ailleurs donnerait la même erreur.",
+    "contexte-trop-grand":
+      "La charge dépasse la fenêtre du modèle. Un autre compte a exactement la même fenêtre : le remède est de COMPRESSER et de rejouer sur le même compte, pas de basculer.",
+    "surcharge-fournisseur":
+      "Le fournisseur est débordé — ça ne vient d'aucun compte et ça les touche tous. Attendre coûte du temps ; basculer coûte le tour d'un second compte pour le même échec.",
+  };
+  const sansBascule = SANS_BASCULE[verdict.nature];
+  if (sansBascule !== undefined) {
+    return { type: "laisser", raison: sansBascule, verdict };
   }
 
   const remplacant = choisir({

@@ -146,7 +146,16 @@ export type DesktopUpdateStatus =
 export type DesktopRuntimeArch = "arm64" | "x64" | "other";
 export type DesktopTheme = "light" | "dark" | "system";
 export type DesktopUpdateChannel = "latest" | "nightly";
-export type DesktopAppStageLabel = "Raptor" | "Dev" | "Nightly";
+/**
+ * Le stade d'un build — ce qui DISTINGUE une version, pas ce qui la nomme.
+ *
+ * « Release » est le stade d'une version publiée : elle s'affiche sous son nom
+ * nu (voir `formatAppDisplayName`). « Raptor » est conservé parce qu'il était
+ * le stade de release avant le changement de marque du 02/08 : un shell de
+ * bureau plus ancien peut encore l'envoyer, et le rejeter ferait échouer le
+ * décodage du branding au démarrage. Il s'affiche comme « Release ».
+ */
+export type DesktopAppStageLabel = "Release" | "Raptor" | "Dev" | "Nightly";
 
 export const DesktopUpdateStatusSchema = Schema.Literals([
   "disabled",
@@ -161,7 +170,7 @@ export const DesktopUpdateStatusSchema = Schema.Literals([
 export const DesktopRuntimeArchSchema = Schema.Literals(["arm64", "x64", "other"]);
 export const DesktopThemeSchema = Schema.Literals(["light", "dark", "system"]);
 export const DesktopUpdateChannelSchema = Schema.Literals(["latest", "nightly"]);
-export const DesktopAppStageLabelSchema = Schema.Literals(["Raptor", "Dev", "Nightly"]);
+export const DesktopAppStageLabelSchema = Schema.Literals(["Release", "Raptor", "Dev", "Nightly"]);
 
 export interface DesktopAppBranding {
   baseName: string;
@@ -1001,6 +1010,19 @@ export interface DesktopBridge {
   setWslDistro: (distro: string | null) => Promise<DesktopWslState>;
   setWslOnly: (enabled: boolean) => Promise<DesktopWslState>;
   pickFolder: (options?: PickFolderOptions) => Promise<string | null>;
+  /**
+   * Le chemin absolu d'un `File` déposé ou choisi dans le renderer.
+   *
+   * Electron a retiré `File.path` en v32 : sans ce pont, un fichier venu du
+   * système n'existe dans la fenêtre que sous forme d'octets, et rien ne peut
+   * dire à l'agent OÙ il est. C'est `webUtils.getPathForFile` — synchrone,
+   * pas d'IPC : Electron résout le chemin dans le preload.
+   *
+   * Rend "" quand le `File` ne vient pas du disque (un blob fabriqué en JS,
+   * une image collée depuis le presse-papiers) — c'est le contrat d'Electron,
+   * et l'appelant DOIT traiter ce cas.
+   */
+  getPathForFile: (file: File) => string;
   confirm: (message: string) => Promise<boolean>;
   setTheme: (theme: DesktopTheme) => Promise<void>;
   showContextMenu: <T extends string>(
@@ -1009,6 +1031,15 @@ export interface DesktopBridge {
   ) => Promise<T | null>;
   openExternal: (url: string) => Promise<boolean>;
   onMenuAction: (listener: (action: string) => void) => () => void;
+  /**
+   * « L'application s'en va » — émis au tout début de la fermeture, AVANT que
+   * le serveur local commence à s'éteindre.
+   *
+   * À écouter pour cesser de rapporter des pannes de connexion pendant la
+   * fermeture : une extinction VOULUE ne doit pas s'afficher comme un échec.
+   * Rend la fonction de désabonnement.
+   */
+  onAppQuitting: (listener: () => void) => () => void;
   getWindowFullscreenState: () => boolean;
   onWindowFullscreenStateChange: (listener: (fullscreen: boolean) => void) => () => void;
   getUpdateState: () => Promise<DesktopUpdateState>;

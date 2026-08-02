@@ -147,6 +147,10 @@ import { DiffWorkerPoolProvider } from "./DiffWorkerPoolProvider";
 import { BranchToolbar } from "./BranchToolbar";
 import { resolveShortcutCommand, shortcutLabelForCommand } from "../keybindings";
 import PlanSidebar from "./PlanSidebar";
+import { PlanEnCours } from "./chat/PlanEnCours";
+import { useFermetureEnCours } from "../fermetureEnCours";
+import { sidebarThemeAccent, useSidebarThemeStore } from "../sidebarThemeStore";
+import { activeSpaceTheme, useSidebarSpacesStore } from "../sidebarSpacesStore";
 import ThreadTerminalDrawer from "./ThreadTerminalDrawer";
 import {
   AlarmClockIcon,
@@ -225,6 +229,7 @@ import {
 } from "../state/entities";
 import { environmentShell } from "../state/shell";
 import { ChatComposer, type ChatComposerHandle } from "./chat/ChatComposer";
+import { useNotificationsDeBureau } from "./chat/useNotificationsDeBureau";
 import { DraftHeroHeadline } from "./chat/DraftHeroHeadline";
 import { ExpandedImageDialog } from "./chat/ExpandedImageDialog";
 import { PullRequestThreadDialog } from "./PullRequestThreadDialog";
@@ -710,6 +715,19 @@ const PersistentThreadTerminalDrawer = memo(function PersistentThreadTerminalDra
     () => drawerTerminalSessions.map((session) => session.target.terminalId),
     [drawerTerminalSessions],
   );
+  // Every client-side id source participates in allocation: the server list
+  // lags fresh opens, and panel terminals are filtered out of the drawer's
+  // sessions — an id collision attaches two viewports to one PTY session.
+  const allocatableTerminalIds = useMemo(
+    () => [
+      ...new Set([
+        ...serverOrderedTerminalIds,
+        ...terminalUiState.terminalIds,
+        ...panelTerminalIds,
+      ]),
+    ],
+    [panelTerminalIds, serverOrderedTerminalIds, terminalUiState.terminalIds],
+  );
   const storeSetTerminalHeight = useTerminalUiStateStore((state) => state.setTerminalHeight);
   const storeSplitTerminal = useTerminalUiStateStore((state) => state.splitTerminal);
   const storeSplitTerminalVertical = useTerminalUiStateStore(
@@ -779,7 +797,7 @@ const PersistentThreadTerminalDrawer = memo(function PersistentThreadTerminalDra
     if (!cwd) {
       return;
     }
-    const terminalId = nextTerminalId(serverOrderedTerminalIds);
+    const terminalId = nextTerminalId(allocatableTerminalIds);
     storeSplitTerminal(threadRef, terminalId);
     bumpFocusRequestId();
     void openTerminal({
@@ -793,11 +811,11 @@ const PersistentThreadTerminalDrawer = memo(function PersistentThreadTerminalDra
       },
     });
   }, [
+    allocatableTerminalIds,
     bumpFocusRequestId,
     cwd,
     effectiveWorktreePath,
     runtimeEnv,
-    serverOrderedTerminalIds,
     storeSplitTerminal,
     threadId,
     threadRef,
@@ -807,7 +825,7 @@ const PersistentThreadTerminalDrawer = memo(function PersistentThreadTerminalDra
     if (!cwd) {
       return;
     }
-    const terminalId = nextTerminalId(serverOrderedTerminalIds);
+    const terminalId = nextTerminalId(allocatableTerminalIds);
     storeSplitTerminalVertical(threadRef, terminalId);
     bumpFocusRequestId();
     void openTerminal({
@@ -821,12 +839,12 @@ const PersistentThreadTerminalDrawer = memo(function PersistentThreadTerminalDra
       },
     });
   }, [
+    allocatableTerminalIds,
     bumpFocusRequestId,
     cwd,
     effectiveWorktreePath,
     openTerminal,
     runtimeEnv,
-    serverOrderedTerminalIds,
     storeSplitTerminalVertical,
     threadId,
     threadRef,
@@ -836,7 +854,7 @@ const PersistentThreadTerminalDrawer = memo(function PersistentThreadTerminalDra
     if (!cwd) {
       return;
     }
-    const terminalId = nextTerminalId(serverOrderedTerminalIds);
+    const terminalId = nextTerminalId(allocatableTerminalIds);
     storeNewTerminal(threadRef, terminalId);
     bumpFocusRequestId();
     void openTerminal({
@@ -853,8 +871,8 @@ const PersistentThreadTerminalDrawer = memo(function PersistentThreadTerminalDra
     bumpFocusRequestId,
     cwd,
     effectiveWorktreePath,
+    allocatableTerminalIds,
     runtimeEnv,
-    serverOrderedTerminalIds,
     storeNewTerminal,
     threadId,
     threadRef,
@@ -1226,6 +1244,9 @@ function ChatViewContent(props: ChatViewProps) {
   );
   const timestampFormat = settings.timestampFormat;
   const autoOpenPlanSidebar = settings.autoOpenPlanSidebar;
+  // Le thème de l'espace actif décide de la couleur du plan et des notifs.
+  const themeEspaceActif = useSidebarSpacesStore(activeSpaceTheme);
+  const themeParDefautDuPlan = useSidebarThemeStore((state) => state.theme);
   const navigate = useNavigate();
   const { resolvedTheme } = useTheme();
   // Granular store selectors — avoid subscribing to prompt changes.
@@ -1526,6 +1547,10 @@ function ChatViewContent(props: ChatViewProps) {
         ),
       ),
     [rightPanelState.surfaces],
+  );
+  const allocatableActiveTerminalIds = useMemo(
+    () => [...new Set([...activeKnownTerminalIds, ...panelTerminalIds])],
+    [activeKnownTerminalIds, panelTerminalIds],
   );
   const previewPanelOpen = activeRightPanelKind === "preview" && isPreviewSupportedInRuntime();
   const rightPanelOpen = rightPanelState.isOpen;
@@ -1887,6 +1912,7 @@ function ChatViewContent(props: ChatViewProps) {
   const serverUpdateState = useAtomValue(
     serverEnvironment.updateStateAtom(serverUpdateEnvironmentId),
   );
+  const fermetureEnCours = useFermetureEnCours();
   const systemComposerBannerItems = useMemo<ComposerBannerStackItem[]>(() => {
     const items: ComposerBannerStackItem[] = [];
     const updateRunning = serverUpdateState.status === "running";
@@ -1906,7 +1932,14 @@ function ChatViewContent(props: ChatViewProps) {
     // While an update runs, transient connect blips are expected (the server
     // restarts) and the update banner already shows progress. Hard failure
     // phases still surface so the Reconnect action stays reachable.
-    const suppressUnavailableBanner = updateRunning && environmentReconnecting;
+    // ON NE CRIE PAS À LA PANNE QUAND ON S'EN VA.
+    //
+    // Au moment de quitter, le serveur local s'éteint pendant que la fenêtre
+    // est encore à l'écran : le sondage échoue, et « Failed to connect »
+    // s'affichait sur le chemin de la sortie. Une extinction VOULUE n'est pas
+    // une panne. Le processus principal l'annonce avant d'éteindre.
+    const suppressUnavailableBanner =
+      fermetureEnCours || (updateRunning && environmentReconnecting);
     if (activeEnvironmentUnavailableState && unavailableConnection && !suppressUnavailableBanner) {
       if (reconnectingThroughVersionSkew) {
         items.push({
@@ -2019,6 +2052,7 @@ function ChatViewContent(props: ChatViewProps) {
     return items;
   }, [
     activeEnvironmentUnavailableState,
+    fermetureEnCours,
     handleReconnectActiveEnvironment,
     navigate,
     setDismissedVersionMismatchKey,
@@ -2079,6 +2113,14 @@ function ChatViewContent(props: ChatViewProps) {
     () => derivePendingUserInputs(threadActivities),
     [threadActivities],
   );
+  // Prévenir quand la fenêtre n'est PAS regardée — le manque qui a laissé Enzo
+  // bloqué des heures le 01/08 sur des approbations qu'il ne voyait pas.
+  useNotificationsDeBureau({
+    approbationsEnAttente: pendingApprovals.length,
+    saisiesEnAttente: pendingUserInputs.length,
+    tourEnCours: phase === "running",
+    erreur: threadError ?? null,
+  });
   const activePendingUserInput = pendingUserInputs[0] ?? null;
   const activePendingDraftAnswers = useMemo(
     () =>
@@ -2136,6 +2178,10 @@ function ChatViewContent(props: ChatViewProps) {
     [activeLatestTurn?.turnId, threadActivities],
   );
   const planSidebarLabel = sidebarProposedPlan || interactionMode === "plan" ? "Plan" : "Tasks";
+  // La couleur du plan suit la PALETTE DE L'ESPACE — « si quelqu'un change la
+  // palette de couleur, ça change aussi la palette de ses notifs ». Sans
+  // thème, on retombe sur le bleu de « Working ».
+  const accentDuPlan = sidebarThemeAccent(themeEspaceActif ?? themeParDefautDuPlan);
   const showPlanFollowUpPrompt =
     pendingUserInputs.length === 0 &&
     interactionMode === "plan" &&
@@ -2693,7 +2739,7 @@ function ChatViewContent(props: ChatViewProps) {
       if (!cwdForOpen) {
         return;
       }
-      const terminalId = nextTerminalId([...activeKnownTerminalIds, ...panelTerminalIds]);
+      const terminalId = nextTerminalId(allocatableActiveTerminalIds);
       storeEnsureTerminal(activeThreadRef, terminalId, { open: true });
       void openTerminal({
         environmentId,
@@ -2712,15 +2758,14 @@ function ChatViewContent(props: ChatViewProps) {
     }
     setTerminalOpen(nextOpen);
   }, [
-    activeKnownTerminalIds,
     activeProject,
     activeThreadId,
     activeThreadRef,
     activeThreadWorktreePath,
+    allocatableActiveTerminalIds,
     environmentId,
     gitCwd,
     openTerminal,
-    panelTerminalIds,
     setTerminalOpen,
     storeEnsureTerminal,
     terminalUiState.terminalIds.length,
@@ -2735,7 +2780,7 @@ function ChatViewContent(props: ChatViewProps) {
       if (!cwdForOpen) {
         return;
       }
-      const terminalId = nextTerminalId(activeKnownTerminalIds);
+      const terminalId = nextTerminalId(allocatableActiveTerminalIds);
       if (direction === "vertical") {
         storeSplitTerminalVertical(activeThreadRef, terminalId);
       } else {
@@ -2758,8 +2803,8 @@ function ChatViewContent(props: ChatViewProps) {
     },
     [
       activeProject,
-      activeKnownTerminalIds,
       activeThreadId,
+      allocatableActiveTerminalIds,
       activeThreadRef,
       openTerminal,
       activeThreadWorktreePath,
@@ -2778,7 +2823,7 @@ function ChatViewContent(props: ChatViewProps) {
     if (!cwdForOpen) {
       return;
     }
-    const terminalId = nextTerminalId(activeKnownTerminalIds);
+    const terminalId = nextTerminalId(allocatableActiveTerminalIds);
     storeNewTerminal(activeThreadRef, terminalId);
     setTerminalFocusRequestId((value) => value + 1);
     void openTerminal({
@@ -2796,8 +2841,8 @@ function ChatViewContent(props: ChatViewProps) {
     });
   }, [
     activeProject,
-    activeKnownTerminalIds,
     activeThreadId,
+    allocatableActiveTerminalIds,
     activeThreadRef,
     openTerminal,
     activeThreadWorktreePath,
@@ -2883,7 +2928,7 @@ function ChatViewContent(props: ChatViewProps) {
         ...(options?.env ? { extraEnv: options.env } : {}),
       });
       const targetTerminalId = shouldCreateNewTerminal
-        ? nextTerminalId(activeKnownTerminalIds)
+        ? nextTerminalId(allocatableActiveTerminalIds)
         : baseTerminalId;
       const openTerminalInput: TerminalOpenInput = shouldCreateNewTerminal
         ? {
@@ -2951,6 +2996,7 @@ function ChatViewContent(props: ChatViewProps) {
       environmentId,
       openTerminal,
       activeKnownTerminalIds,
+      allocatableActiveTerminalIds,
       runningTerminalIds,
       terminalUiState.activeTerminalId,
       writeTerminal,
@@ -3217,7 +3263,7 @@ function ChatViewContent(props: ChatViewProps) {
   const addTerminalSurface = useCallback(() => {
     if (!activeThreadRef || !activeThreadId || !activeProject) return;
     const cwd = gitCwd ?? activeProject.workspaceRoot;
-    const terminalId = nextTerminalId([...activeKnownTerminalIds, ...panelTerminalIds]);
+    const terminalId = nextTerminalId(allocatableActiveTerminalIds);
     useRightPanelStore.getState().openTerminal(activeThreadRef, terminalId);
     setTerminalFocusRequestId((value) => value + 1);
     void openTerminal({
@@ -3234,14 +3280,13 @@ function ChatViewContent(props: ChatViewProps) {
       },
     });
   }, [
-    activeKnownTerminalIds,
     activeProject,
     activeThreadId,
     activeThreadRef,
     activeThreadWorktreePath,
+    allocatableActiveTerminalIds,
     gitCwd,
     openTerminal,
-    panelTerminalIds,
   ]);
   const splitPanelTerminal = useCallback(
     (direction: "horizontal" | "vertical" = "horizontal") => {
@@ -3254,7 +3299,7 @@ function ChatViewContent(props: ChatViewProps) {
       ) {
         return;
       }
-      const terminalId = nextTerminalId([...activeKnownTerminalIds, ...panelTerminalIds]);
+      const terminalId = nextTerminalId(allocatableActiveTerminalIds);
       const cwd = gitCwd ?? activeProject.workspaceRoot;
       useRightPanelStore
         .getState()
@@ -3275,15 +3320,14 @@ function ChatViewContent(props: ChatViewProps) {
       });
     },
     [
-      activeKnownTerminalIds,
       activeProject,
       activeRightPanelSurface,
       activeThreadId,
       activeThreadRef,
       activeThreadWorktreePath,
+      allocatableActiveTerminalIds,
       gitCwd,
       openTerminal,
-      panelTerminalIds,
     ],
   );
   const splitPanelTerminalVertical = useCallback(() => {
@@ -3660,31 +3704,69 @@ function ChatViewContent(props: ChatViewProps) {
     setShowScrollToBottom(false);
     void legendListRef.current?.scrollToEnd?.({ animated });
   }, []);
+  // CE QUI REND LA MAIN À L'HUMAIN QUAND IL REMONTE LE FIL.
+  //
+  // Ces écouteurs sont la SEULE chose qui coupe le suivi automatique. S'ils ne
+  // s'installent pas, la vue redescend au bas à chaque nouveau morceau et on ne
+  // peut plus rien lire pendant que l'agent parle — « je remonte la
+  // conversation et ça saute » (01/08).
+  //
+  // Deux défauts corrigés ici, tous deux silencieux :
+  //
+  //  1. UNE SEULE TENTATIVE, à la frame suivante. Si la liste virtuelle
+  //     n'était pas encore montée à cet instant précis, `scrollNode` était nul,
+  //     on sortait — et plus AUCUN écouteur n'était jamais posé, pour toute la
+  //     durée du fil. Rien ne le signalait. On réessaie donc jusqu'à ce que le
+  //     nœud existe, avec un plafond pour ne pas tourner indéfiniment si la
+  //     liste ne monte jamais.
+  //
+  //  2. LE CLAVIER N'ÉTAIT PAS ÉCOUTÉ. Molette, tactile et clic coupaient le
+  //     suivi ; ↑/↓, PagePrec/PageSuiv, Début/Fin, non. Remonter au clavier
+  //     laissait donc le suivi actif, et la vue se rabattait en bas sous les
+  //     doigts.
   useEffect(() => {
     let removeListeners: (() => void) | null = null;
-    const frame = requestAnimationFrame(() => {
+    let frame = 0;
+    let essais = 0;
+    const ESSAIS_MAX = 120; // ~2 s à 60 Hz : au-delà, la liste ne viendra pas.
+
+    const poser = () => {
       const scrollNode = legendListRef.current?.getScrollableNode();
       if (!scrollNode) {
+        essais += 1;
+        if (essais < ESSAIS_MAX) {
+          frame = requestAnimationFrame(poser);
+        }
         return;
       }
       const handleManualNavigation = () => {
         cancelTimelineLiveFollowForUserNavigationRef.current();
       };
-      scrollNode.addEventListener("wheel", handleManualNavigation, {
-        passive: true,
-      });
-      scrollNode.addEventListener("touchmove", handleManualNavigation, {
-        passive: true,
-      });
-      scrollNode.addEventListener("pointerdown", handleManualNavigation, {
-        passive: true,
-      });
+      // Seules les touches qui DÉPLACENT la vue comptent : taper du texte dans
+      // le composeur ne doit pas couper le suivi.
+      const TOUCHES_DE_NAVIGATION = new Set([
+        "ArrowUp",
+        "ArrowDown",
+        "PageUp",
+        "PageDown",
+        "Home",
+        "End",
+      ]);
+      const handleKeyNavigation = (event: KeyboardEvent) => {
+        if (TOUCHES_DE_NAVIGATION.has(event.key)) handleManualNavigation();
+      };
+      scrollNode.addEventListener("wheel", handleManualNavigation, { passive: true });
+      scrollNode.addEventListener("touchmove", handleManualNavigation, { passive: true });
+      scrollNode.addEventListener("pointerdown", handleManualNavigation, { passive: true });
+      scrollNode.addEventListener("keydown", handleKeyNavigation, { passive: true });
       removeListeners = () => {
         scrollNode.removeEventListener("wheel", handleManualNavigation);
         scrollNode.removeEventListener("touchmove", handleManualNavigation);
         scrollNode.removeEventListener("pointerdown", handleManualNavigation);
+        scrollNode.removeEventListener("keydown", handleKeyNavigation);
       };
-    });
+    };
+    frame = requestAnimationFrame(poser);
 
     return () => {
       cancelAnimationFrame(frame);
@@ -3894,8 +3976,19 @@ function ChatViewContent(props: ChatViewProps) {
     // activeThreadRef resets transitively with the active thread.
   }, [activeThread?.id]);
 
-  // Auto-open the plan sidebar when plan/todo steps arrive for the current turn.
-  // Don't auto-open for plans carried over from a previous turn (the user can open manually).
+  // LE PLAN VIT MAINTENANT DANS LE FIL — et le panneau latéral reste au
+  // réglage de celui qui s'en sert.
+  //
+  // Le doublon constaté le 31/07 (« Plan 3/6 » dans le fil ET « Plan / TASKS »
+  // à droite) vient de ce réglage laissé sur ON ; il est à OFF par défaut,
+  // donc personne ne le subit sans l'avoir demandé.
+  //
+  // Ma première correction posait `const OUVERTURE_AUTO = false` juste ici,
+  // au-dessus du test du réglage. Ça éteignait « Auto-open task panel » dans
+  // les Réglages en douce : un interrupteur qu'on bascule et qui ne fait plus
+  // rien — exactement le bouton mort que je venais de corriger ailleurs le
+  // même jour. Un réglage qu'on veut mort se retire de l'écran ; il ne se
+  // court-circuite pas derrière le dos de celui qui l'a coché.
   useEffect(() => {
     if (!autoOpenPlanSidebar) return;
     if (!activePlan) return;
@@ -6016,6 +6109,7 @@ function ChatViewContent(props: ChatViewProps) {
       <ThreadTasksPanel activities={activeThread?.activities ?? []} />
     ) : activeRightPanelSurface?.kind === "plan" ? (
       <PlanSidebar
+        accent={accentDuPlan}
         activePlan={activePlan}
         activeProposedPlan={sidebarProposedPlan}
         label={planSidebarLabel}
@@ -6213,6 +6307,13 @@ function ChatViewContent(props: ChatViewProps) {
                   ) : (
                     <ComposerBannerStack className="relative z-0" items={composerBannerItems} />
                   )}
+                  {/* LE PLAN, juste au-dessus du composeur. Pas un mode, pas
+                      un panneau latéral qu'il faut penser à ouvrir : il est
+                      là quand l'agent avance par étapes, il disparaît quand
+                      il n'y en a plus. Là où tu regardes déjà en attendant. */}
+                  <div className="relative z-0 pb-1.5">
+                    <PlanEnCours plan={activePlan} accent={accentDuPlan} />
+                  </div>
                   {threadSyncPhase && !activeEnvironmentUnavailable ? (
                     <ThreadSyncStatusPill phase={threadSyncPhase} />
                   ) : null}

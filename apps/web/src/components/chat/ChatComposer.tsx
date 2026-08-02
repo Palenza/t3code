@@ -13,6 +13,7 @@ import type {
   TurnId,
 } from "@t3tools/contracts";
 import {
+  PRIMARY_LOCAL_ENVIRONMENT_ID,
   ProviderDriverKind,
   ProviderInstanceId,
   PROVIDER_SEND_TURN_MAX_ATTACHMENTS,
@@ -44,6 +45,7 @@ import {
   shouldSubmitComposerOnEnter,
 } from "../../composer-logic";
 import { ModeTravailComposerControl } from "../sidebar/SidebarModeTravail";
+import { MemoireComposerControl } from "../sidebar/SidebarMemoire";
 import { deriveComposerSendState, readFileAsDataUrl } from "../ChatView.logic";
 import {
   dataTransferHasComposerMention,
@@ -88,6 +90,14 @@ import {
 } from "../composerFooterLayout";
 import { type ComposerPromptEditorHandle, ComposerPromptEditor } from "../ComposerPromptEditor";
 import { ComposerAttachButton } from "./ComposerAttachButton";
+import {
+  cheminDepuisLePontDesktop,
+  messageHorsPortee,
+  messageSansChemin,
+  agentTourneSurCetteMachine,
+  trierFichiers,
+} from "./composerFileIntake";
+import { reprendreBrouillonDeDictee } from "./brouillonDeDictee";
 import { ProviderModelPicker } from "./ProviderModelPicker";
 import { type ComposerCommandItem, ComposerCommandMenu } from "./ComposerCommandMenu";
 import { ComposerPendingApprovalActions } from "./ComposerPendingApprovalActions";
@@ -178,10 +188,8 @@ import { Select, SelectItem, SelectPopup, SelectValue } from "../ui/select";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { toastManager } from "../ui/toast";
 import {
-  BotIcon,
   CircleAlertIcon,
   ListTodoIcon,
-  PencilRulerIcon,
   type LucideIcon,
   LockIcon,
   LockOpenIcon,
@@ -296,46 +304,56 @@ const ComposerFooterModeControls = memo(function ComposerFooterModeControls(prop
 }) {
   const runtimeModeOption = runtimeModeConfig[props.runtimeMode];
   const RuntimeModeIcon = runtimeModeOption.icon;
-  const interactionModeTooltip =
-    props.interactionMode === "plan"
-      ? "Plan mode — click to return to normal build mode"
-      : "Default mode — click to enter plan mode";
   const planSidebarTooltip = props.planSidebarOpen
     ? `Hide ${props.planSidebarLabel.toLowerCase()} sidebar`
     : `Show ${props.planSidebarLabel.toLowerCase()} sidebar`;
 
-  const interactionModeToggle = props.showInteractionModeToggle ? (
-    <>
-      <Separator orientation="vertical" className="mx-0.5 hidden h-4 sm:block" />
+  // LE MODE PLAN N'EST PLUS UN BOUTON.
+  //
+  // Ordre fondateur du 31/07 : « le mode plan doit être automatique, dans le
+  // sens où c'est juste visuellement ; on n'est pas censé cliquer sur le mode
+  // plan, il n'y a que build ». Le plan est désormais un AFFICHAGE — il monte
+  // tout seul au-dessus du composeur dès que l'agent avance par étapes
+  // (`PlanEnCours`), et s'efface quand il n'y en a plus.
+  //
+  // Le raccourci ⇧⇥ et la valeur `interactionMode` restent : le mode existe
+  // toujours côté provider, on retire seulement l'interrupteur qui obligeait
+  // à y penser. Rien n'est cassé en dessous, une décision de moins au-dessus.
+  //
+  // MAIS RETIRER L'INTERRUPTEUR A FERMÉ LA PORTE DE SORTIE — mordu le 01/08.
+  //
+  // Le mode plan s'active encore tout seul : un `ExitPlanMode`, un tour de
+  // plan, et `interactionMode` reste à "plan". Sans bouton, plus AUCUN moyen
+  // visible d'en sortir : le composeur n'affiche rien, et chaque édition
+  // repart en demande d'approbation. Enzo y a passé une session entière,
+  // convaincu que « Build avait disparu » — il n'y avait plus de bouton du
+  // tout. Seul ⇧⇥ subsistait, et rien ne l'annonçait.
+  //
+  // On ne rend donc PAS l'interrupteur d'ENTRÉE (l'ordre du 31/07 tient : on
+  // ne clique pas pour entrer en plan, il monte tout seul). On rend seulement
+  // la SORTIE, et uniquement quand elle sert : visible si — et seulement si —
+  // on est déjà enfermé. Hors mode plan, la rangée est inchangée.
+  const interactionModeToggle =
+    props.showInteractionModeToggle && props.interactionMode === "plan" ? (
       <Tooltip>
         <TooltipTrigger
           render={
             <ComposerControl
-              className={cn(
-                "shrink-0 whitespace-nowrap",
-                props.interactionMode === "plan"
-                  ? "bg-blue-500/10 text-blue-400 hover:bg-blue-500/15 hover:text-blue-300"
-                  : "text-muted-foreground/70 hover:text-foreground/80",
-              )}
+              className="shrink-0 whitespace-nowrap bg-amber-500/10 text-amber-400 hover:bg-amber-500/15 hover:text-amber-300"
               type="button"
               onClick={props.onToggleInteractionMode}
-              aria-label={interactionModeTooltip}
+              aria-label="Quitter le mode plan"
             />
           }
         >
-          {props.interactionMode === "plan" ? (
-            <ComposerControlIcon icon={PencilRulerIcon} className="text-current opacity-100" />
-          ) : (
-            <ComposerControlIcon icon={BotIcon} opticalSize="large" />
-          )}
-          <span className="sr-only sm:not-sr-only">
-            {props.interactionMode === "plan" ? "Plan" : "Build"}
-          </span>
+          <ComposerControlIcon icon={ListTodoIcon} className="text-current opacity-100" />
+          <span className="sr-only sm:not-sr-only">Quitter le plan</span>
         </TooltipTrigger>
-        <TooltipPopup side="top">{interactionModeTooltip}</TooltipPopup>
+        <TooltipPopup side="top">
+          Quitter le mode plan (⇧⇥) — l'agent réécrit à nouveau
+        </TooltipPopup>
       </Tooltip>
-    </>
-  ) : null;
+    ) : null;
 
   return (
     <>
@@ -380,6 +398,12 @@ const ComposerFooterModeControls = memo(function ComposerFooterModeControls(prop
       {interactionModeToggle}
 
       <ModeTravailComposerControl />
+
+      {/* Ce que l'app a retenu de toi, DANS la rangée des réglages du tour :
+          au même endroit que le modèle, le contexte et le mode, parce que
+          c'est la même question — sous quelles règles ce message part-il ?
+          Survol : les phrases en clair, pour repérer celles captées à tort. */}
+      <MemoireComposerControl />
 
       {props.showPlanToggle ? (
         <>
@@ -1703,6 +1727,38 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     projectSelectionRequired ||
     (environmentUnavailable !== null && activePendingProgress === null);
 
+  /** Posé par la touche Entrée pendant la dictée : le texte, une fois transcrit,
+   * doit PARTIR sans seconde frappe. Voir le commentaire de `surEntree`. */
+  const envoyerDesQueTranscritRef = useRef(false);
+  /** `submitComposer` est déclaré PLUS BAS : on passe par une référence tenue à
+   * jour, sinon la liste de dépendances le lirait avant son initialisation. */
+  const submitComposerRef = useRef<(() => void) | null>(null);
+
+  // LA REPRISE — sans elle, le dépôt serait un module sans appelant, et les
+  // mots sauvés resteraient dans un tiroir que personne n'ouvre.
+  //
+  // Quitter le chat pendant une dictée arrête la capture et met le texte de
+  // côté (`useVoiceDictationSession`). Ici, au retour, on le rend : il se pose
+  // dans le composeur comme s'il venait d'être dicté. `reprendre` vide le
+  // tiroir, donc un re-rendu ne peut pas coller le texte deux fois.
+  const dicteeRepriseRef = useRef(false);
+  useEffect(() => {
+    if (dicteeRepriseRef.current) return;
+    dicteeRepriseRef.current = true;
+    const repris = reprendreBrouillonDeDictee();
+    if (repris === null) return;
+    const base = promptRef.current;
+    const separateur = base.trim().length === 0 ? "" : base.endsWith(" ") ? "" : " ";
+    void applyPromptReplacement(base.length, base.length, `${separateur}${repris}`, {
+      focusEditorAfterReplace: false,
+    });
+    toastManager.add({
+      type: "success",
+      title: "Dictée récupérée",
+      description: "Ce que tu avais dicté avant de quitter le fil a été reposé dans le composeur.",
+    });
+  }, [applyPromptReplacement, promptRef]);
+
   const commitDictationTranscript = useCallback(
     (text: string) => {
       const base = promptRef.current;
@@ -1712,9 +1768,29 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         : composerCursor;
       const insertion = buildDictationReplacement(base, insertionCursor, text);
       if (!insertion) return;
-      void applyPromptReplacement(insertion.rangeStart, insertion.rangeEnd, insertion.replacement, {
-        focusEditorAfterReplace: false,
-      });
+      const pose = applyPromptReplacement(
+        insertion.rangeStart,
+        insertion.rangeEnd,
+        insertion.replacement,
+        { focusEditorAfterReplace: false },
+      );
+      // UNE SEULE ENTRÉE, et le message part — 01/08.
+      //
+      // La règle précédente était « première Entrée pose le texte, seconde
+      // Entrée l'envoie : rien ne part sans relecture ». Intention louable,
+      // mais Enzo l'a redemandée cinq fois : « je veux cliquer sur Entrée »,
+      // « toujours stop et pas la touche entrée direct ». Une relecture qu'on
+      // impose à quelqu'un qui n'en veut pas n'est pas une sécurité, c'est une
+      // friction — et il relit de toute façon en dictant.
+      //
+      // L'envoi attend que la pose soit RÉSOLUE : `applyPromptReplacement` est
+      // asynchrone, et envoyer avant sa fin partirait avec le prompt d'avant.
+      if (envoyerDesQueTranscritRef.current) {
+        envoyerDesQueTranscritRef.current = false;
+        void Promise.resolve(pose).then(() => {
+          submitComposerRef.current?.();
+        });
+      }
     },
     [applyPromptReplacement, composerCursor, promptRef],
   );
@@ -1750,6 +1826,51 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     prepareVoiceDictationInsertion();
     void startVoiceDictation();
   }, [prepareVoiceDictationInsertion, startVoiceDictation]);
+
+  /**
+   * ENTRÉE ARRÊTE LA DICTÉE — au niveau de la FENÊTRE, pas de l'éditeur.
+   *
+   * Le garde posé dans `submitComposer` était juste, et inatteignable : la
+   * touche Entrée n'arrive à l'éditeur que s'il a le focus, or cliquer le
+   * micro le donne au bouton. La commande Lexical ne partait donc jamais, et
+   * il fallait retourner viser le bouton stop à la souris, au milieu d'une
+   * phrase, alors que les deux mains sont au clavier.
+   *
+   * L'écouteur ne vit QUE pendant la dictée : hors dictée, aucune touche ne
+   * passe par ici. Entrée seule — ⇧, ⌘ ou ⌥ gardent leur sens habituel.
+   */
+  useEffect(() => {
+    if (!voiceIsActive) return;
+    const surEntree = (event: KeyboardEvent) => {
+      if (event.key !== "Enter") return;
+      if (event.shiftKey || event.metaKey || event.altKey || event.ctrlKey) return;
+      if (event.isComposing) return;
+      event.preventDefault();
+      event.stopPropagation();
+      // UNE SEULE ENTRÉE : la dictée s'arrête, le texte se pose, et il PART.
+      //
+      // C'était « première Entrée pose, seconde Entrée envoie — rien ne part
+      // sans relecture ». Enzo l'a redemandé cinq fois : « je veux cliquer sur
+      // Entrée », « toujours stop et pas la touche entrée direct ». Une
+      // relecture imposée à quelqu'un qui n'en veut pas n'est pas une
+      // sécurité, c'est une friction. L'envoi lui-même attend la transcription
+      // (voir `commitDictationTranscript`) : rien ne part vide.
+      envoyerDesQueTranscritRef.current = true;
+      //
+      // LE FOCUS DOIT REVENIR, sinon la SECONDE Entrée ne va nulle part —
+      // mordu le 01/08. Les deux autres sorties de dictée (bouton stop,
+      // annulation) posent ce drapeau ; ce chemin-ci, non. Le texte se posait
+      // donc bien dans le composeur, mais le focus restait sur le bouton micro
+      // cliqué : « c'est toujours le bouton stop au lieu de la touche entrée
+      // pour envoyer ». La promesse « seconde Entrée, ça part » n'était tenue
+      // que si on avait arrêté la dictée à la SOURIS.
+      shouldRestoreComposerFocusAfterVoiceRef.current = true;
+      void stopAndCommitVoiceDictation();
+    };
+    // En capture : on passe AVANT l'éditeur et avant tout autre gestionnaire.
+    window.addEventListener("keydown", surEntree, true);
+    return () => window.removeEventListener("keydown", surEntree, true);
+  }, [voiceIsActive, stopAndCommitVoiceDictation]);
 
   const handleStopAndCommitVoiceDictation = useCallback(() => {
     shouldRestoreComposerFocusAfterVoiceRef.current = true;
@@ -2033,6 +2154,16 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
 
   const submitComposer = useCallback(
     (event?: { preventDefault: () => void }) => {
+      // DICTÉE EN COURS : Entrée ARRÊTE et POSE le texte, elle n'envoie pas.
+      // Le bouton d'arrêt était le seul moyen de clore une dictée — un geste
+      // à la souris au milieu d'une phrase, alors que la main est au clavier.
+      // Première Entrée : ça se pose dans le composeur, on relit, on corrige.
+      // Seconde Entrée : ça part. Rien ne s'envoie sans avoir été relu.
+      if (voiceIsActive) {
+        event?.preventDefault();
+        void stopAndCommitVoiceDictation();
+        return;
+      }
       if (noProviderAvailable || isSendDisabled) {
         event?.preventDefault();
         return;
@@ -2062,8 +2193,16 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       noProviderAvailable,
       onSend,
       shouldBlurMobileComposerOnSubmit,
+      stopAndCommitVoiceDictation,
+      voiceIsActive,
     ],
   );
+  // L'APPELANT, et c'est l'étape que je rate. `commitDictationTranscript` est
+  // déclaré au-dessus de `submitComposer` : sans cette référence tenue à jour,
+  // l'envoi direct après dictée serait du code mort — écrit, jamais appelé.
+  useEffect(() => {
+    submitComposerRef.current = submitComposer;
+  }, [submitComposer]);
   const expandMobileComposer = useCallback(() => {
     if (composerBlurFrameRef.current !== null) {
       window.cancelAnimationFrame(composerBlurFrameRef.current);
@@ -2596,13 +2735,75 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   // ------------------------------------------------------------------
   // Callbacks: paste / drag
   // ------------------------------------------------------------------
+  /**
+   * L'entrée UNIQUE des fichiers venus du système — bouton « + », dépôt,
+   * collage. Deux voies, et une seule question les sépare : le provider
+   * sait-il regarder CE fichier lui-même dans le tour ?
+   *
+   *   — une image : oui → voie inline (compressée, plafonnée) ;
+   *   — un PDF, un CSV, un .mov, un dossier : non → MENTION par le chemin,
+   *     que l'agent ouvre avec ses propres outils. C'est exactement ce que
+   *     fait Claude Code quand on lui @-mentionne un fichier.
+   *
+   * Le tri lui-même vit dans `composerFileIntake.ts` — il est testé.
+   */
+  const addComposerFiles = (files: File[]) => {
+    if (files.length === 0) return;
+    // Une mention est un CHEMIN : elle ne vaut que là où l'agent tourne.
+    // Sur un environnement distant, le chemin du Mac ne désigne rien — on le
+    // DIT au lieu de poser un lien mort qui n'échouera qu'à la lecture.
+    // On teste l'APPARTENANCE aux environnements locaux, pas l'égalité avec le
+    // primaire : `getLocalEnvironmentBootstraps()` en rend plusieurs, et un
+    // checkout local n'est pas le primaire. L'ancien test refusait donc les
+    // dépôts de fichiers depuis une machine qui était bien celle d'Enzo —
+    // c'est ce qui a empêché l'enregistrement du bug de swipe d'arriver.
+    const tri = trierFichiers(
+      files,
+      cheminDepuisLePontDesktop,
+      agentTourneSurCetteMachine(
+        environmentId,
+        window.desktopBridge?.getLocalEnvironmentBootstraps(),
+      ),
+    );
+    if (tri.images.length > 0) {
+      void addComposerImages(tri.images);
+    }
+    // Une mention par fichier, chacune détachée de la précédente : deux liens
+    // collés se liraient comme un seul jeton.
+    const refusees: string[] = [];
+    for (const mention of tri.mentions) {
+      if (!insertComposerTextAtEnd(mention, { ensureLeadingBoundary: true })) {
+        refusees.push(mention);
+      }
+    }
+    if (refusees.length > 0) {
+      toastManager.add({
+        type: "error",
+        title: "Unable to add to chat",
+        description: "The composer is busy; try again once it is ready.",
+      });
+    }
+    if (tri.sansChemin.length > 0) {
+      toastManager.add({
+        type: "error",
+        title: "Fichier non localisé",
+        description: messageSansChemin(tri.sansChemin),
+      });
+    }
+    if (tri.horsPortee.length > 0) {
+      toastManager.add({
+        type: "error",
+        title: "Fichier hors de portée de l'agent",
+        description: messageHorsPortee(tri.horsPortee),
+      });
+    }
+  };
+
   const onComposerPaste = (event: React.ClipboardEvent<HTMLElement>) => {
     const files = Array.from(event.clipboardData.files);
     if (files.length === 0) return;
-    const imageFiles = files.filter((file) => file.type.startsWith("image/"));
-    if (imageFiles.length === 0) return;
     event.preventDefault();
-    void addComposerImages(imageFiles);
+    addComposerFiles(files);
   };
 
   const onComposerDragEnter = (event: React.DragEvent<HTMLDivElement>) => {
@@ -2636,7 +2837,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     dragDepthRef.current = 0;
     setIsDragOverComposer(false);
     const files = Array.from(event.dataTransfer.files);
-    void addComposerImages(files);
+    addComposerFiles(files);
     focusComposer();
   };
 
@@ -3347,9 +3548,20 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                             ? "Choose a project above to start a thread"
                             : noProviderAvailable
                               ? "Enable a provider in Settings to send a message"
-                              : phase === "disconnected"
-                                ? "Ask for follow-up changes or attach images"
-                                : "Ask anything, @tag files/folders, $use skills, or / for commands"
+                              : // UNE SEULE INVITE, quel que soit l'état de la session.
+                                //
+                                // Il y en avait deux, choisies sur
+                                // `phase === "disconnected"` — qui ne veut pas
+                                // dire « réseau coupé » mais « aucune session
+                                // vivante », c'est-à-dire l'état de REPOS de
+                                // tout fil qu'on vient d'ouvrir. Le même
+                                // composeur proposait donc deux phrases
+                                // différentes pour une situation identique
+                                // côté humain (capture fondateur 31/07), et
+                                // la variante « au repos » était la moins
+                                // utile des deux : elle taisait @, $ et /,
+                                // pourtant disponibles dans les deux états.
+                                "Ask anything, @tag files/folders, $use skills, or / for commands"
                   }
                   disabled={isConnecting || isComposerApprovalState || projectSelectionRequired}
                 />
@@ -3439,7 +3651,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
               <div className="-m-1 flex min-w-0 flex-1 items-center gap-1 overflow-x-auto p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                 <ComposerAttachButton
                   disabled={activeThreadId === null}
-                  onFiles={addComposerImages}
+                  onFiles={addComposerFiles}
                 />
                 {showTopModelPicker ? null : renderProviderModelPicker(isComposerFooterCompact)}
 

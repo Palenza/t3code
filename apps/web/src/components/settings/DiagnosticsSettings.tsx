@@ -35,6 +35,7 @@ import { usePrimaryEnvironment } from "../../state/environments";
 import { useCopyToClipboard } from "../../hooks/useCopyToClipboard";
 import { Button } from "../ui/button";
 import { ScrollArea } from "../ui/scroll-area";
+import { Popover, PopoverPopup, PopoverTrigger } from "../ui/popover";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { toastManager } from "../ui/toast";
 import { ResourceTelemetryDiagnostics } from "./ResourceTelemetryDiagnostics";
@@ -98,8 +99,12 @@ function StatBlock({
       <div className="flex min-w-0 items-center gap-1.5 text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground/70">
         <span className="min-w-0 truncate">{label}</span>
         {tooltip ? (
-          <Tooltip>
-            <TooltipTrigger
+          // Le clic ouvre aussi : un TooltipTrigger sans onClick ignorait le doigt.
+          <Popover>
+            <PopoverTrigger
+              openOnHover
+              delay={250}
+              closeDelay={100}
               render={
                 <button
                   type="button"
@@ -110,13 +115,14 @@ function StatBlock({
                 </button>
               }
             />
-            <TooltipPopup
+            <PopoverPopup
               side="top"
+              tooltipStyle
               className="max-w-[min(300px,calc(100vw-2rem))] whitespace-normal text-left text-[11px] leading-relaxed text-wrap"
             >
               {tooltip}
-            </TooltipPopup>
-          </Tooltip>
+            </PopoverPopup>
+          </Popover>
         ) : null}
       </div>
       <div

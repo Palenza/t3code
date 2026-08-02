@@ -3,6 +3,16 @@ import { defineConfig } from "vite-plus";
 import * as NodeURL from "node:url";
 
 export default defineConfig({
+  // Le terminal libghostty importe son binaire en `?inline`
+  // (`./vendor/ghostty-vt.wasm?inline`). Sans cette ligne, le lanceur essaie
+  // de PARSER le wasm comme du JavaScript et la suite entière du fichier
+  // tombe — pas une assertion rouge, un échec au chargement.
+  //
+  // Arrivé avec le rattrapage de l'amont (#4860 puis #5102, 31/07) : le vendor
+  // a bougé à la racine du dépôt, et la config racine ne déclarait pas le
+  // format. Vérifié avant de corriger : nos propres lignes de config ne
+  // touchent que l'exclusion des worktrees, elles n'y sont pour rien.
+  assetsInclude: ["**/*.wasm"],
   resolve: {
     alias: {
       "~": NodeURL.fileURLToPath(new URL("./apps/web/src", import.meta.url)),

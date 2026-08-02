@@ -164,7 +164,7 @@ const desktopModelManagerLayer = DesktopModelManager.layer(() =>
 
 const desktopTranscriptionServiceLayer = DesktopTranscriptionService.layer((hostEntryPath) =>
   Electron.utilityProcess.fork(hostEntryPath, [], {
-    serviceName: "T3 Code Voice Transcription",
+    serviceName: "Raptor Voice Transcription",
   }),
 ).pipe(Layer.provide(Layer.mergeAll(desktopModelManagerLayer, desktopFoundationLayer)));
 

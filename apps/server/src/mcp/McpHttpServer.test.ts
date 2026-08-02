@@ -36,6 +36,10 @@ const client = McpSchema.McpServerClient.of({
 const TestLayer = McpHttpServer.PreviewToolkitRegistrationLive.pipe(
   Layer.provideMerge(McpServer.McpServer.layer),
   Layer.provideMerge(PreviewAutomationBroker.layer.pipe(Layer.provide(NodeServices.layer))),
+  // Le disque, comme en prod : la porte de sortie fait déborder l'intégral
+  // au-dessus du plafond. Un harnais qui ne le fournit pas testerait un
+  // chemin que la production ne prend jamais.
+  Layer.provideMerge(NodeServices.layer),
 );
 
 it("normalizes empty successful notification responses to accepted", () => {

@@ -1,4 +1,9 @@
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
+
+import { passerLaPorte } from "../../DebordementSurDisque.ts";
+import { verdictDUrl } from "../../../securite/SurUrl.ts";
 import type {
   PreviewAutomationOperation,
   PreviewAutomationOpenInput,
@@ -35,17 +40,66 @@ const invoke = Effect.fn("PreviewToolkit.invoke")(function* <A>(
 ): Effect.fn.Return<
   A,
   import("@t3tools/contracts").PreviewAutomationError,
-  McpInvocationContext.McpInvocationContext | PreviewAutomationBroker.PreviewAutomationBroker
+  | McpInvocationContext.McpInvocationContext
+  | PreviewAutomationBroker.PreviewAutomationBroker
+  // La porte de sortie écrit sur disque au-dessus du plafond.
+  | FileSystem.FileSystem
+  | Path.Path
 > {
   const scope = yield* McpInvocationContext.requireMcpCapability("preview");
   const broker = yield* PreviewAutomationBroker.PreviewAutomationBroker;
-  return yield* broker.invoke<A>({
+  const brut = yield* broker.invoke<A>({
     scope,
     operation,
     input,
     ...(timeoutMs === undefined ? {} : { timeoutMs }),
     ...(tabId === undefined ? {} : { tabId }),
   });
+
+  // LA PORTE DE SORTIE, posée au GOULOT.
+  //
+  // Les quinze poignées de ce toolkit passent toutes ici. La porte a été
+  // écrite le 31/07 en la déclarant « obligatoire », et ce toolkit-là ne la
+  // traversait pas — un `snapshot` rend le contenu d'une page, donc un jeton
+  // dans une URL ou un champ caché partait non caviardé dans le contexte.
+  //
+  // Les notes sont JOURNALISÉES et non collées au résultat : ces quinze
+  // poignées rendent des formes différentes (`null`, `void`, des objets à
+  // schéma strict), et y greffer un champ casserait la moitié d'entre elles.
+  // Le caviardage, lui, garde la forme intacte.
+  const transformee = yield* passerLaPorte(brut);
+  if (transformee.notes.length > 0) {
+    yield* Effect.logWarning(`preview:${operation} — ${transformee.notes.join(" ")}`);
+  }
+  return transformee.valeur;
+});
+
+/**
+ * REFUSE UNE DESTINATION QUE L'AGENT N'A AUCUNE RAISON DE VISITER.
+ *
+ * Le chemin d'attaque : une page hostile déjà lue dit « va voir
+ * http://169.254.169.254/latest/meta-data/ », l'agent y va, et le
+ * `preview_snapshot` suivant ramène des identifiants de cloud dans le
+ * contexte. L'agent a le droit de naviguer ; le contenu tiers n'a pas le
+ * droit de choisir la destination.
+ *
+ * Posé sur `navigate` et `open` — les deux seules poignées qui prennent une
+ * URL. `localhost` et le réseau privé restent permis : voir son serveur de dev
+ * est la raison d'être de cet outil.
+ */
+const verifierDestination = Effect.fn("PreviewToolkit.verifierDestination")(function* (
+  input: unknown,
+) {
+  const url = (input as { readonly url?: unknown } | null)?.url;
+  if (typeof url !== "string" || url.length === 0) return;
+  const verdict = verdictDUrl(url);
+  for (const alerte of verdict.alertes) {
+    yield* Effect.logWarning(`preview: ${alerte}`);
+  }
+  if (!verdict.sur) {
+    yield* Effect.logError(`preview: destination refusée — ${verdict.pourquoi}`);
+    return yield* Effect.die(new Error(`preview: ${verdict.pourquoi}`));
+  }
 });
 
 const invokeTargeted = <A>(
@@ -63,9 +117,13 @@ const invokeTargeted = <A>(
 const handlers = {
   preview_status: (input) => invokeTargeted<PreviewAutomationStatus>("status", input ?? {}),
   preview_open: (input) =>
-    invokeTargeted<PreviewAutomationStatus>("open", normalizePreviewOpenInput(input)),
+    Effect.flatMap(verifierDestination(input), () =>
+      invokeTargeted<PreviewAutomationStatus>("open", normalizePreviewOpenInput(input)),
+    ),
   preview_navigate: (input) =>
-    invokeTargeted<PreviewAutomationStatus>("navigate", input, input.timeoutMs),
+    Effect.flatMap(verifierDestination(input), () =>
+      invokeTargeted<PreviewAutomationStatus>("navigate", input, input.timeoutMs),
+    ),
   preview_resize: (input) =>
     invokeTargeted<PreviewAutomationResizeResult>("resize", input, input.timeoutMs),
   preview_set_appearance: (input) =>

@@ -106,6 +106,28 @@ interface PersistedV1 {
   } | null;
 }
 
+/**
+ * DÉPINGLER L'APPARENCE — la trace du mode nuit, retiré le 31/07.
+ *
+ * L'ancien panneau avait deux boutons, les étoiles (`auto`) et la lune
+ * (`dark`), et cliquer la lune écrivait `appearance: "dark"` DANS le thème
+ * enregistré. Le bouton est parti ; les enregistrements, eux, sont restés
+ * épinglés. Résultat : le voile de la colonne continuait de se fondre vers
+ * une base nocturne même app en clair, sans plus aucun bouton pour le
+ * défaire — et le panneau, lui, affichait « auto ». Il mentait.
+ *
+ * Le panneau corrige déjà ce qu'il ré-écrit, mais ça ne soigne que les
+ * thèmes qu'on RETOUCHE. Ici on soigne l'enregistrement lui-même, une fois,
+ * à la lecture : plus aucune donnée ne reste dans un état que l'interface
+ * ne sait plus produire ni annuler.
+ *
+ * `resolveSidebarThemeAppearance` garde donc son comportement d'origine —
+ * un thème épinglé force sa base. C'est juste qu'il n'en existe plus.
+ */
+export function desepinglerApparence(theme: SidebarTheme): SidebarTheme {
+  return theme.appearance === "auto" ? theme : { ...theme, appearance: "auto" };
+}
+
 export const useSidebarThemeStore = create<SidebarThemeState>()(
   persist(
     (set) => ({
@@ -125,14 +147,25 @@ export const useSidebarThemeStore = create<SidebarThemeState>()(
     }),
     {
       name: "t3code:sidebar-theme:v1",
-      version: 2,
+      version: 3,
       partialize: (state) => ({
         theme: state.theme,
         themesByProject: state.themesByProject,
       }),
       migrate: (persisted, version) => {
         if (version >= 2) {
-          return persisted as SidebarThemeState;
+          // v2 → v3 : on retire l'apparence épinglée par le mode nuit disparu.
+          const garde = persisted as SidebarThemeState;
+          return {
+            ...garde,
+            theme: garde.theme === null ? null : desepinglerApparence(garde.theme),
+            themesByProject: Object.fromEntries(
+              Object.entries(garde.themesByProject ?? {}).map(([cle, valeur]) => [
+                cle,
+                desepinglerApparence(valeur),
+              ]),
+            ),
+          } satisfies SidebarThemeState;
         }
         const legacy = persisted as PersistedV1;
         const colors = legacy.theme?.colors?.filter((color) => HEX_COLOR.test(color)) ?? [];
@@ -265,10 +298,50 @@ export function sidebarThemeInk(
 }
 
 export function sidebarThemeGrainOpacity(theme: SidebarTheme): number {
-  // Plafonné bas : le grain est une texture, pas un brouillard.
-  return Math.round(clamp01(theme.grain) * 35) / 100;
+  // La molette ne se VOYAIT pas : le bruit brut d'un `feTurbulence` se serre
+  // autour du gris moyen, et `mix-blend-overlay` sur du gris moyen est à peu
+  // près l'identité — d'où « ça n'ajoute pas de grain, ça fait autre chose ».
+  // Le bruit est maintenant étalé en contraste (voir l'URL plus bas) et la
+  // course monte jusqu'à 42 % : au maximum on voit une TEXTURE, jamais un
+  // brouillard. La courbe est en puissance 0,75 parce qu'un voile se perçoit
+  // en gros comme la racine de son opacité : en linéaire, les six premiers
+  // crans de la molette étaient indistinguables de zéro.
+  return Math.round(clamp01(theme.grain) ** 0.75 * 42) / 100;
 }
 
-/** Bruit fractal SVG en data-URI — aucune ressource externe, aucun asset. */
+/**
+ * Bruit fractal SVG en data-URI — aucune ressource externe, aucun asset.
+ *
+ * `feComponentTransfer` ÉTALE le bruit : sans lui, `feTurbulence` sort une
+ * plage serrée autour de 0,5 que le mode `overlay` laisse passer presque
+ * inchangée. Pente 2,6 / ordonnée −0,8 garde le point milieu (0,5 → 0,5) et
+ * pousse les extrêmes (0,35 → 0,11 · 0,65 → 0,89) : du VRAI grain.
+ * baseFrequency 0,65 → un grain de ~1,5 css, indépendant du zoom écran.
+ */
 export const SIDEBAR_THEME_GRAIN_URL =
-  "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix type='saturate' values='0'/></filter><rect width='160' height='160' filter='url(%23n)'/></svg>";
+  "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='140' height='140'><filter id='n' x='0' y='0' width='100%25' height='100%25'><feTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/><feColorMatrix type='saturate' values='0'/><feComponentTransfer><feFuncR type='linear' slope='2.6' intercept='-0.8'/><feFuncG type='linear' slope='2.6' intercept='-0.8'/><feFuncB type='linear' slope='2.6' intercept='-0.8'/></feComponentTransfer></filter><rect width='140' height='140' filter='url(%23n)'/></svg>";
+
+/**
+ * LA COULEUR D'ACCENT DE L'ESPACE — celle que portent le panneau de plan et
+ * les notifications de fin de tâche.
+ *
+ * Consigne fondateur : « si quelqu'un change la palette de couleur, ça change
+ * aussi la palette de ses notifs ». Une couleur en dur — le vert de ma
+ * maquette — dit toujours la même chose quel que soit l'espace ; elle se
+ * cogne au voile dès qu'on sort du gris, et elle n'appartient à personne.
+ *
+ * La dominante d'un thème est `stops[0]` : c'est déjà elle qui décide du
+ * voile de la colonne. La reprendre ici fait que la progression d'une tâche
+ * et l'espace où elle tourne parlent la MÊME couleur — on sait d'un coup
+ * d'œil de quel espace vient ce qui bouge.
+ *
+ * Sans thème, on retombe sur le bleu du libellé « Working » (sky-500) :
+ * l'état par défaut est déjà bleu partout ailleurs dans l'app, on ne va pas
+ * inventer une troisième couleur au repos.
+ */
+export const ACCENT_PAR_DEFAUT = "#0ea5e9";
+
+export function sidebarThemeAccent(theme: SidebarTheme | null | undefined): string {
+  const dominante = theme?.stops.find((stop) => HEX_COLOR.test(stop.color));
+  return dominante?.color ?? ACCENT_PAR_DEFAUT;
+}

@@ -33,17 +33,45 @@ import { stackedThreadToast, toastManager } from "./ui/toast";
 import { useCopyToClipboard } from "~/hooks/useCopyToClipboard";
 import { useAtomCommand } from "~/state/use-atom-command";
 
-function stepStatusIcon(status: string): React.ReactNode {
+/**
+ * LES DEUX PLANS PARLENT LA MÊME COULEUR — celle de l'espace.
+ *
+ * Constaté sur les captures du 31/07 : le plan dans le fil portait la palette
+ * (rose dans un espace, orange dans un autre) pendant que CE panneau restait
+ * vert dans les deux. Même donnée, deux langages, côte à côte à l'écran.
+ *
+ * La consigne fondateur ne visait pas qu'une surface — « si quelqu'un change
+ * la palette de couleur, ça change aussi la palette de ses notifs ». Le vert
+ * et le bleu étaient en dur ; ils suivent maintenant `sidebarThemeAccent`,
+ * exactement comme `PlanEnCours`.
+ *
+ * Les teintes restent FAIBLES sous le texte (5 %) et franches seulement sur
+ * les pastilles, qui ne portent aucun libellé : la leçon de « Working », où
+ * une couleur posée sous de l'écriture la rendait illisible sur voile.
+ */
+function stepStatusIcon(status: string, accent: string): React.ReactNode {
   if (status === "completed") {
     return (
-      <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-success/10 text-success-foreground">
+      <span
+        className="flex size-5 shrink-0 items-center justify-center rounded-full"
+        style={{
+          backgroundColor: `color-mix(in oklab, ${accent} 14%, transparent)`,
+          color: accent,
+        }}
+      >
         <CheckIcon className="size-3" />
       </span>
     );
   }
   if (status === "inProgress") {
     return (
-      <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+      <span
+        className="flex size-5 shrink-0 items-center justify-center rounded-full"
+        style={{
+          backgroundColor: `color-mix(in oklab, ${accent} 14%, transparent)`,
+          color: accent,
+        }}
+      >
         <LoaderIcon className="size-3 animate-spin" />
       </span>
     );
@@ -65,6 +93,8 @@ interface PlanSidebarProps {
   workspaceRoot: string | undefined;
   timestampFormat: TimestampFormat;
   mode?: "sheet" | "sidebar" | "embedded";
+  /** La couleur de l'espace — le plan du fil porte déjà la même. */
+  accent: string;
 }
 
 const PlanSidebar = memo(function PlanSidebar({
@@ -77,6 +107,7 @@ const PlanSidebar = memo(function PlanSidebar({
   workspaceRoot,
   timestampFormat,
   mode = "sidebar",
+  accent,
 }: PlanSidebarProps) {
   const [proposedPlanExpanded, setProposedPlanExpanded] = useState(false);
   const [isSavingToWorkspace, setIsSavingToWorkspace] = useState(false);
@@ -211,13 +242,16 @@ const PlanSidebar = memo(function PlanSidebar({
               {activePlan.steps.map((step) => (
                 <div
                   key={`${step.status}:${step.step}`}
-                  className={cn(
-                    "flex items-center gap-2.5 rounded-lg px-2.5 py-2 transition-colors duration-200",
-                    step.status === "inProgress" && "bg-blue-500/5",
-                    step.status === "completed" && "bg-emerald-500/5",
-                  )}
+                  className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 transition-colors duration-200"
+                  style={
+                    step.status === "pending"
+                      ? undefined
+                      : {
+                          backgroundColor: `color-mix(in oklab, ${accent} 5%, transparent)`,
+                        }
+                  }
                 >
-                  {stepStatusIcon(step.status)}
+                  {stepStatusIcon(step.status, accent)}
                   <p
                     className={cn(
                       "text-[13px] leading-snug",

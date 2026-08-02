@@ -15,7 +15,11 @@ import { getDesktopUrl } from "../electron/ElectronProtocol.ts";
 import * as ElectronShell from "../electron/ElectronShell.ts";
 import * as ElectronTheme from "../electron/ElectronTheme.ts";
 import * as ElectronWindow from "../electron/ElectronWindow.ts";
-import { MENU_ACTION_CHANNEL, WINDOW_FULLSCREEN_STATE_CHANNEL } from "../ipc/channels.ts";
+import {
+  APP_QUITTING_CHANNEL,
+  MENU_ACTION_CHANNEL,
+  WINDOW_FULLSCREEN_STATE_CHANNEL,
+} from "../ipc/channels.ts";
 import * as PreviewManager from "../preview/Manager.ts";
 import * as DesktopAppSettings from "../settings/DesktopAppSettings.ts";
 
@@ -37,7 +41,7 @@ const DEVELOPMENT_RETRYABLE_LOAD_ERROR_CODES = new Set([
 
 type WindowTitleBarOptions = Pick<
   Electron.BrowserWindowConstructorOptions,
-  "titleBarOverlay" | "titleBarStyle" | "trafficLightPosition"
+  "titleBarOverlay" | "titleBarStyle" | "trafficLightPosition" | "roundedCorners"
 >;
 
 type DesktopWindowRuntimeServices =
@@ -80,6 +84,8 @@ export class DesktopWindow extends Context.Service<
     readonly handleBackendNotReady: Effect.Effect<void>;
     readonly flushMainWindowBounds: Effect.Effect<void>;
     readonly dispatchMenuAction: (action: string) => Effect.Effect<void, DesktopWindowError>;
+    /** Prévenir le rendu qu'on s'en va, sans jamais réveiller la fenêtre. */
+    readonly notifyQuitting: Effect.Effect<void>;
     readonly syncAppearance: Effect.Effect<void>;
   }
 >()("@t3tools/desktop/window/DesktopWindow") {}
@@ -224,7 +230,7 @@ async function requestMicrophonePermission(platform: NodeJS.Platform): Promise<b
   return false;
 }
 
-function getWindowTitleBarOptions(
+export function getWindowTitleBarOptions(
   shouldUseDarkColors: boolean,
   platform: NodeJS.Platform,
 ): WindowTitleBarOptions {
@@ -232,6 +238,20 @@ function getWindowTitleBarOptions(
     return {
       titleBarStyle: "hiddenInset",
       trafficLightPosition: { x: 16, y: 18 },
+      // PAS de `roundedCorners: false` ICI — essayé le 01/08, ANNULÉ le jour
+      // même.
+      //
+      // La demande était juste (« Raptor c'est rectangulaire, des coins à 90
+      // degrés ») et le diagnostic aussi : l'arrondi vient de macOS, pas de
+      // notre CSS. Mais l'option Electron est prévue pour les fenêtres SANS
+      // CADRE. Combinée à `titleBarStyle: "hiddenInset"`, elle a fait
+      // DISPARAÎTRE les feux tricolores : plus de fermer, réduire, agrandir.
+      // Enzo l'a vu en une minute.
+      //
+      // Perdre les contrôles de fenêtre coûte infiniment plus qu'un coin
+      // arrondi. Si on veut vraiment les angles droits, il faudra passer la
+      // fenêtre en `frame: false` et redessiner nous-mêmes ces trois boutons —
+      // un chantier, pas une ligne.
     };
   }
 
@@ -864,6 +884,17 @@ export const make = Effect.gen(function* () {
     flushMainWindowBounds: Effect.suspend(() => flushMainWindowBounds).pipe(
       Effect.withSpan("desktop.window.flushMainWindowBounds"),
     ),
+    notifyQuitting: Effect.gen(function* () {
+      // On NE crée pas de fenêtre et on NE révèle rien : au contraire de
+      // `dispatchMenuAction`, qui existe pour amener l'humain quelque part.
+      // Ici l'humain part — le seul geste utile est de se taire.
+      const fenetre = yield* electronWindow.currentMainOrFirst;
+      if (Option.isNone(fenetre)) return;
+      const cible = fenetre.value;
+      if (cible.isDestroyed()) return;
+      cible.webContents.send(APP_QUITTING_CHANNEL);
+    }),
+
     dispatchMenuAction: Effect.fn("desktop.window.dispatchMenuAction")(function* (action) {
       yield* Effect.annotateCurrentSpan({ action });
       const existingWindow = yield* focusedMainWindow;

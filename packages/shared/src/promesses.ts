@@ -76,7 +76,22 @@ function phrasesDe(texte: string): ReadonlyArray<string> {
  * promesse en produirait une fantôme.
  */
 export function extrairePromesses(reponse: string): ReadonlyArray<Promesse> {
-  const sansCode = reponse.replace(/```[\s\S]*?```/gu, " ").replace(/`[^`\n]*`/gu, " ");
+  // Le code est retiré — et les CITATIONS aussi.
+  //
+  // Un verbe entre guillemets est RAPPORTÉ, pas promis : « Regarde-les — ce
+  // sont mes phrases : "Je vérifie", "J'attaque", "Je commence" » ne contient
+  // aucun engagement neuf, elle en cite trois anciens. Sans ce retrait, une
+  // réponse qui relit ses propres promesses en fabrique autant de nouvelles —
+  // la boucle exacte observée le 31/07, 20 promesses en une session.
+  const sansCode = reponse
+    .replace(/```[\s\S]*?```/gu, " ")
+    .replace(/`[^`\n]*`/gu, " ")
+    // Guillemets FRANÇAIS et droits seulement. Surtout PAS l'apostrophe :
+    // en français elle marque l'élision, pas une citation — « J'attaque le
+    // relais. J'attaque » verrait tout ce qui sépare ses deux apostrophes
+    // effacé, et la promesse avec. (Un test l'a attrapé sur-le-champ.)
+    .replace(/«[^»]*»/gu, " ")
+    .replace(/"[^"\n]*"/gu, " ");
   const promesses: Promesse[] = [];
   const vues = new Set<string>();
 
@@ -89,8 +104,17 @@ export function extrairePromesses(reponse: string): ReadonlyArray<Promesse> {
       let trouve: RegExpExecArray | null = motif.exec(phrase);
       while (trouve !== null) {
         const action = (trouve[1] ?? "").toLowerCase();
-        if (action.length > 0 && !vues.has(`${phrase}|${action}`)) {
-          vues.add(`${phrase}|${action}`);
+        // UNE PROMESSE PAR PHRASE, pas par verbe.
+        //
+        // La clé était `phrase|verbe` : « Je vérifie X, et j'enchaîne sur Y »
+        // sortait donc DEUX promesses au texte identique, et « Je vérifie,
+        // j'attaque, je commence » en sortait TROIS. Or c'est la PHRASE qu'on
+        // affiche, et c'est elle qui sert d'identité au store — plusieurs
+        // promesses de même phrase se ramènent forcément à la même ligne,
+        // dupliquée autant de fois qu'elle contenait de verbes. Le premier
+        // verbe suffit à retrouver la promesse plus tard.
+        if (action.length > 0 && !vues.has(phrase)) {
+          vues.add(phrase);
           promesses.push({ phrase, action });
         }
         trouve = motif.exec(phrase);
@@ -108,10 +132,7 @@ export function extrairePromesses(reponse: string): ReadonlyArray<Promesse> {
  * promesse qu'on croit tenue à tort se referme en silence — moins grave que
  * l'inverse, qui harcèlerait l'humain avec des rappels déjà réglés.
  */
-export function promesseTenue(
-  promesse: Promesse,
-  tracesDuTravail: ReadonlyArray<string>,
-): boolean {
+export function promesseTenue(promesse: Promesse, tracesDuTravail: ReadonlyArray<string>): boolean {
   const racine = promesse.action.slice(0, Math.max(4, promesse.action.length - 2));
   return tracesDuTravail.some((trace) => trace.toLowerCase().includes(racine));
 }

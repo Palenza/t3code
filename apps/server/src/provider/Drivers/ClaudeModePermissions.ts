@@ -57,14 +57,17 @@ export const lireModeDuHome = Effect.fn("lireModeDuHome")(function* (
   try {
     const lu = decodeSettings(brut);
     const p = lu["permissions"];
-    permissions = typeof p === "object" && p !== null ? (p as { deny?: unknown; allow?: unknown }) : null;
+    permissions =
+      typeof p === "object" && p !== null ? (p as { deny?: unknown; allow?: unknown }) : null;
   } catch {
     return null;
   }
   if (permissions === null) return null;
 
   const enTexte = (valeur: unknown) =>
-    Array.isArray(valeur) ? [...valeur].filter((v): v is string => typeof v === "string").sort() : [];
+    Array.isArray(valeur)
+      ? [...valeur].filter((v): v is string => typeof v === "string").sort()
+      : [];
   const denyLu = enTexte(permissions.deny);
   const allowLu = enTexte(permissions.allow);
   if (denyLu.length === 0 && allowLu.length === 0) return null;
@@ -127,7 +130,9 @@ export const appliquerModeAuHome = Effect.fn("appliquerModeAuHome")(function* (
     suivant["permissions"] = { ...permissionsExistantes, deny: regles.deny, allow: regles.allow };
   }
 
-  yield* fs.makeDirectory(homePath, { recursive: true }).pipe(Effect.orElseSucceed(() => undefined));
+  yield* fs
+    .makeDirectory(homePath, { recursive: true })
+    .pipe(Effect.orElseSucceed(() => undefined));
   yield* fs
     .writeFileString(fichier, `${encodeSettings(suivant)}\n`)
     .pipe(

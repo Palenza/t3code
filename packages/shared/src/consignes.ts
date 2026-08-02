@@ -42,12 +42,40 @@ export interface Consigne {
  * (« ne … jamais ») ou une forme impérative (« arrête de », « plus jamais »).
  */
 const MOTIFS_INTERDIT: ReadonlyArray<RegExp> = [
-  /\bne\s+(?:me\s+|te\s+|le\s+|la\s+|les\s+)?\p{L}+\s+(?:pas|plus|jamais)\b/iu,
+  // « ne … plus/jamais » : ces deux-là portent la DURÉE dans le mot. « on ne
+  // passe jamais par d'autres serveurs » est une règle, peu importe le sujet.
+  /\bne\s+\p{L}+\s+(?:plus|jamais)\b/iu,
+  /\bne\s+(?:me|te|nous|le|la|les|lui|leur|y|en)\s+\p{L}+\s+(?:plus|jamais)\b/iu,
   /\bne\s+(?:jamais|plus)\s+\p{L}+/iu,
   /\bplus\s+jamais\b/iu,
   /\barrête\s+de\b/iu,
+  // Impersonnel normatif et volitif : « pas » y est directif malgré tout.
   /\bil\s+ne\s+faut\s+(?:pas|plus|jamais)\b/iu,
   /\bje\s+(?:ne\s+)?veux\s+pas\b/iu,
+];
+
+/**
+ * « ne … pas » NU — le motif qui a fabriqué 4 des 5 fausses consignes du
+ * 31/07, réinjectées dans toutes les sessions de tous les comptes :
+ *
+ *   « les points ne sont pas à distance égale »   → un CONSTAT
+ *   « je ne peux pas rajouter trois points »      → une PLAINTE
+ *   « Ça ne rajoute pas de la granularité »       → un CONSTAT
+ *   « Je ne peux pas lire proprement »            → un CONSTAT
+ *
+ * C'est la même leçon que le module avait déjà tirée pour le « jamais » nu,
+ * et qu'il n'avait pas appliquée à « pas ». La différence est dans le mot :
+ * « jamais » dit TOUJOURS, « pas » dit MAINTENANT. Une négation en « pas »
+ * décrit un état ; elle ne devient une règle que si elle est ADRESSÉE.
+ *
+ * Et l'adresse doit être LOCALE À LA NÉGATION, pas quelque part dans la
+ * phrase : « tu peux voir que les points ne sont pas à distance égale »
+ * contient « tu », et reste un constat. On exige donc soit un impératif en
+ * tête de phrase (« ne me demande pas… »), soit un « tu ne … pas » explicite.
+ */
+const MOTIFS_INTERDIT_ADRESSES: ReadonlyArray<RegExp> = [
+  /^\s*ne\s+(?:me|te|nous|le|la|les|lui|leur|y|en)?\s*\p{L}+\s+pas\b/iu,
+  /\btu\s+ne\s+(?:me|te|le|la|les|lui|leur|y|en)?\s*\p{L}+\s+pas\b/iu,
 ];
 
 /**
@@ -68,8 +96,62 @@ const MOTIFS_IMPOSE: ReadonlyArray<RegExp> = [
 
 /** Marqueurs faibles : ne valent que si la phrase s'adresse à l'agent. */
 const MOTIFS_IMPOSE_FAIBLES: ReadonlyArray<RegExp> = [/\btoujours\b/iu, /\bpar\s+défaut\b/iu];
+/**
+ * Une phrase qui s'adresse à l'agent. Quatre formes, et la quatrième s'est
+ * fait oublier : l'IMPÉRATIF NÉGATIF — et la cinquième aussi,
+ * l'impersonnel normatif « il (ne) faut ».
+ *
+ * « Ne fais jamais ça », « Ne me demande pas de copier la console » sont les
+ * ordres les plus directs qui existent, et ils ne contiennent ni « tu » ni un
+ * impératif en tête — ils commencent par la négation. Cinq tests sont passés
+ * au rouge quand j'ai exigé l'adresse pour toutes les natures ; ils avaient
+ * raison, pas moi. Deux autres ont suivi pour « Il faut absolument que… »
+ * et « Il ne faut pas déployer sans mon accord » : en français, l'impersonnel
+ * normatif EST une adresse. Ses motifs sont déjà étroits (« il faut que tu »,
+ * « il faut absolument », « il ne faut pas/plus/jamais »), donc l'ouvrir ici
+ * ne rouvre pas la porte au texte collé. Idem pour le volitif « je (ne)
+ * veux » — l'humain qui énonce sa volonté s'adresse bien à quelqu'un.
+ *
+ * Ce que ce motif teste, au fond, n'est pas « y a-t-il un pronom de deuxième
+ * personne » mais « cette phrase exprime-t-elle une VOLONTÉ portant sur le
+ * travail ». Sept rouges ont été nécessaires pour en faire le tour ; chacun
+ * a ajouté une forme réelle du français, aucune n'a été devinée.
+ */
 const PHRASE_ADRESSEE =
-  /\b(?:tu|toi|te)\b|^(?:fais|vérifie|verifie|utilise|garde|pense|mets|écris|ecris|préfère|prefere)\b/iu;
+  /\b(?:tu|toi|te|ton|ta|tes)\b|^(?:fais|vérifie|verifie|utilise|garde|pense|mets|écris|ecris|préfère|prefere)\b|^n[e']\s*(?:me|nous|le|la|les|lui|leur|y|en)?\s*\p{L}+|\bon\s+(?:ne\s+\p{L}+\s+(?:plus|jamais)|doit)\b|\bil\s+(?:ne\s+)?faut\b|\bje\s+(?:ne\s+)?veux\b/iu;
+
+/**
+ * LE VOUVOIEMENT DISQUALIFIE — ce n'est pas la voix de l'humain.
+ *
+ * Il tutoie, toujours ; c'est même une de ses consignes permanentes. Une
+ * phrase qui vouvoie vient donc forcément d'AILLEURS : un article collé, une
+ * réponse d'un autre assistant, une doc.
+ *
+ * Le 31/07, coller une conversation entière a fait entrer « Donc au lieu de
+ * lutter contre la compaction, exploitez-la » dans les consignes permanentes
+ * de TOUS les projets. Le mineur tourne sur le message envoyé en entier — il
+ * ne distinguait pas ce que l'humain DIT de ce qu'il COLLE.
+ *
+ * `assez` et `chez` sont écartés : ce sont les deux mots courants en -ez qui
+ * ne sont pas des verbes. Un nom propre en -ez passerait encore, et c'est
+ * acceptable — ce motif ne fait que DISQUALIFIER. Rater une consigne coûte
+ * une phrase à redire ; en inventer une fausse la grave dans tous les projets
+ * et personne ne vient la relire. Le gate se trompe du côté qui n'écrit rien.
+ */
+const VOUVOIEMENT = /\b(?:vous|votre|vos)\b|\b(?!assez\b|chez\b)\p{L}{3,}ez\b/iu;
+
+/**
+ * Ce qui est CITÉ n'est pas ce qui est demandé.
+ *
+ * « Les règles critiques (« ne jamais pousser sur main », « toujours lancer
+ * make lint ») vont dans le CLAUDE.md racine » est devenue une consigne
+ * permanente le 31/07 : le « jamais » CITÉ EN EXEMPLE a suffi. Même leçon que
+ * pour les promesses le même jour — et on ne touche PAS aux apostrophes, qui
+ * portent l'élision française.
+ */
+function sansCitations(phrase: string): string {
+  return phrase.replace(/«[^»]*»/gu, " ").replace(/"[^"\n]*"/gu, " ");
+}
 
 /**
  * Ce qui disqualifie une phrase malgré un marqueur.
@@ -114,15 +196,28 @@ export function extraireConsignes(message: string): ReadonlyArray<Consigne> {
     // une consigne éternelle avant ce garde (audit 29/07).
     if (phrase.endsWith("?")) continue;
 
-    const interdit = MOTIFS_INTERDIT.some((motif) => motif.test(phrase));
-    const imposeFort = !interdit && MOTIFS_IMPOSE.some((motif) => motif.test(phrase));
+    // Ce que l'humain COLLE n'est pas ce qu'il DEMANDE. Le mineur reçoit le
+    // message entier ; sans ces deux gardes, un article, une doc ou la
+    // réponse d'un autre assistant deviennent loi permanente dans tous les
+    // projets — constaté le 31/07 sur cinq lignes d'un coup.
+    if (VOUVOIEMENT.test(phrase)) continue;
+    const jugee = sansCitations(phrase).trim();
+
+    const interdit =
+      MOTIFS_INTERDIT.some((motif) => motif.test(jugee)) ||
+      MOTIFS_INTERDIT_ADRESSES.some((motif) => motif.test(jugee));
+    const imposeFort = !interdit && MOTIFS_IMPOSE.some((motif) => motif.test(jugee));
     const imposeFaible =
-      !interdit &&
-      !imposeFort &&
-      PHRASE_ADRESSEE.test(phrase) &&
-      MOTIFS_IMPOSE_FAIBLES.some((motif) => motif.test(phrase));
+      !interdit && !imposeFort && MOTIFS_IMPOSE_FAIBLES.some((motif) => motif.test(jugee));
     const impose = imposeFort || imposeFaible;
     if (!interdit && !impose) continue;
+    // L'ADRESSE EST EXIGÉE POUR TOUTES LES NATURES, plus seulement pour les
+    // marqueurs faibles. C'était la porte d'entrée du texte tiers : « L'état
+    // ne dépend plus du résumé » et « À utiliser systématiquement pour :
+    // exploration de codebase » portent un marqueur fort et ne s'adressent à
+    // personne. Une consigne parle À l'agent ; une phrase qui n'adresse
+    // personne décrit un monde, elle ne demande rien.
+    if (!PHRASE_ADRESSEE.test(jugee)) continue;
     // Le filtre de portée s'applique aux OBLIGATIONS (« il faut que tu
     // corriges ce bouton » = tâche du jour), jamais aux interdictions : une
     // vraie interdiction (« ne fais jamais ça ») gagne toujours sur lui —

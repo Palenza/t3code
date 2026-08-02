@@ -3,10 +3,10 @@ import { memo, useCallback, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 
 import { useEnvironmentIdentificationMode } from "../../hooks/useSettings";
+import { APP_BUILD_VERSION, APP_DISPLAY_NAME } from "../../branding";
 import { cn } from "../../lib/utils";
 import { SidebarCarnet } from "./SidebarCarnet";
 import { SidebarModeTravail } from "./SidebarModeTravail";
-import { SidebarMemoire } from "./SidebarMemoire";
 import { GeneralSettingsPanel, ProviderSettingsPanel } from "../settings/SettingsPanels";
 import { TableauLocalSettingsPanel } from "../settings/TableauLocalSettings";
 import { Popover, PopoverPopup, PopoverTrigger } from "../ui/popover";
@@ -78,6 +78,12 @@ export const SidebarChromeHeader = memo(function SidebarChromeHeader({
 });
 
 function SidebarBrand({ onBackdrop }: { onBackdrop: boolean }) {
+  // LA SIGNATURE DE RAPTOR, et rien d'autre.
+  //
+  // Cet en-tête disait « T3 · Code · RAPTOR » : le glyphe de l'amont, son nom,
+  // et le nôtre en troisième position. Décision fondateur du 02/08 — « je veux
+  // me détacher absolument des mentions de l'amont, moi c'est Raptor » — le
+  // mot-signature devient le tout. On garde la braise : c'était déjà la nôtre.
   return (
     <Link
       aria-label="Go to threads"
@@ -87,56 +93,20 @@ function SidebarBrand({ onBackdrop }: { onBackdrop: boolean }) {
       )}
       to="/"
     >
-      <T3Wordmark />
-      <span
-        className={cn(
-          "sidebar-brand-word truncate text-base font-medium tracking-tight",
-          // BLANC PUR sur le bandeau (demande fondateur 29/07) : sur
-          // l'ardoise griffée, un gris se noie.
-          onBackdrop ? "text-white" : "text-muted-foreground",
-        )}
-      >
-        Code
-      </span>
-      {/* Le canal du fork, dit à sa place : « T3 Code Raptor ». En braise
-          cuivre sur le bandeau griffé, pour prolonger l'icône. */}
       {/* RAPTOR : braise dégradée + halo, comme une signature chauffée à
           blanc. Le dégradé est peint DANS le texte (background-clip), donc
           il garde son éclat sur n'importe quelle couleur de bandeau. */}
       <span
         className={cn(
-          "sidebar-brand-word truncate text-[13px] font-bold uppercase tracking-[0.2em]",
+          "sidebar-brand-word truncate text-[15px] font-bold uppercase tracking-[0.22em]",
           onBackdrop
             ? "bg-gradient-to-r from-[#ffd9a8] via-[#ff9d4d] to-[#ff5a1f] bg-clip-text text-transparent drop-shadow-[0_0_6px_rgba(255,120,40,0.55)]"
-            : "text-muted-foreground/70",
+            : "text-foreground",
         )}
       >
         Raptor
       </span>
     </Link>
-  );
-}
-
-function T3Wordmark() {
-  // Fork identity (29/07 au soir) : le glyphe redit T3 — le fork garde le nom
-  // amont, son canal s'appelle RAPTOR. Le T est le dessin amont ; le 3 est
-  // tracé à la même graisse.
-  return (
-    <svg
-      aria-label="T3"
-      className="h-3.5 w-auto shrink-0"
-      viewBox="15.5309 37 94.3941 56.96"
-      xmlns="http://www.w3.org/2000/svg"
-    >
-      <path
-        d="M33.4509 93V47.56H15.5309V37H64.3309V47.56H46.4109V93H33.4509Z"
-        fill="currentColor"
-      />
-      <path
-        d="M69 93.96C63.6 93.96 59.2 92.6 55.8 89.88C52.4 87.16 50.5 83.24 50.1 78.12H62.9C63.2 80.36 64.02 82.02 65.36 83.1C66.7 84.18 68.5 84.72 70.76 84.72C73.16 84.72 75.02 84.1 76.34 82.86C77.66 81.62 78.32 79.94 78.32 77.82C78.32 75.5 77.56 73.76 76.04 72.6C74.52 71.44 72.28 70.86 69.32 70.86H65.9V61.98H69.32C71.88 61.98 73.82 61.42 75.14 60.3C76.46 59.18 77.12 57.6 77.12 55.56C77.12 53.64 76.54 52.14 75.38 51.06C74.22 49.98 72.6 49.44 70.52 49.44C68.44 49.44 66.8 49.98 65.6 51.06C64.4 52.14 63.68 53.68 63.44 55.68H50.82C51.18 50.8 52.98 47.02 56.22 44.34C59.46 41.66 63.72 40.32 69 40.32C74.6 40.32 79.02 41.68 82.26 44.4C85.5 47.12 87.12 50.78 87.12 55.38C87.12 58.02 86.44 60.3 85.08 62.22C83.72 64.14 81.84 65.46 79.44 66.18V66.42C82.32 67.06 84.56 68.44 86.16 70.56C87.76 72.68 88.56 75.28 88.56 78.36C88.56 83.16 86.82 86.94 83.34 89.7C79.86 92.54 74.98 93.96 69 93.96Z"
-        fill="currentColor"
-      />
-    </svg>
   );
 }
 
@@ -251,7 +221,7 @@ export const SidebarChromeFooter = memo(function SidebarChromeFooter() {
   }, [navigateClosingMobile]);
 
   return (
-    <SidebarFooter className="p-2">
+    <SidebarFooter className="p-[var(--sidebar-content-inset)]">
       <SidebarForkUpdatePill />
       <SidebarProviderUpdatePill />
       <SidebarUpdatePill />
@@ -266,9 +236,10 @@ export const SidebarChromeFooter = memo(function SidebarChromeFooter() {
       {/* Le REGLAGE vit dans le composeur (à côté de Build) ; ici ne reste que
           le CRI quand un mode restrictif désarme les agents. */}
       <SidebarModeTravail />
-      {/* La mémoire AVANT le mode : ce que l'app a retenu de toi pèse sur
-          chaque session, et c'était jusqu'ici invisible et irrévocable. */}
-      <SidebarMemoire />
+      {/* La mémoire a DÉMÉNAGÉ dans la barre du composeur, à côté du modèle et
+          du mode — même registre : sous quelles règles ce message part-il ?
+          La garder ici EN PLUS faisait deux entrées pour une seule chose, et
+          rendait la colonne plus longue sans rien apprendre de neuf. */}
       <SidebarMenu>
         {SIDEBAR_QUICK_LINKS.map((link) => (
           <SidebarMenuItem key={link.to}>
@@ -282,6 +253,28 @@ export const SidebarChromeFooter = memo(function SidebarChromeFooter() {
           </SidebarMenuButton>
         </SidebarMenuItem>
       </SidebarMenu>
+      {/* LA VERSION, EN PERMANENCE — et ce n'est pas cosmétique.
+       *
+       * Le 01/08, Enzo a piloté une app 149 commits en retard sans le savoir,
+       * pendant qu'on empilait des correctifs qu'il ne voyait pas. Quatre
+       * diagnostics faux sont nés de cet écart, et la journée entière avec.
+       * Rien à l'écran ne disait quelle version tournait.
+       *
+       * Discret par construction — un chiffre qu'on ne lit que lorsqu'on le
+       * cherche. Mais quand on le cherche, il est là, et il change à chaque
+       * DMG.
+       *
+       * `APP_BUILD_VERSION`, et surtout PAS `APP_VERSION` : le second est la
+       * version de l'app web, qui sert à la détection d'écart client/serveur
+       * et que seule la CI bumpe. Il affichait 0.0.31 pendant qu'Enzo faisait
+       * tourner un DMG 0.0.73 (sa capture du 02/08) — un numéro faux à
+       * l'endroit exact censé empêcher les numéros faux. */}
+      <div
+        className="px-2 pb-0.5 text-right text-[10px] text-sidebar-muted-foreground/45 tabular-nums"
+        title={`${APP_DISPLAY_NAME} ${APP_BUILD_VERSION}`}
+      >
+        v{APP_BUILD_VERSION}
+      </div>
     </SidebarFooter>
   );
 });

@@ -485,6 +485,10 @@ const make = Effect.gen(function* () {
       return yield* writeFileStringAtomically({
         filePath: settingsPath,
         contents: `${sparseSettingsJson}\n`,
+        // Il ne porte pas de secret — les jetons vivent au trousseau — mais il
+        // porte le `homePath` de chaque compte, c'est-à-dire l'adresse du
+        // fichier d'identifiants. Ce n'est pas une fuite, c'est une carte.
+        proprietaireSeul: true,
       }).pipe(
         Effect.provideService(FileSystem.FileSystem, fs),
         Effect.provideService(Path.Path, pathService),

@@ -276,7 +276,7 @@ export function VoiceDictionarySection(props: {
             setPasteText(event.currentTarget.value);
             setPasteReport(null);
           }}
-          placeholder={"té trois code, pé trois -> T3 Code\nfable cinq -> Fable 5\nPalenza"}
+          placeholder={"raptore, rapetore -> Raptor\nfable cinq -> Fable 5\nPalenza"}
           rows={5}
           disabled={props.degraded}
           aria-label="Paste dictionary entries"

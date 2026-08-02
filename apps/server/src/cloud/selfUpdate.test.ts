@@ -1,5 +1,6 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, it } from "@effect/vitest";
+import * as DateTime from "effect/DateTime";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -16,6 +17,8 @@ import {
 } from "@t3tools/shared/hostProcess";
 
 import * as ServerConfig from "../config.ts";
+import { PersistenceSqlError } from "../persistence/Errors.ts";
+import * as ToursEnVol from "../persistence/ToursEnVol.ts";
 import * as ProcessRunner from "../processRunner.ts";
 import {
   BOOT_SERVICE_UNIT_ENV,
@@ -25,6 +28,30 @@ import {
 import * as SelfUpdate from "./selfUpdate.ts";
 
 const NODE_PATH = "/usr/local/bin/node";
+
+/**
+ * Des tours d'agent non clos, décrits par leur ancienneté en minutes.
+ *
+ * L'instant de départ se calcule à la lecture, à partir de l'horloge du test :
+ * un âge fixé une fois pour toutes dériverait dès que le test avance le temps.
+ */
+const makeToursEnVolLayer = (agesEnMinutes: ReadonlyArray<number>, illisible: boolean) =>
+  Layer.succeed(ToursEnVol.ToursEnVolRepository, {
+    lister: illisible
+      ? Effect.fail(
+          new PersistenceSqlError({
+            operation: "ToursEnVol.lister",
+            cause: new Error("projection illisible"),
+          }),
+        )
+      : Effect.gen(function* () {
+          const maintenant = yield* DateTime.now;
+          return agesEnMinutes.map((minutes, index) => ({
+            filId: `fil-${index}`,
+            commenceA: DateTime.subtract(maintenant, { minutes }),
+          }));
+        }),
+  });
 
 const eventuallyFileString = Effect.fn("test.eventuallyFileString")(function* (
   filePath: string,
@@ -284,6 +311,10 @@ it.layer(NodeServices.layer)("ServerSelfUpdate.update", (it) => {
     readonly failWhen?: (command: string, args: ReadonlyArray<string>) => boolean;
     readonly stdoutFor?: (command: string, args: ReadonlyArray<string>) => string | undefined;
     readonly failSpawn?: boolean;
+    /** Tours d'agent non clos, en minutes d'ancienneté (n°57). */
+    readonly toursEnVol?: ReadonlyArray<number>;
+    /** La projection est illisible : on ne doit pas en conclure « rien en vol ». */
+    readonly toursIllisibles?: boolean;
   }) {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
@@ -358,6 +389,7 @@ it.layer(NodeServices.layer)("ServerSelfUpdate.update", (it) => {
             stdoutFor: options?.stdoutFor,
           }),
           configLayer,
+          makeToursEnVolLayer(options?.toursEnVol ?? [], options?.toursIllisibles === true),
         ),
       ),
       provideHostRefs({ platform: options?.platform ?? "linux", env, entryPath }),
@@ -521,6 +553,106 @@ it.layer(NodeServices.layer)("ServerSelfUpdate.update", (it) => {
     }).pipe(Effect.provide(TestClock.layer())),
   );
 
+  // ── n°57 · refuser plutôt que courser ────────────────────────────────────
+  //
+  // Un redémarrage tue tout tour en vol : il passe à `interrupted`, état
+  // terminal, il ne reprend pas. Cette mise à jour arrive par RPC, sans
+  // personne devant la machine — donc on ne tranche pas à sa place.
+
+  it.effect("refuses to restart while an agent turn is in flight, and installs nothing", () =>
+    Effect.gen(function* () {
+      const context = yield* makeContext({ toursEnVol: [3, 41] });
+      const error = yield* context.service.update({ targetVersion: "0.0.29" }).pipe(Effect.flip);
+      assert.include(error.reason, "Redémarrage refusé");
+      // Le premier regard échoue vite : rien n'est même téléchargé.
+      assert.lengthOf(context.commands, 0);
+      yield* TestClock.adjust(Duration.seconds(10));
+      assert.lengthOf(context.spawns, 0);
+      assert.equal(context.exitCount(), 0);
+    }).pipe(Effect.provide(TestClock.layer())),
+  );
+
+  it.effect("the refusal names how many turns, how old, and what unblocks it", () =>
+    Effect.gen(function* () {
+      // Nos erreurs sont lues par un agent, pas par un humain (A7) : un refus
+      // qui ne dit pas quoi faire ensuite ne se répare pas.
+      const context = yield* makeContext({ toursEnVol: [3, 41] });
+      const error = yield* context.service.update({ targetVersion: "0.0.29" }).pipe(Effect.flip);
+      assert.include(error.reason, "2 tours en vol");
+      assert.include(error.reason, "41 min");
+      assert.include(error.reason, "état terminal");
+      assert.include(error.reason, "forçant explicitement");
+    }).pipe(Effect.provide(TestClock.layer())),
+  );
+
+  it.effect("forcing restarts anyway — and the log carries the receipt", () =>
+    Effect.gen(function* () {
+      const context = yield* makeContext({ toursEnVol: [3, 41] });
+      const result = yield* context.service.update({
+        targetVersion: "0.0.29",
+        malgreLeTravailEnCours: true,
+      });
+      assert.deepEqual(result, { targetVersion: "0.0.29", method: "respawn" });
+      yield* TestClock.adjust(Duration.seconds(10));
+      assert.equal(context.exitCount(), 1);
+    }).pipe(Effect.provide(TestClock.layer())),
+  );
+
+  it.effect("a turn that starts DURING the download still stops the restart", () =>
+    Effect.gen(function* () {
+      // C'est le second regard qui protège vraiment : le téléchargement et le
+      // préflight durent des minutes. Le tour apparaît pendant le préflight,
+      // donc après le premier regard.
+      const toursEnVol: Array<number> = [];
+      const context = yield* makeContext({
+        toursEnVol,
+        stdoutFor: (command) => {
+          if (command === NODE_PATH) toursEnVol.push(7);
+          return undefined;
+        },
+      });
+      const error = yield* context.service.update({ targetVersion: "0.0.29" }).pipe(Effect.flip);
+      assert.include(error.reason, "Redémarrage refusé");
+      assert.include(error.reason, "1 tour en vol");
+      // Refuser ici ne coûte rien : la version est installée à côté, inerte.
+      assert.include(error.reason, "déjà installée et vérifiée");
+      assert.deepEqual(
+        context.commands.map((entry) => entry.command),
+        ["npm", NODE_PATH],
+      );
+      yield* TestClock.adjust(Duration.seconds(10));
+      assert.equal(context.exitCount(), 0);
+    }).pipe(Effect.provide(TestClock.layer())),
+  );
+
+  it.effect("a stale row does not condemn the server to never update again", () =>
+    Effect.gen(function* () {
+      // 240 min = 2,8× le plus long tour jamais mesuré (85,2 min sur 583).
+      // Au-delà, ce n'est plus du travail : c'est un tour dont le processus
+      // est mort sans reclasser sa ligne. Refuser à vie serait une panne.
+      const context = yield* makeContext({ toursEnVol: [999] });
+      const result = yield* context.service.update({ targetVersion: "0.0.29" });
+      assert.deepEqual(result, { targetVersion: "0.0.29", method: "respawn" });
+    }).pipe(Effect.provide(TestClock.layer())),
+  );
+
+  it.effect("an unreadable projection refuses — it never reads as « nothing in flight »", () =>
+    Effect.gen(function* () {
+      const context = yield* makeContext({ toursIllisibles: true });
+      const error = yield* context.service.update({ targetVersion: "0.0.29" }).pipe(Effect.flip);
+      assert.include(error.reason, "impossible de lire les tours en cours");
+      assert.lengthOf(context.commands, 0);
+
+      // Mais la porte reste ouverte : un serveur cassé doit pouvoir être
+      // remplacé, sinon la panne de lecture devient définitive.
+      const forced = yield* context.service.update({
+        targetVersion: "0.0.29",
+        malgreLeTravailEnCours: true,
+      });
+      assert.deepEqual(forced, { targetVersion: "0.0.29", method: "respawn" });
+    }).pipe(Effect.provide(TestClock.layer())),
+  );
+
   it.effect("rewrites the systemd unit and restarts the boot service", () =>
     Effect.gen(function* () {
       const context = yield* makeContext({ bootService: true });
@@ -545,11 +677,19 @@ it.layer(NodeServices.layer)("ServerSelfUpdate.update", (it) => {
       yield* TestClock.adjust(Duration.seconds(10));
       assert.deepEqual(context.commands[3], {
         command: "systemctl",
-        args: ["--user", "restart", "t3code.service"],
+        args: ["--user", "restart", "--no-block", "t3code.service"],
       });
       assert.lengthOf(context.spawns, 0);
       // systemd replaces the process; the server must not exit itself.
       assert.equal(context.exitCount(), 0);
+
+      // The queued restart returns while this process is still shutting
+      // down; the lock must stay held so a second update cannot rewrite the
+      // unit mid-teardown.
+      const concurrentError = yield* context.service
+        .update({ targetVersion: "0.0.30" })
+        .pipe(Effect.flip);
+      assert.include(concurrentError.reason, "already in progress");
     }).pipe(Effect.provide(TestClock.layer())),
   );
 
@@ -583,7 +723,7 @@ it.layer(NodeServices.layer)("ServerSelfUpdate.update", (it) => {
       assert.deepEqual(
         context.commands.slice(-2).map((entry) => entry.args),
         [
-          ["--user", "restart", BOOT_SERVICE_UNIT_FILE],
+          ["--user", "restart", "--no-block", BOOT_SERVICE_UNIT_FILE],
           ["--user", "daemon-reload"],
         ],
       );

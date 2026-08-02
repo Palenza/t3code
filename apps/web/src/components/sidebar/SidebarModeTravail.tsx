@@ -196,6 +196,19 @@ export function ModeTravailComposerControl() {
           <button
             type="button"
             aria-label={`Mode de travail : ${modeActif?.nom ?? "aucune restriction"}`}
+            // L'explication du mode ACTIF, au survol. `role` et
+            // `quandUtiliser` vivent déjà dans la donnée du mode et n'étaient
+            // montrés nulle part : un picto bouclier et un mot ne disent pas
+            // ce que l'agent a le droit de faire. En `title` plutôt qu'en
+            // info-bulle React, pour ne pas envelopper un déclencheur de
+            // popover dans un second déclencheur.
+            title={
+              modeActif
+                ? [modeActif.nom, modeActif.role, modeActif.quandUtiliser]
+                    .filter(Boolean)
+                    .join("\n")
+                : "Aucun mode : l'agent n'est restreint sur rien."
+            }
             className={cn(
               "flex h-7 shrink-0 cursor-pointer items-center gap-1.5 rounded-md px-2 text-xs whitespace-nowrap transition-colors",
               restreint
@@ -204,9 +217,11 @@ export function ModeTravailComposerControl() {
             )}
           >
             <ShieldIcon className="size-3.5 shrink-0" />
-            <span className="hidden sm:inline">
-              {restreint ? (modeActif?.nom ?? "Mode") : "Mode"}
-            </span>
+            {/* Le mode ACTIF se lit toujours, pas seulement quand il
+                restreint : « Mode » tout court ne dit pas dans lequel on est,
+                et l'Atelier — le plus permissif — était justement celui qu'on
+                ne voyait jamais nommé. */}
+            <span className="hidden sm:inline">{modeActif?.nom ?? "Mode"}</span>
           </button>
         }
       />

@@ -71,6 +71,7 @@ import * as Stream from "effect/Stream";
 import { resolveAttachmentPath } from "../../attachmentStore.ts";
 import { ServerConfig } from "../../config.ts";
 import * as McpProviderSession from "../../mcp/McpProviderSession.ts";
+import { garderLaSortie } from "../gardeDeSortieDOutil.ts";
 import { resolveClaudeSdkExecutablePath } from "../Drivers/ClaudeExecutable.ts";
 import { makeClaudeEnvironment } from "../Drivers/ClaudeHome.ts";
 import {
@@ -3653,6 +3654,22 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
         includePartialMessages: true,
         canUseTool,
         env: claudeEnvironment,
+        // La PORTE DE SORTIE, étendue aux outils du SDK (n°71). Elle ne gardait
+        // que nos 23 outils MCP : `Bash`, `Read`, `Grep`, `WebFetch` rendaient
+        // leur sortie au modèle sans jamais la croiser — alors que ce sont eux
+        // qui rapportent le plus de contenu tiers. Le rappel ne tronque rien et
+        // ne change pas la forme ; il rend `undefined` quand il n'y a rien à
+        // faire, et le SDK garde alors la sortie originale à l'octet près.
+        hooks: {
+          PostToolUse: [
+            {
+              hooks: [
+                (entree: { readonly tool_response?: unknown }) =>
+                  Promise.resolve(garderLaSortie(entree.tool_response) ?? { continue: true }),
+              ],
+            },
+          ],
+        } as unknown as NonNullable<ClaudeQueryOptions["hooks"]>,
         ...(input.cwd ? { additionalDirectories: [input.cwd] } : {}),
         ...(Object.keys(extraArgs).length > 0 ? { extraArgs } : {}),
         ...(mcpSession
@@ -3907,15 +3924,38 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
     // "default" restores the session's original permission mode.
     // When interactionMode is absent we leave the current mode unchanged.
     if (input.interactionMode === "plan") {
+      // ENTRER en plan est plus RESTRICTIF : si ça échoue, continuer ferait
+      // tourner le tour moins bridé que demandé. Celui-là doit rester bloquant.
       yield* Effect.tryPromise({
         try: () => context.query.setPermissionMode("plan"),
         catch: (cause) => toRequestError(input.threadId, "turn/setPermissionMode", cause),
       });
     } else if (input.interactionMode === "default") {
+      // REVENIR au mode de base ne peut RIEN relâcher de dangereux : si l'appel
+      // échoue, on reste en plan, c'est-à-dire plus restrictif. Le faire échouer
+      // était donc du zèle pur — et ce zèle a fabriqué un VERROU.
+      //
+      // Mordu le 01/08 : Enzo, coincé en mode plan, voyait « Provider turn
+      // start failed — turn/setPermissionMode failed » à chaque envoi. L'appel
+      // qui devait le LIBÉRER tuait le tour avant qu'il ne démarre. Sortir
+      // demandait un tour, le tour exigeait la sortie.
+      //
+      // La cause réelle était ailleurs (session d'adaptateur fermée), et ce
+      // message la MASQUAIT : il accusait le changement de mode alors que rien
+      // n'aurait fonctionné de toute façon. On avale donc l'échec, on garde le
+      // mode courant, et le tour part — s'il y a une vraie panne dessous, elle
+      // se dira elle-même, à son nom.
       yield* Effect.tryPromise({
         try: () => context.query.setPermissionMode(context.basePermissionMode ?? "default"),
         catch: (cause) => toRequestError(input.threadId, "turn/setPermissionMode", cause),
-      });
+      }).pipe(
+        Effect.catchCause((cause) =>
+          Effect.logWarning("turn/setPermissionMode: retour au mode de base impossible", {
+            threadId: input.threadId,
+            cause,
+          }),
+        ),
+      );
     }
 
     const turnId = steeringTurnState?.turnId ?? TurnId.make(yield* randomUUIDv4);

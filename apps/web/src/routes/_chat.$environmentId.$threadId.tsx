@@ -6,6 +6,7 @@ import { threadHasStarted } from "../components/ChatView.logic";
 import { finalizePromotedDraftThreadByRef, useComposerDraftStore } from "../composerDraftStore";
 import { resolveThreadRouteRef, resolveThreadRouteRenderState } from "../threadRoutes";
 import { resolveThreadSyncPhase } from "../threadSync";
+import { useUiStateStore } from "../uiStateStore";
 import { SidebarInset } from "~/components/ui/sidebar";
 import {
   useEnvironmentThreadRefs,
@@ -73,6 +74,23 @@ function ChatThreadRouteView() {
     }
     finalizePromotedDraftThreadByRef(threadRef);
   }, [draftThread, serverThreadStarted, threadRef]);
+
+  /**
+   * ON NOTE LE FIL OUVERT — « ça doit toujours se redémarrer là où tu as
+   * quitté ».
+   *
+   * Ici et pas ailleurs : c'est le seul endroit du code où « un fil est
+   * ouvert » est un fait, pas une déduction. On attend `renderState ===
+   * "ready"` pour ne jamais retenir un fil qui s'est révélé absent — sinon
+   * on se noterait une destination qu'on vient soi-même de juger morte, et
+   * le prochain lancement rejouerait cette mort.
+   */
+  useEffect(() => {
+    if (!threadRef || renderState !== "ready") return;
+    useUiStateStore
+      .getState()
+      .setLastOpenedThreadKey(`${threadRef.environmentId}:${threadRef.threadId}`);
+  }, [renderState, threadRef]);
 
   if (!threadRef) {
     return null;

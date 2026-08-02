@@ -64,7 +64,11 @@ export type NatureEchec =
   | "quota" // le compte est à sec — écarter, réessayer ailleurs
   | "authentification-morte" // jeton révoqué — écarter DÉFINITIVEMENT
   | "transitoire" // hoquet réseau/serveur — réessayer ailleurs
-  | "notre-faute"; // requête invalide — NE PAS basculer, la faute suivrait
+  | "notre-faute" // requête invalide — NE PAS basculer, la faute suivrait
+  // ── Les deux suivantes viennent d'Hermès (`agent/error_classifier.py`), et
+  //    elles existent parce que leur REMÈDE diffère de tout le reste.
+  | "contexte-trop-grand" // la charge dépasse la fenêtre — COMPRESSER, pas basculer
+  | "surcharge-fournisseur"; // 529/overloaded — ATTENDRE : ça touche tous les comptes
 
 export interface Verdict {
   readonly nature: NatureEchec;
@@ -107,6 +111,33 @@ const CAUSES_MORTELLES: ReadonlyArray<RegExp> = [
   /could not be refreshed/i,
 ];
 
+/**
+ * L'ÉTAT DE SESSION CASSÉ — et la bascule est le pire remède.
+ *
+ * Deux pannes vues en vrai le 31/07, signalées par le drapeau `reconnu` :
+ *
+ *   [ede_diagnostic] result_type=user last_content_type=n/a stop_reason=tool_use
+ *   No conversation found with session ID: d9b0e2ac-…
+ *
+ * Aucune ne vient du compte. La première dit que le tour s'est arrêté sur un
+ * appel d'outil dont le contenu manque — un état de conversation incohérent.
+ * La seconde dit que la CLI ne retrouve pas la session sur disque.
+ *
+ * Les deux tombaient dans « transitoire », donc le pool BASCULAIT de compte.
+ * Or chaque compte a son propre dossier de sessions : le suivant ne retrouvera
+ * pas davantage cette conversation, et le suivant non plus. On brûlait donc
+ * les comptes un par un pour une faute qui n'est celle d'aucun d'eux — les
+ * quotas à 95 % et 100 % du 31/07 se sont vidés en partie comme ça.
+ *
+ * `notre-faute` : on NE bascule PAS, on s'arrête et on le dit.
+ */
+const CAUSES_SESSION_CASSEE: ReadonlyArray<RegExp> = [
+  /no conversation found with session id/i,
+  /\[ede_diagnostic\]/i,
+  /adapter thread is closed/i,
+  /session (?:is )?closed/i,
+];
+
 /** Un quota atteint — le compte reviendra, mais pas tout de suite. */
 const CAUSES_QUOTA: ReadonlyArray<RegExp> = [
   /usage limit reached/i,
@@ -131,6 +162,44 @@ const CAUSES_QUOTA: ReadonlyArray<RegExp> = [
  * solde ne revient qu'après une recharge. On l'écarte donc pour longtemps
  * plutôt que de le retenter toutes les heures pour rien.
  */
+/**
+ * Le fournisseur est débordé — ça n'appartient à AUCUN compte.
+ *
+ * Aspiré de `_OVERLOADED_PATTERNS` d'Hermès. Sans cette famille, un 529
+ * d'Anthropic tombe dans « transitoire » et déclenche une bascule : on brûle
+ * le tour d'un second compte Max sur une panne qui touche tout le
+ * fournisseur, et le second échoue exactement pareil.
+ */
+const CAUSES_SURCHARGE: ReadonlyArray<RegExp> = [
+  /\boverloaded\b/iu,
+  /\bover\s*capacity\b/iu,
+  /\bat\s+capacity\b/iu,
+  /service (?:is |may be )?temporarily overloaded/iu,
+];
+
+/**
+ * La charge dépasse la fenêtre — basculer la reproduirait à l'identique.
+ *
+ * Aspiré de `_CONTEXT_OVERFLOW_PATTERNS`. Le remède n'est ni la bascule ni
+ * l'abandon : c'est de COMPRESSER et de rejouer sur le même compte.
+ *
+ * ⚠️ ORDRE, et c'est un piège qu'ils ont payé : ces motifs se testent APRÈS
+ * ceux de session cassée et de timeout. Un avis de timeout mentionne souvent
+ * « max_tokens » comme cause possible — et envoyait donc chez eux des sessions
+ * SAINES en compression inutile.
+ */
+const CAUSES_CONTEXTE_PLEIN: ReadonlyArray<RegExp> = [
+  /context (?:length|size|window)/iu,
+  /maximum context/iu,
+  /prompt is too long/iu,
+  /prompt exceeds max length/iu,
+  /too many tokens/iu,
+  /token limit/iu,
+  /maximum number of tokens/iu,
+  /request (?:entity )?too large/iu,
+  /request_too_large/iu,
+];
+
 const CAUSES_SOLDE: ReadonlyArray<RegExp> = [
   /out of usage credits/i,
   /insufficient credits/i,
@@ -141,6 +210,14 @@ const CAUSES_SOLDE: ReadonlyArray<RegExp> = [
 
 /** Un solde ne se recharge pas tout seul : inutile de sonder toutes les heures. */
 const REPRISE_SOLDE_MS = 12 * 60 * 60_000;
+/**
+ * Combien on attend après une surcharge du fournisseur.
+ *
+ * Court, parce qu'une surcharge se résorbe en minutes — contrairement à un
+ * solde vide. Le fournisseur donne souvent un `Retry-After` ; celui-ci n'est
+ * que le repli.
+ */
+const REPRISE_SURCHARGE_MS = 60_000;
 
 /**
  * Délai avant de retenter un compte écarté, selon le code HTTP.
@@ -200,6 +277,32 @@ export function classerEchec(entree: {
 
   if (CAUSES_MORTELLES.some((motif) => motif.test(message))) {
     return { nature: "authentification-morte", reconnu: true };
+  }
+
+  // AVANT tout le reste : une session cassée n'appartient à aucun compte.
+  // Placé ici parce qu'un de ces messages peut arriver avec un code 5xx, qui
+  // le classerait « transitoire » plus bas — et relancerait la bascule.
+  if (CAUSES_SESSION_CASSEE.some((motif) => motif.test(message))) {
+    return { nature: "notre-faute", reconnu: true };
+  }
+
+  // La SURCHARGE avant tout code : un 529 est un 5xx, donc il partirait en
+  // « transitoire » plus bas — et déclencherait une bascule qui brûle le tour
+  // d'un second compte sur une panne qui touche tout le fournisseur.
+  if (CAUSES_SURCHARGE.some((motif) => motif.test(message))) {
+    return {
+      nature: "surcharge-fournisseur",
+      reconnu: true,
+      repriseA:
+        entree.repriseAnnoncee ?? new Date(entree.maintenant + REPRISE_SURCHARGE_MS).toISOString(),
+    };
+  }
+
+  // Le CONTEXTE PLEIN avant le test des 4xx : il arrive souvent en 400, et
+  // serait donc classé « notre-faute » — donc abandonné, alors que le remède
+  // existe et qu'il est simple : compresser et rejouer sur le MÊME compte.
+  if (CAUSES_CONTEXTE_PLEIN.some((motif) => motif.test(message))) {
+    return { nature: "contexte-trop-grand", reconnu: true };
   }
 
   // 4xx hors 401/408/429 : c'est NOTRE requête qui est mauvaise. Basculer

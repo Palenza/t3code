@@ -151,8 +151,18 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
             variant={props.triggerVariant ?? "ghost"}
             data-chat-provider-model-picker="true"
             className={cn(
-              "min-w-0 justify-between whitespace-nowrap",
-              props.compact ? "max-w-42 shrink-0" : "max-w-48 shrink sm:max-w-56",
+              // LE NOM DU MODÈLE NE SE COUPE PAS — demande fondateur 02/08 :
+              // « au lieu de Claude Op…, on veut voir les noms complets, même
+              // si je passe à Claude Fable 5 ou autre ».
+              //
+              // C'étaient `max-w-42` / `max-w-48` (168 / 192 px) : avec
+              // l'icône, l'espace et le chevron, « Claude Opus 5 » n'y tenait
+              // plus. Savoir QUEL modèle répond est la première chose qu'on
+              // lit sur cette barre ; un nom coupé la rend illisible pile là
+              // où elle sert. Le nom prend donc la place qu'il lui faut, et
+              // c'est aux contrôles voisins de céder — la barre a déjà son
+              // menu compact pour les fenêtres étroites.
+              "shrink-0 justify-between whitespace-nowrap",
               props.triggerClassName,
             )}
             disabled={props.disabled}
@@ -165,21 +175,52 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
               driverKind={activeEntry.driverKind}
               displayName={activeEntry.displayName}
               accentColor={activeEntry.accentColor}
-              showBadge={showInstanceBadge}
+              // AUCUNE PASTILLE SUR LE LOGO — signalé trois fois, la dernière
+              // le 02/08 : « bug réintroduit, des boutons sous le logo Claude ».
+              //
+              // Elle revient d'amont (#3379) à chaque synchro du fork. Son
+              // intention est bonne — dire qu'il y a plusieurs comptes — mais
+              // un disque cerclé collé sous un logo se lit comme un BOUTON,
+              // pas comme une marque : on croit pouvoir cliquer dessus. Et
+              // l'information est déjà là où on la cherche — l'info-bulle
+              // nomme le compte en entier, et chaque ligne du sélecteur porte
+              // le sien. Une pastille qui répète une information disponible ne
+              // paie pas le bruit qu'elle coûte.
+              showBadge={false}
+              badgeContent="none"
               className="size-4"
               iconClassName={cn("size-4", props.activeProviderIconClassName)}
-              indicatorBackground="var(--input)"
-              badgeClassName={cn(
-                "right-[-0.125rem] bottom-[-0.125rem] h-3 min-w-3",
-                "px-0.5 text-[7px]",
-              )}
+              // UN ANNEAU DE DÉCOUPE DOIT ÊTRE OPAQUE — corrigé le 01/08.
+              //
+              // C'était `var(--input)`, qui vaut en thème sombre
+              // `--alpha(var(--color-white) / 8%)` (index.css:929) : un blanc
+              // TRANSLUCIDE. Un anneau translucide ne découpe rien, il dépose
+              // un voile pâle — et comme `ComposerControl` est un bouton
+              // fantôme sans fond, ce voile se voyait sur la surface du
+              // composeur : un disque clair derrière l'icône du modèle, que
+              // Enzo a signalé plusieurs fois.
+              //
+              // `--background` est opaque dans TOUS les thèmes (zinc-25,
+              // neutral-950, #000, un color-mix opaque) — vérifié, c'est ce
+              // qui permet à l'anneau de faire son travail : séparer, pas
+              // teinter.
+              indicatorBackground="var(--background)"
+              badgeClassName="right-[-0.1875rem] bottom-[-0.1875rem] size-2 min-w-0 border-2 p-0"
             />
           ) : null}
           <Tooltip>
-            <TooltipTrigger render={<span className="min-w-0 flex-1 overflow-hidden truncate" />}>
+            <TooltipTrigger render={<span className="whitespace-nowrap" />}>
               {triggerTitle}
             </TooltipTrigger>
-            <TooltipPopup side="top">{triggerLabel}</TooltipPopup>
+            {/* La pastille dit QU'IL Y EN A PLUSIEURS ; l'info-bulle dit
+                LEQUEL. C'est le seul endroit où un nom de compte tient en
+                entier — sur l'icône, il ne tenait qu'en deux lettres
+                illisibles. */}
+            <TooltipPopup side="top">
+              {showInstanceBadge && activeEntry
+                ? `${triggerLabel} — ${activeEntry.displayName}`
+                : triggerLabel}
+            </TooltipPopup>
           </Tooltip>
         </span>
         <span aria-hidden="true" className="flex items-center">

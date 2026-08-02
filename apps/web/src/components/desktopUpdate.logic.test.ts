@@ -161,19 +161,35 @@ describe("getDesktopUpdateActionError", () => {
 describe("desktop update UI helpers", () => {
   it("builds the stable release URL for a downloaded version", () => {
     expect(getDesktopUpdateReleaseUrl("0.0.30")).toBe(
-      "https://github.com/pingdotgg/t3code/releases/tag/v0.0.30",
+      "https://github.com/Palenza/t3code/releases/tag/raptor-v0.0.30",
     );
   });
 
   it("builds the nightly release URL without dropping its version suffix", () => {
     expect(getDesktopUpdateReleaseUrl("0.0.30-nightly.20260728.931")).toBe(
-      "https://github.com/pingdotgg/t3code/releases/tag/v0.0.30-nightly.20260728.931",
+      "https://github.com/Palenza/t3code/releases/tag/raptor-v0.0.30-nightly.20260728.931",
     );
   });
 
   it("omits the release URL when the updater does not report a version", () => {
     expect(getDesktopUpdateReleaseUrl(null)).toBeNull();
     expect(getDesktopUpdateReleaseUrl("  ")).toBeNull();
+  });
+
+  it("pointe vers NOS releases, avec le préfixe que notre workflow produit", () => {
+    // Golden réécrit sciemment le 02/08, et voici pourquoi : le lien envoyait
+    // l'utilisateur chez l'amont. Depuis le débranding, une version de Raptor
+    // n'existe même pas là-bas — le lien tombait sur un 404, ou pire sur les
+    // notes d'une version homonyme qui n'est pas celle qui tourne.
+    //
+    // Le préfixe « raptor-v » n'est pas décoratif : le dépôt est un fork, la
+    // synchro y fait entrer les tags « v* » de l'amont, et nos releases
+    // doivent s'en distinguer. Il DOIT rester identique à celui de
+    // .github/workflows/raptor-release.yml — sinon ce lien meurt sans bruit.
+    const url = getDesktopUpdateReleaseUrl("0.0.86");
+    expect(url).toContain("/Palenza/");
+    expect(url).not.toContain("pingdotgg");
+    expect(url).toContain("/releases/tag/raptor-v0.0.86");
   });
 
   it("toasts only for actionable updater errors", () => {
@@ -232,7 +248,7 @@ describe("desktop update UI helpers", () => {
         availableVersion: "1.1.0",
         downloadedVersion: "1.1.1",
       }),
-    ).toContain("Install update 1.1.1 and restart T3 Code?");
+    ).toContain("Install update 1.1.1 and restart Raptor?");
   });
 
   it("falls back to generic install confirmation copy when no version is available", () => {
@@ -241,7 +257,7 @@ describe("desktop update UI helpers", () => {
         availableVersion: null,
         downloadedVersion: null,
       }),
-    ).toContain("Install update and restart T3 Code?");
+    ).toContain("Install update and restart Raptor?");
   });
 
   it("warns Windows users that a silent installation can take several minutes", () => {
