@@ -122,6 +122,7 @@ import {
   isProviderUpdateActive,
   type ProviderUpdateCandidate,
 } from "../ProviderUpdateLaunchNotification.logic";
+import { BandeAttention } from "./ProviderAttentionBand";
 import { ProviderInstanceCard } from "./ProviderInstanceCard";
 import { DRIVER_OPTIONS, getDriverOption } from "./providerDriverMeta";
 import {
@@ -2140,6 +2141,23 @@ export function ProviderSettingsPanel() {
               <span className="text-xs text-muted-foreground">seconds</span>
             </div>
           }
+        />
+
+        {/*
+          Ce qui a besoin d'attention, AVANT la liste. Volé à Cursor : avec
+          trois comptes, un compte au mur n'était qu'une carte parmi trois.
+        */}
+        <BandeAttention
+          providers={serverProviders}
+          nomDuCompte={(instanceId) => {
+            const ligne = rows.find((candidate) => String(candidate.instanceId) === instanceId);
+            if (ligne === undefined) return instanceId;
+            return (
+              ligne.instance.displayName?.trim() ||
+              getDriverOption(ligne.driver)?.label ||
+              String(ligne.driver)
+            );
+          }}
         />
 
         {rows.map((row, index) => {

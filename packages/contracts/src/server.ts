@@ -206,6 +206,49 @@ export const ServerProviderRateLimits = Schema.Struct({
 });
 export type ServerProviderRateLimits = typeof ServerProviderRateLimits.Type;
 
+/**
+ * L'ÉTAT D'UN COMPTE DANS LA ROTATION — ce que le moteur savait déjà et que
+ * personne ne voyait.
+ *
+ * Le pool de comptes (`comptePool.ts`) classe chaque compte en `ok`,
+ * `refroidissement` ou `mort`, avec la raison qui l'a mis là et l'instant où
+ * il redevient utilisable. Rien de tout ça ne sortait du serveur : la
+ * rotation automatique — la raison d'être de Raptor — était invisible dans ses
+ * propres réglages. Un compte pouvait être écarté depuis une heure sans
+ * qu'aucun écran ne le dise.
+ *
+ * Ce bloc voyage sur le MÊME porteur que les quotas, `ServerProvider`, et par
+ * le même flux poussé. Deux faits sur un compte, un seul tuyau.
+ */
+export const ServerProviderRotationState = Schema.Literals([
+  /** Utilisable maintenant. */
+  "ok",
+  /** Écarté temporairement ; `resumesAt` dit jusqu'à quand. */
+  "cooling",
+  /** Écarté DÉFINITIVEMENT — seule une ré-authentification le ressuscite. */
+  "dead",
+]);
+export type ServerProviderRotationState = typeof ServerProviderRotationState.Type;
+
+export const ServerProviderRotation = Schema.Struct({
+  state: ServerProviderRotationState,
+  /**
+   * Ce qui l'a mis là, tel que le serveur l'a écrit — jamais reformulé, jamais
+   * deviné. Absent quand l'état est `ok`.
+   */
+  reason: Schema.optional(TrimmedNonEmptyString),
+  /** Quand un compte en refroidissement redevient utilisable. */
+  resumesAt: Schema.optional(IsoDateTime),
+  /**
+   * Échecs « transitoires » d'affilée depuis la dernière réussite.
+   *
+   * « Transitoire » est ce que le message d'erreur laisse croire, pas un fait.
+   * Répété, il devient faux — et sans ce compteur on le croyait indéfiniment.
+   */
+  consecutiveFailures: Schema.optional(NonNegativeInt),
+});
+export type ServerProviderRotation = typeof ServerProviderRotation.Type;
+
 export const ServerProvider = Schema.Struct({
   // Routing key for the configured instance this snapshot represents. This
   // is the only stable identity consumers may use for provider routing.
@@ -251,6 +294,14 @@ export const ServerProvider = Schema.Struct({
   // Optional because it only ever appears after the provider has reported at
   // least once. Absent means "nothing reported yet", never "no limit".
   rateLimits: Schema.optionalKey(ServerProviderRateLimits),
+  /**
+   * L'état de ce compte dans la rotation automatique.
+   *
+   * Optionnel pour la même raison que `rateLimits` : absent veut dire « le
+   * serveur n'a rien à en dire », jamais « tout va bien ». Un client plus
+   * ancien l'ignore simplement.
+   */
+  rotation: Schema.optionalKey(ServerProviderRotation),
 });
 export type ServerProvider = typeof ServerProvider.Type;
 
