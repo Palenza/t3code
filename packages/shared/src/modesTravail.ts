@@ -111,6 +111,52 @@ export function reglesPour(mode: ModeTravail): ReglesPermission {
   return { deny, allow };
 }
 
+/**
+ * Les entrées de permission qu'un mode peut POSER — donc les SEULES qu'on ait
+ * le droit de retirer.
+ *
+ * ── Pourquoi cette liste existe (03/08) ───────────────────────────────────
+ *
+ * Poser un mode écrasait `permissions.deny` et `permissions.allow` en entier,
+ * et le mode Atelier — qui ne restreint rien, donc ne produit aucune règle —
+ * tombait dans la branche « rien à restreindre » et SUPPRIMAIT le bloc
+ * `permissions` complet. Un utilisateur qui avait écrit ses propres refus
+ * (`Bash(rm:*)`, un `defaultMode`, des `additionalDirectories`) les perdait
+ * en cliquant sur le mode qui promet de ne rien restreindre.
+ *
+ * La règle qui referme ça tient en une phrase : ON NE RETIRE QUE CE QU'ON A
+ * POSÉ. Et pour l'appliquer sans inventer de marqueur — un marqueur mentirait
+ * dès que l'utilisateur édite son fichier à la main — il suffit que le
+ * vocabulaire de nos règles soit CLOS et connu :
+ *
+ *   · les refus sont toujours des NOMS NUS d'outils, tirés de la table des
+ *     familles. Neuf valeurs possibles, quel que soit le mode ;
+ *   · les autorisations sont toujours des `Edit(motif)`, où le motif vient
+ *     d'un périmètre déclaré par un mode du catalogue.
+ *
+ * Tout le reste appartient à l'utilisateur, et se recopie intact.
+ *
+ * Zone d'ombre assumée : si quelqu'un écrit à la main EXACTEMENT une de nos
+ * entrées, on la lui retirera en levant un mode. C'est indiscernable par
+ * construction, et le sens de l'erreur est le bon — retirer un refus ne
+ * détruit rien d'autre que la ligne, et retirer une autorisation rend la
+ * CLI PLUS prudente, pas moins.
+ */
+export function entreesPosablesParUnMode(modes: ReadonlyArray<ModeTravail>): {
+  readonly deny: ReadonlySet<string>;
+  readonly allow: ReadonlySet<string>;
+} {
+  const deny = new Set<string>();
+  for (const famille of TOUTES_FAMILLES) {
+    for (const outil of OUTILS_PAR_FAMILLE[famille]) deny.add(outil);
+  }
+  const allow = new Set<string>();
+  for (const mode of modes) {
+    for (const motif of mode.perimetreEcriture ?? []) allow.add(`Edit(${motif})`);
+  }
+  return { deny, allow };
+}
+
 /** Le fragment de prompt système qu'un mode ajoute. */
 export function promptDuMode(mode: ModeTravail): string {
   const morceaux = [mode.role.trim()];
