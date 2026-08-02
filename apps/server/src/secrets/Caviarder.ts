@@ -159,6 +159,23 @@ const EN_TETE_AUTH = /\b(authorization|proxy-authorization)\s*:\s*(\S+)(\s+\S+)?
 /** Les paramètres d'URL sensibles — le nom décide, là encore. */
 const PARAM_URL = /([?&])([A-Za-z_][A-Za-z0-9_-]*)=([^&\s"']+)/gu;
 
+/**
+ * Le mot de passe DANS une URL — `schéma://utilisateur:motdepasse@hôte`.
+ *
+ * Trouvé par le ratissage du 02/08 (contre-visite d'agent-reach), puis rejoué
+ * ici même : `https://enzo:motdepasse@git.exemple.com` et
+ * `postgres://admin:Sup3rS3cret@db.interne:5432` sortaient INCHANGÉS — donc en
+ * clair — par l'export Markdown d'un fil et par la porte de sortie MCP. Un
+ * simple `git remote -v` collé dans une conversation partait en clair chez le
+ * destinataire.
+ *
+ * Seul le MOT DE PASSE tombe. L'utilisateur et l'hôte restent lisibles :
+ * savoir QUEL compte sur QUEL hôte est ce qui rend un journal utile, et
+ * `ssh://git@github.com` (un utilisateur sans mot de passe) doit traverser
+ * intact.
+ */
+const MOT_DE_PASSE_URL = /\b([a-z][a-z0-9+.-]*:\/\/[^\s/:@"']+):([^\s/@"']+)@/giu;
+
 /** Une clé privée en bloc PEM : on ne garde jamais le moindre morceau. */
 const CLE_PRIVEE = /-----BEGIN[^-]*PRIVATE KEY-----[\s\S]*?-----END[^-]*PRIVATE KEY-----/gu;
 
@@ -180,6 +197,14 @@ export function caviarder(texte: string): string {
   for (const motif of JETONS) {
     sortie = sortie.replaceAll(motif, (trouve) => masquer(trouve));
   }
+
+  // Le mot de passe d'une URL. APRÈS la passe JETONS, et sans jamais la
+  // repasser : un `ghp_…` en position mot de passe a déjà été masqué en
+  // gardant sa tête reconnaissable — la retoucher détruirait précisément ce
+  // qu'elle avait choisi de garder. D'où le refus des valeurs portant `***`.
+  sortie = sortie.replaceAll(MOT_DE_PASSE_URL, (entier, avant: string, motDePasse: string) =>
+    motDePasse.includes("***") ? entier : `${avant}:***@`,
+  );
 
   // L'en-tête d'autorisation garde son SCHÉMA : savoir que c'est un Bearer
   // plutôt qu'un Basic est utile pour déboguer, et ne révèle rien.

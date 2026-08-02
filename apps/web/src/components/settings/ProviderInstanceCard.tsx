@@ -43,6 +43,8 @@ import { ProviderModelsSection } from "./ProviderModelsSection";
 import { ProviderInstanceIcon } from "../chat/ProviderInstanceIcon";
 import { ProviderAccentColorPicker } from "./ProviderAccentColorPicker";
 import { ProviderRateLimitGauges } from "./ProviderRateLimitGauges";
+import { LigneDeRotation } from "./ProviderRotationLine";
+import { ancreDuCompte } from "./rotationPresentation.logic";
 import { RedactedSensitiveText } from "./RedactedSensitiveText";
 import {
   getProviderVersionAdvisoryPresentation,
@@ -601,7 +603,10 @@ export function ProviderInstanceCard({
   ) : null;
 
   return (
-    <div className="rounded-xl transition-colors hover:bg-muted/20">
+    <div
+      id={ancreDuCompte(String(instanceId))}
+      className="scroll-mt-4 rounded-xl transition-colors hover:bg-muted/20"
+    >
       <div className="px-3 py-3 sm:px-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0 flex-1 space-y-1">
@@ -707,6 +712,16 @@ export function ProviderInstanceCard({
             </div>
             {authRowNode}
             <ProviderRateLimitGauges rateLimits={liveProvider?.rateLimits} />
+            {/*
+              L'ÉTAT DANS LA ROTATION, sous le quota du même compte.
+
+              Les deux répondent à des questions différentes et voisines : « où
+              en est ce compte ? » et « puis-je encore compter dessus ? ». Le
+              moteur connaissait la seconde depuis toujours et ne la disait
+              nulle part — un compte pouvait être écarté depuis une heure, et
+              l'écran ne montrait qu'un quota qui ne bougeait plus.
+            */}
+            <LigneDeRotation rotation={liveProvider?.rotation} instanceId={String(instanceId)} />
           </div>
           <div className="flex w-full shrink-0 items-center gap-2 sm:w-auto sm:justify-end">
             <Button

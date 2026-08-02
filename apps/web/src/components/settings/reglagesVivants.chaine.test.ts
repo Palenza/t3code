@@ -91,6 +91,18 @@ function balises(contenu: string, nom: string): ReadonlyArray<{ ligne: number; t
         continue;
       }
       if (c === '"' || c === "'" || c === "`") {
+        // ⚠️ Deuxième piège, celui qui rendait ce lecteur BORGNE : une
+        // apostrophe de texte anglais — « WSL backend couldn't start » — était
+        // prise pour une ouverture de chaîne. Elle ne se refermait qu'à
+        // l'apostrophe suivante, des milliers de caractères plus loin, et tout
+        // le reste du fichier disparaissait de l'analyse. Mesuré le 02/08 :
+        // 33 lignes de réglage lues sur 48, et le même trou sur les
+        // interrupteurs et les listes.
+        //
+        // Un guillemet précédé d'une LETTRE n'ouvre jamais une chaîne — il est
+        // dans un mot. Une chaîne s'ouvre après `=`, `(`, `,`, un blanc.
+        const precedent = contenu[i - 1] ?? "";
+        if (/[A-Za-zÀ-ÿ0-9]/.test(precedent)) continue;
         guillemet = c;
         continue;
       }
@@ -210,6 +222,71 @@ describe("les réglages agissent, ils ne décorent pas", () => {
         false,
       );
     }
+  });
+
+  it("une apostrophe de texte n'aveugle plus le lecteur", () => {
+    // La panne, réduite à sa plus petite forme. Sans ce test, la réparation
+    // n'est qu'une ligne de code qu'un futur nettoyage supprimera comme
+    // « défensive » — et le lecteur redeviendra borgne sans un seul rouge.
+    // L'apostrophe doit être DANS la fenêtre de la balise — c'est la forme
+    // réelle du cas qui mordait (`ConnectionsSettings.tsx`, « WSL backend »,
+    // dont le message d'erreur vit dans l'attribut `status`). Placée APRÈS la
+    // balise fermée, elle ne reproduit rien : ma première version du piège
+    // passait au vert avec le lecteur cassé.
+    const piege = [
+      `<SettingsRow`,
+      `  title="A"`,
+      `  description="a"`,
+      `  status={<span>WSL backend couldn't start</span>}`,
+      `/>`,
+      `<SettingsRow title="B" description="b" />`,
+    ].join("\n");
+
+    expect(balises(piege, "SettingsRow")).toHaveLength(2);
+  });
+
+  it("aucun réglage ne se présente sous un intitulé NU", () => {
+    // Volé à Cursor : chez eux, chaque réglage porte sous son nom une phrase
+    // qui dit ce qu'il fait. Ici c'est déjà vrai — `SettingsRow` EXIGE une
+    // `description`, et les 50 lignes en ont une. Ce garde ne répare donc
+    // rien : c'est un fil-piège posé AU-DELÀ de là où passe tout ce qui est
+    // sain, pour que seul le cassé le touche.
+    //
+    // Il a quand même servi tout de suite : en le branchant, il a lu 33
+    // lignes là où il en existe 48, et c'est ce qui a fait découvrir
+    // l'apostrophe qui aveuglait le lecteur (voir `balises`).
+    //
+    // Le trou que le type laisse ouvert : `description=""` type-vérifie. Un
+    // intitulé nu passerait alors sans un rouge, et le réglage redeviendrait
+    // une case à cocher dont personne ne sait ce qu'elle fait.
+    const nus: string[] = [];
+    let vues = 0;
+
+    for (const chemin of fichiers) {
+      const contenu = NodeFS.readFileSync(chemin, "utf8");
+      for (const { ligne, texte } of balises(contenu, "SettingsRow")) {
+        vues += 1;
+        const vide = /description=(?:""|\{""\}|\{`\s*`\}|\{null\}|\{undefined\})/.test(texte);
+        if (!vide && /description=/.test(texte)) continue;
+        nus.push(`${chemin.slice(racine.length + 1)}:${ligne}`);
+      }
+    }
+
+    expect(
+      vues,
+      `Le lecteur ne voit plus que ${vues} ligne(s) de réglage — il en existait 48 ` +
+        `(mesuré le 02/08, après réparation du lecteur borgne). ` +
+        `S'il en reste si peu, c'est l'ANALYSEUR qui est cassé, pas le code.`,
+    ).toBeGreaterThanOrEqual(35);
+
+    expect(
+      nus,
+      nus.length === 0
+        ? ""
+        : `Ces réglages n'expliquent pas ce qu'ils font :\n${nus.join("\n")}\n\n` +
+            `Un intitulé seul oblige à essayer pour comprendre — et sur un réglage, ` +
+            `essayer coûte un aller-retour dont on ne voit pas toujours l'effet.`,
+    ).toEqual([]);
   });
 
   it("aucun interrupteur n'est purement décoratif", () => {

@@ -16,6 +16,8 @@ interface ImportMetaEnv {
   readonly APP_VERSION: string;
   /** La version du BUNDLE installé (DMG). Voir `APP_BUILD_VERSION` dans branding. */
   readonly APP_BUILD_VERSION: string;
+  /** Le commit exact du build. Chaîne vide en développement. */
+  readonly APP_COMMIT_HASH: string;
 }
 
 interface ImportMeta {

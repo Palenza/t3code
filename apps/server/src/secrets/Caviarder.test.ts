@@ -167,3 +167,57 @@ describe("caviarder — les invariants", () => {
     assert.equal(caviarder(""), "");
   });
 });
+
+describe("le mot de passe dans une URL — la fuite du ratissage 02/08", () => {
+  // Rejoué AVANT le correctif : ces trois formes sortaient inchangées — donc
+  // en clair — par l'export Markdown et la porte de sortie MCP.
+  it("masque le mot de passe, et SEULEMENT lui", () => {
+    assert.equal(
+      caviarder("https://enzo:motdepasse@git.exemple.com/repo.git"),
+      "https://enzo:***@git.exemple.com/repo.git",
+    );
+    assert.equal(
+      caviarder("postgres://admin:Sup3rS3cret@db.interne:5432/palenza"),
+      "postgres://admin:***@db.interne:5432/palenza",
+    );
+  });
+
+  it("attrape la forme réelle : un `git remote -v` collé dans un fil", () => {
+    const remote = "origin  https://enzo:MotDePasse2026@github.com/Palenza/t3code.git (fetch)";
+    const sortie = caviarder(remote);
+    assert.ok(!sortie.includes("MotDePasse2026"));
+    assert.ok(sortie.includes("https://enzo:***@github.com/Palenza/t3code.git"));
+  });
+
+  it("laisse intact un utilisateur SANS mot de passe", () => {
+    // « ssh://git@github.com » est la forme la plus courante au monde — la
+    // massacrer rendrait chaque journal git illisible, et un garde qui rend
+    // les journaux illisibles finit désactivé.
+    const formes = [
+      "ssh://git@github.com/Palenza/t3code.git",
+      "mailto:enzo@exemple.com",
+      "sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+      "https://github.com/Palenza/t3code.git",
+    ];
+    for (const forme of formes) {
+      assert.equal(caviarder(forme), forme);
+    }
+  });
+
+  it("ne repasse PAS derrière la passe des jetons", () => {
+    // Un ghp_… en position mot de passe est déjà masqué EN GARDANT sa tête
+    // reconnaissable — c'est ce qui permet de savoir QUELLE clé a fui. La
+    // passe URL ne doit pas écraser ce choix.
+    const texte = `https://enzo:ghp_${"A".repeat(24)}@github.com/repo.git`;
+    const sortie = caviarder(texte);
+    assert.ok(sortie.includes("ghp_"), sortie);
+    assert.ok(sortie.includes("***"), sortie);
+    // Et l'idempotence tient toujours, mot de passe compris.
+    assert.equal(caviarder(sortie), sortie);
+  });
+
+  it("reste idempotent sur un mot de passe ordinaire", () => {
+    const une = caviarder("https://enzo:motdepasse@git.exemple.com/repo.git");
+    assert.equal(caviarder(une), une);
+  });
+});

@@ -106,7 +106,9 @@ export function deciderRelais(entree: EntreeRelais): DecisionRelais {
       raison:
         verdict.nature === "authentification-morte"
           ? "Ce compte n'est plus authentifié et aucun autre n'est disponible."
-          : "Tous les comptes sont à sec ou en attente de reprise.",
+          : verdict.nature === "abonnement-fini"
+            ? "L'abonnement de ce compte est terminé et aucun autre compte n'est disponible."
+            : "Tous les comptes sont à sec ou en attente de reprise.",
     };
   }
 
@@ -117,9 +119,16 @@ export function deciderRelais(entree: EntreeRelais): DecisionRelais {
     // Le MODÈLE ne bouge pas : on change de compte, pas de cerveau. Un tour
     // relancé sur un modèle différent ne serait plus le tour demandé.
     modelSelection: { ...entree.selectionActuelle, instanceId: remplacant.instanceId },
-    raison:
-      verdict.nature === "authentification-morte"
-        ? "Compte non authentifié — repris ailleurs."
-        : "Quota atteint — repris ailleurs.",
+    raison: RAISON_DE_BASCULE[verdict.nature] ?? "Quota atteint — repris ailleurs.",
   };
 }
+
+/**
+ * Ce qu'on écrit quand on a basculé. Une phrase par nature, parce que le
+ * lecteur n'a que celle-là pour savoir s'il doit AGIR ou seulement patienter.
+ */
+const RAISON_DE_BASCULE: Partial<Record<Verdict["nature"], string>> = {
+  "authentification-morte": "Compte non authentifié — repris ailleurs.",
+  // « Reconnecte-toi » serait un mauvais conseil : le jeton est bon.
+  "abonnement-fini": "Abonnement de ce compte terminé — repris ailleurs.",
+};

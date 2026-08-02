@@ -11,7 +11,11 @@ import type { ServerProviderRateLimitWindow, ServerProviderRateLimits } from "@t
  *   - Claude reports ONE window per event, named by `rateLimitType`. Its
  *     five-hour and seven-day figures arrive in separate messages, minutes
  *     apart.
- *   - Codex reports its full snapshot every time (`primary` + `secondary`).
+ *   - Codex sends SPARSE rolling updates — its own protocol comment says so
+ *     ("Sparse rolling rate-limit update"): `primary` or `secondary` can
+ *     arrive alone. (This line used to claim the OPPOSITE — "full snapshot
+ *     every time" — caught by the 02/08 sweep against the upstream spec. The
+ *     code below was already safe: it merges field by field.)
  *
  * So a snapshot cannot be replaced wholesale on each event: doing that would
  * make Claude's sidebar flicker between "5h only" and "7d only" forever,

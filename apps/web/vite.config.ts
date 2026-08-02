@@ -51,6 +51,12 @@ const configuredAppVersion = process.env.APP_VERSION?.trim() || pkg.version;
  * garde le comportement d'avant partout où le build ne le fournit pas.
  */
 const configuredBuildVersion = process.env.APP_BUILD_VERSION?.trim() || configuredAppVersion;
+/**
+ * Le commit exact du build. Vide en développement — et c'est juste : il n'y
+ * a pas de commit qui décrive ce qui tourne quand on édite en direct. Le
+ * seul endroit qui le connaît est `scripts/build-desktop-artifact.ts`.
+ */
+const configuredCommitHash = process.env.APP_COMMIT_HASH?.trim() || "";
 const configuredHostedAppUrl = (() => {
   const explicitHostedAppUrl = process.env.VITE_HOSTED_APP_URL?.trim();
   if (explicitHostedAppUrl) {
@@ -189,6 +195,7 @@ export default defineConfig(() => {
       "import.meta.env.VITE_HOSTED_APP_CHANNEL": JSON.stringify(configuredHostedAppChannel),
       "import.meta.env.APP_VERSION": JSON.stringify(configuredAppVersion),
       "import.meta.env.APP_BUILD_VERSION": JSON.stringify(configuredBuildVersion),
+      "import.meta.env.APP_COMMIT_HASH": JSON.stringify(configuredCommitHash),
     },
     resolve: {
       tsconfigPaths: true,

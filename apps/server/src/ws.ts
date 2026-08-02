@@ -85,6 +85,7 @@ import * as ProviderRegistry from "./provider/Services/ProviderRegistry.ts";
 import * as ProviderMaintenanceRunner from "./provider/providerMaintenanceRunner.ts";
 import { makeProviderStatusStream } from "./provider/providerStatusStream.ts";
 import { withCurrentRateLimits } from "./provider/rateLimitProjection.ts";
+import { withRotationState } from "./provider/rotationProjection.ts";
 import * as ServerSelfUpdate from "./cloud/selfUpdate.ts";
 import * as ServerLifecycleEvents from "./serverLifecycleEvents.ts";
 import * as ServerRuntimeStartup from "./serverRuntimeStartup.ts";
@@ -1002,7 +1003,14 @@ const makeWsRpcLayer = (
         // Joined here, not in the drivers: the registry's snapshots are cached
         // on disk and a quota baked into one would come back stale at boot.
         // See `provider/rateLimitProjection.ts`.
-        const providers = withCurrentRateLimits(yield* providerRegistry.getProviders);
+        // Deux faits vivants par compte — son quota et son état dans la
+        // rotation — joints au même endroit, juste avant que les octets
+        // partent. Chacun a sa fonction : elles répondent à deux questions
+        // différentes et se testent séparément.
+        const providers = withRotationState(
+          withCurrentRateLimits(yield* providerRegistry.getProviders),
+          DateTime.toEpochMillis(yield* DateTime.now),
+        );
         const settings = ServerSettings.redactServerSettingsForClient(
           yield* serverSettings.getSettings,
         );

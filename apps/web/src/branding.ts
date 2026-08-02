@@ -60,3 +60,17 @@ export const APP_VERSION = import.meta.env.APP_VERSION || "0.0.0";
  * build ne le fournit pas, donc rien ne régresse là où les deux coïncident.
  */
 export const APP_BUILD_VERSION = import.meta.env.APP_BUILD_VERSION || APP_VERSION;
+/**
+ * LE COMMIT EXACT DU BUILD — volé à Hermès, qui affiche « Branch main ·
+ * Commit 4be8905 » sous sa version.
+ *
+ * Pour un fork, c'est la seule ligne qui répond à « je tourne sur MA version
+ * ou sur celle de l'amont ? ». Un numéro de version ne le dit pas : l'amont et
+ * nous portons les mêmes, et la synchro nocturne fait entrer leurs commits
+ * chez nous en permanence.
+ *
+ * Chaîne VIDE en développement, et c'est voulu : quand on édite en direct,
+ * aucun commit ne décrit ce qui tourne. Afficher le dernier commité serait
+ * un chiffre faux et crédible — exactement ce qu'on refuse ailleurs.
+ */
+export const APP_COMMIT_HASH = import.meta.env.APP_COMMIT_HASH || "";
