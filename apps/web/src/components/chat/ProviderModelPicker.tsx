@@ -151,8 +151,18 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
             variant={props.triggerVariant ?? "ghost"}
             data-chat-provider-model-picker="true"
             className={cn(
-              "min-w-0 justify-between whitespace-nowrap",
-              props.compact ? "max-w-42 shrink-0" : "max-w-48 shrink sm:max-w-56",
+              // LE NOM DU MODÈLE NE SE COUPE PAS — demande fondateur 02/08 :
+              // « au lieu de Claude Op…, on veut voir les noms complets, même
+              // si je passe à Claude Fable 5 ou autre ».
+              //
+              // C'étaient `max-w-42` / `max-w-48` (168 / 192 px) : avec
+              // l'icône, l'espace et le chevron, « Claude Opus 5 » n'y tenait
+              // plus. Savoir QUEL modèle répond est la première chose qu'on
+              // lit sur cette barre ; un nom coupé la rend illisible pile là
+              // où elle sert. Le nom prend donc la place qu'il lui faut, et
+              // c'est aux contrôles voisins de céder — la barre a déjà son
+              // menu compact pour les fenêtres étroites.
+              "shrink-0 justify-between whitespace-nowrap",
               props.triggerClassName,
             )}
             disabled={props.disabled}
@@ -165,12 +175,18 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
               driverKind={activeEntry.driverKind}
               displayName={activeEntry.displayName}
               accentColor={activeEntry.accentColor}
-              showBadge={showInstanceBadge}
-              // Une PASTILLE, pas des initiales. Sur une icône de 16 px, deux
-              // lettres à 7 px font ~5 px de haut : aucune lettre ne se dessine
-              // en 5 px, ça devient une tache — et le badge, à 12 px, couvrait
-              // 75 % du logo en débordant dessus. La couleur porte l'identité
-              // du compte ; le NOM est dans l'info-bulle, là où on va le lire.
+              // AUCUNE PASTILLE SUR LE LOGO — signalé trois fois, la dernière
+              // le 02/08 : « bug réintroduit, des boutons sous le logo Claude ».
+              //
+              // Elle revient d'amont (#3379) à chaque synchro du fork. Son
+              // intention est bonne — dire qu'il y a plusieurs comptes — mais
+              // un disque cerclé collé sous un logo se lit comme un BOUTON,
+              // pas comme une marque : on croit pouvoir cliquer dessus. Et
+              // l'information est déjà là où on la cherche — l'info-bulle
+              // nomme le compte en entier, et chaque ligne du sélecteur porte
+              // le sien. Une pastille qui répète une information disponible ne
+              // paie pas le bruit qu'elle coûte.
+              showBadge={false}
               badgeContent="none"
               className="size-4"
               iconClassName={cn("size-4", props.activeProviderIconClassName)}
@@ -193,7 +209,7 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
             />
           ) : null}
           <Tooltip>
-            <TooltipTrigger render={<span className="min-w-0 flex-1 overflow-hidden truncate" />}>
+            <TooltipTrigger render={<span className="whitespace-nowrap" />}>
               {triggerTitle}
             </TooltipTrigger>
             {/* La pastille dit QU'IL Y EN A PLUSIEURS ; l'info-bulle dit
