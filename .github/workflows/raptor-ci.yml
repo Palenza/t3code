@@ -1,0 +1,89 @@
+# LA CI DE RAPTOR — la nôtre, celle qui tourne vraiment.
+#
+# Pourquoi un fichier de plus alors que `ci.yml` existe : `ci.yml` appartient
+# à l'amont et tourne sur des runners `blacksmith-*`, un service tiers auquel
+# ce dépôt n'a pas accès. Il est désactivé à la main, et c'est justifié — il
+# ne pourrait jamais démarrer ici. Résultat au 02/08/2026 : AUCUN test ne
+# tourne sur GitHub pour ce dépôt. Un dépôt qui ne vérifie rien laisse un
+# rouge voyager jusqu'au DMG.
+#
+# Celle-ci n'utilise que des runners GitHub standard. Elle ne remplace pas
+# `ci.yml`, elle le double : le jour où l'amont change ses étapes, la synchro
+# nocturne met `ci.yml` à jour sans toucher à ce fichier, et rien ne casse.
+name: Raptor CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - travail
+  workflow_dispatch:
+
+# Une seule vérification à la fois par branche : une rafale de commits ne doit
+# pas faire la queue pendant vingt minutes, seul le dernier état compte.
+concurrency:
+  group: raptor-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verifier:
+    name: Vérifier
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Récupérer le code
+        uses: actions/checkout@v6
+
+      - name: Installer Vite+ et les dépendances
+        uses: voidzero-dev/setup-vp@v1
+        with:
+          node-version-file: package.json
+          cache: true
+          run-install: true
+
+      # Le paquet Electron n'est pas dans le lockfile : sans cette étape, tout
+      # ce qui touche apps/desktop échoue au chargement, pas au test.
+      - name: Poser le runtime Electron
+        run: vp run --filter @t3tools/desktop ensure:electron
+
+      - name: Format et lint
+        run: vp check
+
+      - name: Typecheck
+        run: vpr typecheck
+
+      - name: Tests
+        run: vp run test
+
+  # Le garde de marque vit dans la suite de tests, donc il tourne déjà au-dessus.
+  # Ce travail-là vérifie l'autre moitié : que l'app se CONSTRUIT. Le typecheck
+  # passe régulièrement là où le bundler casse — c'est une leçon payée, pas une
+  # précaution théorique.
+  construire:
+    name: Construire le bureau
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Récupérer le code
+        uses: actions/checkout@v6
+
+      - name: Installer Vite+ et les dépendances
+        uses: voidzero-dev/setup-vp@v1
+        with:
+          node-version-file: package.json
+          cache: true
+          run-install: true
+
+      - name: Poser le runtime Electron
+        run: vp run --filter @t3tools/desktop ensure:electron
+
+      - name: Construire
+        run: vp run build:desktop
+
+      # Le préchargement est le pont entre le renderer et Electron. S'il sort
+      # vide, l'app démarre et n'a plus AUCUN pont — panne muette, écran normal.
+      - name: Vérifier que le pont de préchargement existe vraiment
+        run: |
+          test -f apps/desktop/dist-electron/preload.cjs
+          grep -qE "desktopBridge|getLocalEnvironmentBootstrap" apps/desktop/dist-electron/preload.cjs

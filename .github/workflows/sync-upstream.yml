@@ -254,3 +254,41 @@ jobs:
             echo "### ❌ L'alerte n'a pas pu être créée" >> "$GITHUB_STEP_SUMMARY"
             exit 1
           fi
+
+      # AMÉLIORATION 5 — le filet qui manquait, et qui a coûté deux jours.
+      #
+      # L'alerte ci-dessus ne se déclenche QUE sur un conflit de la fusion à
+      # blanc dans `travail`. Si une étape ANTÉRIEURE meurt, le job s'arrête
+      # avant d'y arriver et personne n'apprend rien.
+      #
+      # C'est exactement ce qui s'est produit : le run du 2026-08-01 a échoué à
+      # l'étape 7 (« Fusionner l'amont dans main ») — le pari « main fusionne
+      # toujours proprement » ne tenait plus. Aucune issue, aucun signal. La
+      # synchro était morte depuis deux jours quand on l'a découverte, et
+      # seulement parce qu'on cherchait autre chose.
+      #
+      # `if: failure()` attrape n'importe quelle étape précédente. Une panne de
+      # synchro doit se VOIR : un fork qui ne se synchronise plus ne le dit
+      # jamais de lui-même, il vieillit simplement.
+      - name: Alerter si la synchro a échoué, quelle qu'en soit l'étape
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          JOUR=$(date -u +%Y-%m-%d)
+          TITRE="Sync amont EN PANNE — $JOUR"
+          CORPS=$(printf 'La synchronisation avec l amont a échoué.\n\nRun : %s/%s/actions/runs/%s\n\nTant que ce n est pas réparé, le fork VIEILLIT en silence : aucun commit de l amont n arrive, et rien ne le signale ailleurs.\n' \
+            "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")
+
+          # Une issue par jour au maximum : une panne qui dure ne doit pas
+          # produire une issue par run, sinon on apprend à les ignorer.
+          if gh issue list --repo "$GITHUB_REPOSITORY" --state open \
+               --search "$TITRE in:title" --json number --jq 'length' | grep -qv '^0$'; then
+            echo "→ une alerte du jour existe déjà, on n en rouvre pas une seconde"
+            exit 0
+          fi
+
+          if ! gh issue create --repo "$GITHUB_REPOSITORY" --title "$TITRE" --body "$CORPS"; then
+            echo "::error::Alerte de panne impossible — issues désactivées ?"
+            echo "### ❌ La synchro a échoué ET l alerte n a pas pu être créée" >> "$GITHUB_STEP_SUMMARY"
+          fi
