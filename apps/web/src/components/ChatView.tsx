@@ -172,6 +172,12 @@ import {
   projectScriptIdFromCommand,
 } from "~/projectScripts";
 import { newDraftId, newMessageId, newThreadId } from "~/lib/utils";
+import { effortInjectePourAuto } from "../effortAuto";
+import {
+  choisirCompteDeSecondAvis,
+  questionPourSecondAvis,
+  titreDeSecondAvis,
+} from "../secondAvis";
 import { getProviderModelCapabilities, resolveSelectableProvider } from "../providerModels";
 import { NO_PROVIDER_MODEL_SELECTION } from "../providerInstances";
 import { useClientSettings, useEnvironmentSettings } from "../hooks/useSettings";
@@ -468,7 +474,15 @@ function formatOutgoingPrompt(params: {
 }): string {
   const caps = getProviderModelCapabilities(params.models, params.model, params.provider);
   const promptEffort = resolvePromptInjectedEffort(caps, params.effort);
-  return applyClaudePromptEffortPrefix(params.text, promptEffort);
+  // L'effort AUTO décide ICI, à l'envoi, sur le texte final : booster ou non.
+  // C'est la seule couture par-message qui existe (l'effort SDK est fixé au
+  // démarrage de session) — cf. effortAuto.ts pour les signaux et leurs bornes.
+  const boost = effortInjectePourAuto({
+    effort: params.effort,
+    texte: params.text,
+    modeleConnaitUltrathink: resolvePromptInjectedEffort(caps, "ultrathink") === "ultrathink",
+  });
+  return applyClaudePromptEffortPrefix(params.text, boost ?? promptEffort);
 }
 const SCRIPT_TERMINAL_COLS = 120;
 const SCRIPT_TERMINAL_ROWS = 30;
@@ -5721,6 +5735,130 @@ function ChatViewContent(props: ChatViewProps) {
     composerRef,
   ]);
 
+  // SECOND AVIS AVEUGLE (levier n°4, 02/08) : rejoue la question d'origine,
+  // verbatim, dans un fil neuf sur un AUTRE compte — sans jamais montrer la
+  // première réponse. Un relecteur qui a lu le brouillon se laisse
+  // convaincre ; un relecteur aveugle ne peut pas. Le désaccord entre deux
+  // moteurs indépendants est le signal. Coût marginal : nul, les abonnements
+  // sont déjà payés.
+  const secondAvisPossible = useMemo(
+    () =>
+      providerStatuses.filter((provider) => provider.enabled && provider.rotation?.state !== "dead")
+        .length >= 2,
+    [providerStatuses],
+  );
+
+  const handleSecondAvis = useCallback(
+    async (assistantMessageId: MessageId) => {
+      if (!activeThread || !activeProject || sendInFlightRef.current) return;
+      const sendCtx = composerRef.current?.getSendContext();
+      if (!sendCtx?.providerAvailable) return;
+      const selection = sendCtx.selectedModelSelection;
+
+      // La question d'origine : le dernier message humain AVANT cette réponse.
+      const messages = displayServerMessages;
+      const position = messages.findIndex((message) => message.id === assistantMessageId);
+      if (position < 0) return;
+      const question = messages
+        .slice(0, position)
+        .toReversed()
+        .find((message) => message.role === "user" && (message.text ?? "").trim().length > 0);
+      if (!question) return;
+
+      const compte = choisirCompteDeSecondAvis({
+        instanceActuelle: String(selection.instanceId),
+        candidats: providerStatuses.map((provider) => ({
+          instanceId: String(provider.instanceId),
+          enabled: provider.enabled,
+          rotation: provider.rotation,
+        })),
+      });
+      if (compte === null) {
+        toastManager.add({
+          type: "error",
+          title: "No second opinion available",
+          description: "Every other account is disabled or out of rotation.",
+        });
+        return;
+      }
+
+      const texte = questionPourSecondAvis(question.text ?? "");
+      const titre = titreDeSecondAvis(texte);
+      const selectionAvis = {
+        ...selection,
+        instanceId: compte as (typeof selection)["instanceId"],
+      };
+      const nextThreadId = newThreadId();
+      const createdAt = new Date().toISOString();
+
+      const createResult = await createThread({
+        environmentId: activeThread.environmentId,
+        input: {
+          threadId: nextThreadId,
+          projectId: activeProject.id,
+          title: titre,
+          modelSelection: selectionAvis,
+          runtimeMode,
+          interactionMode: "default",
+          branch: activeThreadBranch,
+          worktreePath: activeThread.worktreePath,
+          createdAt,
+        },
+      });
+      if (createResult._tag === "Failure") {
+        toastManager.add({
+          type: "error",
+          title: "Second opinion failed",
+          description: "Could not create the review thread.",
+        });
+        return;
+      }
+      const startResult = await startThreadTurn({
+        environmentId: activeThread.environmentId,
+        input: {
+          threadId: nextThreadId,
+          message: {
+            messageId: newMessageId(),
+            role: "user",
+            text: texte,
+            attachments: [],
+          },
+          modelSelection: selectionAvis,
+          titleSeed: titre,
+          runtimeMode,
+          interactionMode: "default",
+          createdAt,
+        },
+      });
+      toastManager.add(
+        startResult._tag === "Failure"
+          ? {
+              type: "error",
+              title: "Second opinion failed",
+              description: "The review thread was created but its turn did not start.",
+            }
+          : {
+              type: "success",
+              title: "Second opinion started",
+              // On nomme le compte : l'utilisateur doit savoir QUI relit —
+              // c'est la moitié de la valeur d'un avis indépendant.
+              description: `Your question was replayed, blind, on ${compte}.`,
+            },
+      );
+    },
+    [
+      activeThread,
+      activeProject,
+      providerStatuses,
+      displayServerMessages,
+      runtimeMode,
+      activeThreadBranch,
+      createThread,
+      startThreadTurn,
+      composerRef,
+    ],
+  );
+
   const getModelDisabledReason = useCallback(
     (instanceId: ProviderInstanceId, model: string): string | null => {
       if (!activeThread) {
@@ -6246,6 +6384,7 @@ function ChatViewContent(props: ChatViewProps) {
                 contentInsetEndAdjustment={composerOverlayHeight}
                 onIsAtEndChange={onIsAtEndChange}
                 onManualNavigation={cancelTimelineLiveFollowForUserNavigation}
+                onSecondAvis={secondAvisPossible ? handleSecondAvis : undefined}
                 hideEmptyPlaceholder={isDraftHeroState || threadDetailLoading}
                 topFadeEnabled={!hasTimelineTopBanner}
               />

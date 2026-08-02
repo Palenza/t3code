@@ -76,6 +76,11 @@ const BUILT_IN_MODELS: ReadonlyArray<ServerProviderModel> = [
             { value: "max", label: "Max" },
             { value: "ultracode", label: "Ultracode" },
             { value: "ultrathink", label: "Ultrathink" },
+            // Auto = effort de base high + boost « ultrathink » décidé à
+            // l'ENVOI sur des signaux structurels (apps/web/src/effortAuto.ts).
+            // Volontairement HORS de promptInjectedValues : choisir Auto ne
+            // réécrit jamais le brouillon.
+            { value: "auto", label: "Auto" },
           ],
           promptInjectedValues: ["ultrathink"],
         }),
@@ -107,6 +112,11 @@ const BUILT_IN_MODELS: ReadonlyArray<ServerProviderModel> = [
             { value: "max", label: "Max" },
             { value: "ultracode", label: "Ultracode" },
             { value: "ultrathink", label: "Ultrathink" },
+            // Auto = effort de base high + boost « ultrathink » décidé à
+            // l'ENVOI sur des signaux structurels (apps/web/src/effortAuto.ts).
+            // Volontairement HORS de promptInjectedValues : choisir Auto ne
+            // réécrit jamais le brouillon.
+            { value: "auto", label: "Auto" },
           ],
           promptInjectedValues: ["ultrathink"],
         }),
@@ -143,6 +153,11 @@ const BUILT_IN_MODELS: ReadonlyArray<ServerProviderModel> = [
             { value: "max", label: "Max" },
             { value: "ultracode", label: "Ultracode" },
             { value: "ultrathink", label: "Ultrathink" },
+            // Auto = effort de base high + boost « ultrathink » décidé à
+            // l'ENVOI sur des signaux structurels (apps/web/src/effortAuto.ts).
+            // Volontairement HORS de promptInjectedValues : choisir Auto ne
+            // réécrit jamais le brouillon.
+            { value: "auto", label: "Auto" },
           ],
           promptInjectedValues: ["ultrathink"],
         }),
@@ -407,6 +422,12 @@ export function normalizeClaudeCliEffort(
   }
   if (effort === "ultracode") {
     return "xhigh";
+  }
+  // `auto` : la session part sur l'effort PAR DÉFAUT (high) ; le boost, lui,
+  // voyage dans le texte du message quand il est mérité — c'est la seule
+  // couture par-tour, l'effort SDK étant figé au démarrage de session.
+  if (effort === "auto") {
+    return "high";
   }
   if (
     effort === "xhigh" &&
