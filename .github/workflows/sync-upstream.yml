@@ -116,6 +116,19 @@ jobs:
         # version exacte qu'on embarque, et l'historique du fork se lit comme
         # une suite de builds identifiés plutôt que de « merge du jour ».
         run: |
+          # ⚠️ CE QU'IL NE FAUT PAS FAIRE SUR `main`, ET LA RAISON.
+          #
+          # `main` est la branche qui fusionne AUTOMATIQUEMENT. Tout fichier
+          # qu'on y modifie et que l'amont modifie aussi devient un conflit
+          # quotidien — et un conflit sur `main` arrête la synchro, donc le
+          # fork cesse de suivre l'amont. La tentation est réelle : corriger
+          # le README pour qu'il pointe NOS releases, ou le `repository` du
+          # package.json. Les deux sont des fichiers que l'amont touche.
+          #
+          # Nos divergences vivent sur `travail`, qui passe par une PR relue.
+          # `main` ne porte que ce que l'amont ne touche pas : nos propres
+          # workflows (`raptor-*.yml`, celui-ci).
+          #
           # LA FUSION PEUT ENTRER EN CONFLIT SUR UN FICHIER QU'ON JETTE JUSTE
           # APRÈS — et c'est exactement ce qui a tué la synchro.
           #
