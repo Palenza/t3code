@@ -52,6 +52,7 @@ import {
   MousePointerClickIcon,
   PaintbrushIcon,
   MinusIcon,
+  ScaleIcon,
   SparklesIcon,
   SquarePenIcon,
   TerminalIcon,
@@ -145,6 +146,13 @@ interface TimelineRowSharedState {
   onOpenTurnDiff: (turnId: TurnId, filePath?: string) => void;
   onToggleTurnFold: (turnId: TurnId) => void;
   onToggleWorkGroup: (groupId: string, anchorElement?: HTMLElement) => void;
+  /**
+   * Second avis AVEUGLE (levier n°4, 02/08) : rejoue la question d'origine
+   * dans un fil neuf, sur un AUTRE compte, sans jamais montrer la première
+   * réponse. Absent quand aucun autre compte n'est disponible — le bouton
+   * disparaît alors, il ne se grise pas : un geste impossible ne se promet pas.
+   */
+  onSecondAvis?: ((assistantMessageId: MessageId) => void) | undefined;
 }
 
 interface TimelineRowActivityState {
@@ -194,6 +202,7 @@ interface MessagesTimelineProps {
   onManualNavigation: () => void;
   hideEmptyPlaceholder?: boolean;
   topFadeEnabled?: boolean;
+  onSecondAvis?: ((assistantMessageId: MessageId) => void) | undefined;
 }
 
 // ---------------------------------------------------------------------------
@@ -229,6 +238,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   onManualNavigation,
   hideEmptyPlaceholder = false,
   topFadeEnabled = false,
+  onSecondAvis,
 }: MessagesTimelineProps) {
   const [expandedTurnIds, setExpandedTurnIds] = useState<ReadonlySet<TurnId>>(new Set());
   const [expandedWorkGroupIds, setExpandedWorkGroupIds] = useState<ReadonlySet<string>>(new Set());
@@ -489,6 +499,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
       onOpenTurnDiff,
       onToggleTurnFold,
       onToggleWorkGroup,
+      onSecondAvis,
     }),
     [
       timestampFormat,
@@ -504,6 +515,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
       onOpenTurnDiff,
       onToggleTurnFold,
       onToggleWorkGroup,
+      onSecondAvis,
     ],
   );
   const activityState = useMemo<TimelineRowActivityState>(
@@ -1113,6 +1125,7 @@ function AssistantTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "mess
         {row.showAssistantMeta ? (
           <div className="mt-1.5 flex items-center gap-2 text-xs tabular-nums opacity-0 transition-opacity duration-200 focus-within:opacity-100 group-hover/assistant:opacity-100">
             <AssistantCopyButton row={row} />
+            <SecondAvisButton row={row} />
             {!row.message.streaming && (
               <Tooltip>
                 <TooltipTrigger
@@ -1144,6 +1157,39 @@ function AssistantCopyButton({ row }: { row: Extract<TimelineRow, { kind: "messa
   }
 
   return <MessageCopyButton text={assistantCopyState.text ?? ""} variant="ghost" />;
+}
+
+function SecondAvisButton({ row }: { row: Extract<TimelineRow, { kind: "message" }> }) {
+  const ctx = use(TimelineRowCtx);
+  // Absent = pas d'autre compte disponible : le bouton disparaît, il ne se
+  // grise pas — un geste impossible ne se promet pas. Et jamais pendant le
+  // streaming : la question d'origine est déjà connue, mais proposer un
+  // second avis sur une réponse encore en train de s'écrire invite à juger
+  // un travail inachevé.
+  if (ctx.onSecondAvis === undefined || row.message.streaming) {
+    return null;
+  }
+  const onSecondAvis = ctx.onSecondAvis;
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <Button
+            size="icon-xs"
+            variant="ghost"
+            className="text-muted-foreground hover:text-foreground"
+            aria-label="Second opinion from another account"
+            onClick={() => onSecondAvis(row.message.id)}
+          >
+            <ScaleIcon className="size-3.5" />
+          </Button>
+        }
+      />
+      <TooltipPopup side="top">
+        Second opinion — replays your question, blind, on another account
+      </TooltipPopup>
+    </Tooltip>
+  );
 }
 
 function ProposedPlanTimelineRow({

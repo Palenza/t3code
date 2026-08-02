@@ -76,6 +76,7 @@ import {
   noterCompactage,
   noterUsage,
 } from "../../contexte/GardeDeFalaise.ts";
+import { finEnPromesse, raisonDuRefus } from "../../gardes/PromesseDeFin.ts";
 import { garderLaSortie } from "../gardeDeSortieDOutil.ts";
 import { resolveClaudeSdkExecutablePath } from "../Drivers/ClaudeExecutable.ts";
 import { makeClaudeEnvironment } from "../Drivers/ClaudeHome.ts";
@@ -3712,6 +3713,35 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
                 () => {
                   noterCompactage(threadId);
                   return Promise.resolve({ continue: true });
+                },
+              ],
+            },
+          ],
+          // LE PREMIER GARDE-PRODUIT (levier n°3) : un tour ne se termine pas
+          // sur une promesse. Décision dans gardes/PromesseDeFin.ts, sous
+          // test ; ici les trois garde-fous d'exécution — jamais deux
+          // blocages (stop_hook_active), jamais pendant du travail de fond,
+          // et le module se tait devant une question.
+          Stop: [
+            {
+              hooks: [
+                (entree: {
+                  readonly stop_hook_active?: boolean;
+                  readonly last_assistant_message?: string;
+                  readonly background_tasks?: ReadonlyArray<unknown>;
+                  readonly session_crons?: ReadonlyArray<unknown>;
+                }) => {
+                  if (entree.stop_hook_active === true) return Promise.resolve({ continue: true });
+                  if ((entree.background_tasks?.length ?? 0) > 0)
+                    return Promise.resolve({ continue: true });
+                  if ((entree.session_crons?.length ?? 0) > 0)
+                    return Promise.resolve({ continue: true });
+                  const promesse = finEnPromesse(entree.last_assistant_message);
+                  return Promise.resolve(
+                    promesse === null
+                      ? { continue: true }
+                      : { decision: "block", reason: raisonDuRefus(promesse) },
+                  );
                 },
               ],
             },
