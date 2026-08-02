@@ -271,6 +271,55 @@ describe("les réglages agissent, ils ne décorent pas", () => {
     ).toEqual([]);
   });
 
+  it("aucun bouton d'info n'ignore le clic", () => {
+    // Un `<button>` rendu par un `TooltipTrigger` s'ouvre au SURVOL et reste
+    // muet au clic. Au doigt — et pour quiconque clique avant de survoler —
+    // l'affordance est morte : l'objet a la forme d'un bouton et n'en fait
+    // pas le travail.
+    //
+    // Quatre de ces boutons vivaient dans les réglages le 02/08. Le remède
+    // existait déjà dans le même dossier : `Popover` + `openOnHover`, qui
+    // répond aux DEUX gestes.
+    const muets: string[] = [];
+
+    for (const chemin of fichiers) {
+      const contenu = NodeFS.readFileSync(chemin, "utf8");
+      const lignes = contenu.split("\n");
+      for (const { ligne, texte } of balises(contenu, "TooltipTrigger")) {
+        const rendUnBouton = texte.includes("<button") || texte.includes("<Button");
+        if (!rendUnBouton) continue;
+        if (texte.includes("onClick")) continue;
+
+        // DEUX EXCEPTIONS QUI NE SONT PAS DES ÉCHAPPATOIRES, mais des cas où
+        // la règle avait tort. Trouvées en l'écrivant, sur des cas réels.
+        //
+        // 1. Un bouton `disabled` ne PEUT pas être cliqué : lui reprocher de
+        //    n'avoir pas de gestionnaire n'a pas de sens. C'est même le bon
+        //    patron — le verrou plus l'infobulle qui dit pourquoi.
+        if (/\sdisabled(\s|\/>|>|=)/.test(texte)) continue;
+        //
+        // 2. Un autre déclencheur peut FOURNIR le clic. `DialogTrigger`,
+        //    `PopoverTrigger`, `MenuTrigger`… enveloppent le bouton et
+        //    ouvrent au clic. Le geste marche ; c'est le détecteur qui ne le
+        //    voyait pas.
+        if (/<(Dialog|AlertDialog|Popover|Menu|Sheet|Drawer)Trigger\b/.test(texte)) continue;
+
+        if (estAssume(lignes, ligne)) continue;
+        muets.push(`${chemin.slice(racine.length + 1)}:${ligne}`);
+      }
+    }
+
+    expect(
+      muets,
+      muets.length === 0
+        ? ""
+        : `Ces boutons s'ouvrent au survol et ignorent le clic :\n${muets.join("\n")}\n\n` +
+            `Remplace le Tooltip par un Popover avec « openOnHover » — le patron est déjà ` +
+            `utilisé dans ce dossier (ConnectionsSettings, ProviderInstanceCard). Un bouton ` +
+            `qui ne répond pas au clic n'est pas un bouton.`,
+    ).toEqual([]);
+  });
+
   it("aucun interrupteur n'est désactivé en dur", () => {
     // `disabled` sans condition, c'est un contrôle qui ne s'allumera JAMAIS.
     // `disabled={x}` est légitime — c'est un état, pas une condamnation.

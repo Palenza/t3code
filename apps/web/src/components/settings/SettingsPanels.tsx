@@ -107,6 +107,7 @@ import {
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { Switch } from "../ui/switch";
 import { stackedThreadToast, toastManager } from "../ui/toast";
+import { Popover, PopoverPopup, PopoverTrigger } from "../ui/popover";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { AddProviderInstanceDialog } from "./AddProviderInstanceDialog";
 import {
@@ -272,8 +273,19 @@ function backgroundActivityOverrideSettings(
 
 function PolicyTooltip({ children }: { readonly children: string }) {
   return (
-    <Tooltip>
-      <TooltipTrigger
+    /*
+      UN BOUTON QUI IGNORE LE CLIC N'EST PAS UN BOUTON.
+      C'était un `TooltipTrigger` sans `onClick` : le survol ouvrait l'aide, le
+      clic ne faisait RIEN. Au doigt — et pour quiconque clique avant de
+      survoler — l'affordance était morte. Le `Popover` avec `openOnHover`
+      ouvre aux DEUX gestes, et c'est le patron déjà employé ailleurs dans ces
+      mêmes réglages.
+    */
+    <Popover>
+      <PopoverTrigger
+        openOnHover
+        delay={250}
+        closeDelay={100}
         render={
           <button
             type="button"
@@ -284,10 +296,10 @@ function PolicyTooltip({ children }: { readonly children: string }) {
           </button>
         }
       />
-      <TooltipPopup side="top" className="max-w-72">
+      <PopoverPopup side="top" tooltipStyle className="max-w-72 whitespace-normal">
         {children}
-      </TooltipPopup>
-    </Tooltip>
+      </PopoverPopup>
+    </Popover>
   );
 }
 

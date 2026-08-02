@@ -47,6 +47,7 @@ import {
   NumberFieldIncrement,
   NumberFieldInput,
 } from "../ui/number-field";
+import { Popover, PopoverPopup, PopoverTrigger } from "../ui/popover";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import {
   AzureDevOpsIcon,
@@ -123,8 +124,15 @@ function backgroundActivityOverrideSettings(
 
 function BackgroundPolicyTooltip({ children }: { readonly children: string }) {
   return (
-    <Tooltip>
-      <TooltipTrigger
+    /*
+      Même correction qu'en `SettingsPanels.tsx` : un `TooltipTrigger` sans
+      `onClick` ouvre au survol et ignore le clic. Le `Popover` répond aux deux.
+    */
+    <Popover>
+      <PopoverTrigger
+        openOnHover
+        delay={250}
+        closeDelay={100}
         render={
           <button
             type="button"
@@ -135,10 +143,10 @@ function BackgroundPolicyTooltip({ children }: { readonly children: string }) {
           </button>
         }
       />
-      <TooltipPopup side="top" className="max-w-72">
+      <PopoverPopup side="top" tooltipStyle className="max-w-72 whitespace-normal">
         {children}
-      </TooltipPopup>
-    </Tooltip>
+      </PopoverPopup>
+    </Popover>
   );
 }
 
