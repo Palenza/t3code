@@ -145,23 +145,30 @@ export function rayonPourRendreVisible(angles: ReadonlyArray<number>): number {
   return Math.min(RAYON_MAXI, besoin);
 }
 
-/** L'angle du plus grand vide angulaire — la place la plus loin de tous. */
-function angleDuPlusGrandVide(angles: ReadonlyArray<number>): number {
-  if (angles.length === 0) return ORIENTATION_DEFAUT;
-  const tries = [...angles].map((a) => ((a % TOUR) + TOUR) % TOUR).sort((a, b) => a - b);
-  let meilleur = tries[0]! + Math.PI;
-  let plusGrand = -1;
-  for (let i = 0; i < tries.length; i += 1) {
-    const debut = tries[i]!;
-    const fin = i + 1 < tries.length ? tries[i + 1]! : tries[0]! + TOUR;
-    const vide = fin - debut;
-    if (vide > plusGrand) {
-      plusGrand = vide;
-      meilleur = debut + vide / 2;
-    }
-  }
-  return meilleur;
-}
+/**
+ * LES GABARITS DE POSE D'ARC — mesurés, pas déduits (02/08, « les placements
+ * des 3 ronds sont totalement pas comme Arc »).
+ *
+ * · DUO : ANTIPODAL. 300 images du 31/07 — le milieu des deux reste épinglé
+ *   au centre (±1 px), donc 180°/180°.
+ * · TRIO : 60°/150°/150°. 149 images du 09:30, centre CIRCONSCRIT calculé
+ *   sans rien supposer (médian à 2 px du centre du canevas), petit écart
+ *   59-68°. Même signature sur la session du 31/07.
+ *
+ * Moi je posais 120/120/120 — un « équilatéral » hérité d'un vieil invariant,
+ * qu'aucune capture d'Arc ne montre. Le trio d'Arc, c'est une PAIRE à 60° et
+ * un troisième en face : angles de la dominante + [0°, +60°, −150°].
+ */
+const GABARITS_DE_POSE: ReadonlyArray<ReadonlyArray<number>> = [
+  [0],
+  [0, Math.PI],
+  [0, Math.PI / 3, (-5 * Math.PI) / 6],
+];
+
+const anglesDuGabarit = (angleDominante: number, count: number): number[] => {
+  const gabarit = GABARITS_DE_POSE[Math.min(count, GABARITS_DE_POSE.length) - 1] ?? [0];
+  return gabarit.map((decalage) => angleDominante + decalage);
+};
 
 /** Le plafond : au-delà, un rond sortirait de la toile. Arc mesure 0,42. */
 export const RAYON_MAXI = CENTRE - MARGE;
@@ -408,8 +415,31 @@ export function deplacerFigure(points: ReadonlyArray<Point>, x: number, y: numbe
 export function ajouterRond(points: ReadonlyArray<Point>, max: number): Point[] {
   if (points.length === 0) return [surLeCercle(ORIENTATION_DEFAUT, RAYON_DEFAUT)];
   if (points.length >= max) return [...points];
-  const angles = [...points.map(angleDe), angleDuPlusGrandVide(points.map(angleDe))];
+  // Le gabarit d'Arc pour N+1, ancré sur l'angle de la dominante : passer de
+  // deux à trois REDISTRIBUE la figure (paire à 60° + un en face) — c'est ce
+  // que ses captures montrent, pas une insertion dans un vide.
+  const angles = anglesDuGabarit(angleDe(points[0]!), points.length + 1);
   const rayon = Math.max(rayonDe(points), rayonPourRendreVisible(angles));
+  return angles.map((angle) => surLeCercle(angle, rayon));
+}
+
+/**
+ * Pose un ensemble de stops PAR LEURS COULEURS : chaque rond à l'angle de SA
+ * teinte, tous au rayon commun (la moyenne de leurs rayons de teinte).
+ *
+ * C'est la pose des préréglages d'Arc : ses trios de teintes voisines donnent
+ * des écarts angulaires de 37/40/283 (mesuré le 02/08 à 07 h 26) — les écarts
+ * DE TEINTE du préréglage, pas un gabarit. Le rayon monte si besoin pour que
+ * chaque rond reste visible.
+ */
+export function poserSelonCouleurs(couleurs: ReadonlyArray<string>): Point[] {
+  if (couleurs.length === 0) return [];
+  const positions = couleurs.map((couleur) => wheelPositionOf(couleur));
+  const angles = positions.map(angleDe);
+  const rayonMoyen =
+    positions.reduce((somme, p) => somme + Math.hypot(p.x - CENTRE, p.y - CENTRE), 0) /
+    positions.length;
+  const rayon = Math.min(RAYON_MAXI, Math.max(rayonMoyen, rayonPourRendreVisible(angles)));
   return angles.map((angle) => surLeCercle(angle, rayon));
 }
 
@@ -430,12 +460,9 @@ export function poserFigure(x: number, y: number, count: number): Point[] {
   const dy = y - CENTRE;
   const vise = Math.hypot(dx, dy);
   const angle = vise < 1e-9 ? ORIENTATION_DEFAUT : Math.atan2(dy, dx);
-  const angles = Array.from(
-    { length: Math.max(1, count) },
-    (_, index) => angle + (TOUR * index) / Math.max(1, count),
-  );
-  // Une figure NEUVE s'étale : c'est la pose, donc les ronds doivent tous se
-  // voir. Le glissé, lui, pourra la refermer jusqu'à l'uni.
+  // Le gabarit d'Arc, ancré sur l'angle visé — plus jamais un étalement à
+  // angles égaux, qu'aucune de ses captures ne montre.
+  const angles = anglesDuGabarit(angle, Math.max(1, count));
   const rayon = Math.max(Math.min(RAYON_MAXI, vise), rayonPourRendreVisible(angles));
   return angles.map((valeur) => surLeCercle(valeur, rayon));
 }

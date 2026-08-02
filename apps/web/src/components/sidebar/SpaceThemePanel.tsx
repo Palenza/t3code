@@ -17,6 +17,7 @@ import {
   degradeDePastille,
   deplacerFigure,
   poserFigure,
+  poserSelonCouleurs,
   retirerRond,
   stopsAvecCouleurs,
   stopsDepuisPoints,
@@ -321,10 +322,10 @@ export function SpaceThemePanel({ spaceId }: { readonly spaceId?: string } = {})
 
   const applyGradient = useCallback(
     (trio: readonly [string, string, string]) => {
-      // Un gradient = TROIS ronds, aux couleurs EXACTES du préréglage,
-      // ancrés sur le premier ton.
-      const position = wheelPositionOf(trio[0]);
-      apply({ ...current, stops: stopsAvecCouleurs(poserFigure(position.x, position.y, 3), trio) });
+      // Un gradient = TROIS ronds, aux couleurs EXACTES du préréglage —
+      // chacun À L'ANGLE DE SA TEINTE (pose d'Arc, mesurée : ses trios font
+      // 37/40/283 d'écarts, les écarts de teinte du préréglage).
+      apply({ ...current, stops: stopsAvecCouleurs(poserSelonCouleurs(trio), trio) });
     },
     [apply, current],
   );

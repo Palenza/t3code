@@ -5,6 +5,7 @@ import {
   deplacerFigure,
   orientationDe,
   poserFigure,
+  poserSelonCouleurs,
   RAYON_MAXI,
   RAYON_MINI,
   RAYON_REFERME,
@@ -16,9 +17,10 @@ import {
 } from "./SpaceThemePanel.logic";
 
 /**
- * L'invariant du fondateur tient toujours — « les points doivent TOUJOURS
- * rester à distance égale » — mais il n'est plus MAINTENU, il est CONSTRUIT :
- * des points également répartis sur un cercle forment un polygone régulier.
+ * La référence de ces tests est ARC, mesuré — plus aucun invariant à nous.
+ * Le 02/08, « à distance égale » (mon équilatéral 120/120/120) est tombé
+ * devant les captures : le trio d'Arc fait 60/150/150, son duo est antipodal,
+ * et ses préréglages posent chaque rond à l'angle de SA teinte.
  *
  * Ce qui a changé le 01/08, et pourquoi ces attentes ont été réécrites : les
  * anciennes exigeaient un écart FIGÉ (`ECART_RONDS`) pendant le glissé. La
@@ -99,18 +101,41 @@ describe("la figure de la toile", () => {
     memeRayon(points);
   });
 
-  it("pose trois ronds en triangle ÉQUILATÉRAL, à n'importe quel rayon", () => {
+  it("pose trois ronds au GABARIT d'Arc — 60/150/150, jamais l'équilatéral", () => {
+    // Reçu 02/08 : 149 images d'Arc à 3 ronds, centre circonscrit CALCULÉ
+    // (médian à 2 px du centre du canevas), écarts 60/150/150 (petit écart
+    // 59-68). Mon 120/120/120 ne figure sur aucune capture — « les
+    // placements des 3 ronds sont totalement pas comme Arc ».
     for (const cible of [0.62, 0.75, 0.9]) {
       const points = poserFigure(cible, 0.5, 3);
       expect(points).toHaveLength(3);
-      tousEgaux(points);
       memeRayon(points);
-      expect(ecartsAngulaires(points).map(Math.round)).toEqual([120, 120, 120]);
+      expect(ecartsAngulaires(points).map(Math.round)).toEqual([60, 150, 150]);
     }
   });
 
-  it("garde l'égalité quand la dominante traverse toute la toile", () => {
+  it("pose deux ronds ANTIPODAUX aussi via le gabarit", () => {
+    const points = poserFigure(0.8, 0.5, 2);
+    expect(ecartsAngulaires(points).map(Math.round)).toEqual([180, 180]);
+  });
+
+  it("pose un préréglage PAR SES COULEURS — chaque rond à l'angle de sa teinte", () => {
+    // La pose des trios d'Arc mesurée le 02/08 à 07 h 26 : 37/40/283 —
+    // les écarts DE TEINTE du préréglage, pas un gabarit.
+    const trio = ["#f08a62", "#e8785a", "#d95f70"] as const;
+    const points = poserSelonCouleurs([...trio]);
+    expect(points).toHaveLength(3);
+    memeRayon(points);
+    const angles = points.map(angle);
+    trio.forEach((hex, index) => {
+      const attendu = angle(wheelPositionOf(hex));
+      expect(Math.abs(angles[index]! - attendu)).toBeLessThan(0.02);
+    });
+  });
+
+  it("garde rayon commun ET écarts du gabarit quand la dominante traverse la toile", () => {
     let points = poserFigure(0.7, 0.5, 3);
+    const depart = ecartsAngulaires(points);
     for (const [x, y] of [
       [0.05, 0.05],
       [0.95, 0.05],
@@ -120,9 +145,10 @@ describe("la figure de la toile", () => {
       [0.62, 0.5],
     ] as const) {
       points = deplacerFigure(points, x, y);
-      tousEgaux(points);
       memeRayon(points);
       dansLaToile(points);
+      const maintenant = ecartsAngulaires(points);
+      maintenant.forEach((valeur, index) => expect(valeur).toBeCloseTo(depart[index]!, 4));
     }
   });
 
@@ -176,7 +202,7 @@ describe("la figure de la toile", () => {
     ] as const) {
       const points = deplacerFigure(poserFigure(0.7, 0.5, 3), cible[0], cible[1]);
       dansLaToile(points);
-      tousEgaux(points);
+      memeRayon(points);
       expect(rayon(points[0]!)).toBeCloseTo(RAYON_MAXI, 6);
     }
   });
@@ -244,13 +270,16 @@ describe("la figure de la toile", () => {
 
   it("survit à la promotion d'un satellite : permuter les rôles ne déforme rien", () => {
     const points = poserFigure(0.72, 0.5, 3);
+    const ecartsAvant = ecartsAngulaires(points);
     const permute = [points[1]!, points[2]!, points[0]!];
-    tousEgaux(permute);
     memeRayon(permute);
-    // Et glisser depuis le nouveau rôle garde la figure saine.
+    // Et glisser depuis le nouveau rôle garde la figure saine : mêmes écarts,
+    // même rayon commun.
     const apres = deplacerFigure(permute, 0.3, 0.7);
-    tousEgaux(apres);
     memeRayon(apres);
+    ecartsAngulaires(apres).forEach((valeur, index) =>
+      expect(valeur).toBeCloseTo(ecartsAvant[index]!, 4),
+    );
   });
 
   it("reste lisible après un aller-retour ajouter/retirer/ajouter", () => {
