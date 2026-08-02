@@ -4,6 +4,8 @@ import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 
+import { compterLaPortee, type PoseDeMode, type SautDeMode } from "@t3tools/shared/porteeDuMode";
+
 import { appliquerModeAuHome, lireModeDuHome } from "./provider/Drivers/ClaudeModePermissions.ts";
 import { resolveClaudeHomePath } from "./provider/Drivers/ClaudeHome.ts";
 import { ServerSettingsService } from "./serverSettings.ts";
@@ -153,7 +155,10 @@ export const modePoserRouteLayer = HttpRouter.add(
         (demande.instanceId === undefined || cle === demande.instanceId),
     );
 
-    let appliques = 0;
+    /** UNE issue par compte visé — c'est le compte qui la traduit, pas nous. */
+    const issues: Array<PoseDeMode | SautDeMode> = [];
+    /** Le détail nommé des échecs, pour que le journal désigne le coupable. */
+    const echecs: Array<{ instanceId: string; cause: PoseDeMode }> = [];
     for (const [cle, config] of vises) {
       const brut = config.config;
       const homePath =
@@ -164,27 +169,41 @@ export const modePoserRouteLayer = HttpRouter.add(
           : "";
       // Sans dossier propre, l'instance partage le `~/.claude` de l'humain :
       // y écrire un refus toucherait sa CLI personnelle, hors de l'app.
-      if (homePath.trim().length === 0) continue;
+      if (homePath.trim().length === 0) {
+        issues.push("saute");
+        continue;
+      }
       const resolu = yield* resolveClaudeHomePath({ homePath });
-      yield* appliquerModeAuHome(resolu, mode);
-      appliques += 1;
+      // On enregistre l'ISSUE, pas le fait d'avoir appelé. Confondre les deux
+      // faisait annoncer « appliqué, tous restreints » quand rien n'était posé.
+      const resultat = yield* appliquerModeAuHome(resolu, mode);
+      issues.push(resultat);
+      if (resultat !== "applique") {
+        echecs.push({ instanceId: cle, cause: resultat });
+        yield* Effect.logWarning("mode NON posé", {
+          instanceId: cle as ProviderInstanceId,
+          mode: mode?.slug ?? "libre",
+          cause: resultat,
+        });
+        continue;
+      }
       yield* Effect.logInfo("mode posé", {
         instanceId: cle as ProviderInstanceId,
         mode: mode?.slug ?? "libre",
       });
     }
+    const portee = compterLaPortee(issues);
 
     modeCourant = mode;
-    // La PORTÉE REELLE, pas seulement le nombre d'appliques. Un compte sans
-    // dossier propre est SAUTE — et sur cette machine c'est le compte
-    // principal, celui qui porte douze des quatorze fils actifs. Dire
-    // « 3 comptes » laissait croire a « partout » ; il faut dire sur combien.
+    // La PORTÉE REELLE, comptée une seule fois, par le module qui sait aussi
+    // la METTRE EN PHRASE. Le bug est né de sa dispersion : le serveur
+    // comptait ici, le client reformulait là-bas, et les deux moitiés ne se
+    // rencontraient qu'en production.
     return HttpServerResponse.jsonUnsafe({
       pose: true,
       mode: mode === null ? null : mode.slug,
-      comptes: appliques,
-      comptesTotal: vises.length,
-      comptesSautes: vises.length - appliques,
+      ...portee,
+      echecs,
     });
   }).pipe(
     Effect.catchCause((cause) =>

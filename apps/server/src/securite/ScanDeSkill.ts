@@ -40,7 +40,7 @@
  * Module PUR.
  */
 
-import { CARACTERES_INVISIBLES, scannerMenaces } from "./MotifsDeMenace.ts";
+import { scannerMenaces, trouverInvisibleSuspect } from "./MotifsDeMenace.ts";
 
 export type Gravite = "critique" | "haute" | "moyenne";
 export type Verdict = "sain" | "prudence" | "dangereux";
@@ -414,13 +414,20 @@ export function scannerSkill(
         ou: fichier.nom,
       });
     }
-    const invisible = CARACTERES_INVISIBLES.find((c) => fichier.texte.includes(c));
-    if (invisible !== undefined) {
+    // Les assembleurs d'emoji ne comptent PAS : 26 occurrences de U+FE0F
+    // vivent dans 21 skills saines du parc, et un garde qui crie au loup se
+    // fait débrancher. Ce qui compte, c'est un invisible sans usage légitime,
+    // ou un sélecteur détaché de tout pictogramme. Cf. MotifsDeMenace.
+    const invisible = trouverInvisibleSuspect(fichier.texte);
+    if (invisible !== null) {
+      const point = `U+${invisible.point.toString(16).toUpperCase().padStart(4, "0")}`;
       trouvailles.push({
         id: "caractere-invisible",
         gravite: "critique",
         categorie: "obfuscation",
-        quoi: `caractère invisible U+${invisible.codePointAt(0)?.toString(16).toUpperCase().padStart(4, "0")} — l'humain qui relit ne le voit pas, le modèle le lit`,
+        // La POSITION est dite : un humain ne peut pas chercher à l'œil un
+        // caractère qui, par définition, ne se voit pas.
+        quoi: `caractère invisible ${point} au caractère ${invisible.index + 1} — l'humain qui relit ne le voit pas, le modèle le lit`,
         ou: fichier.nom,
       });
     }

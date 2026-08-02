@@ -1,4 +1,10 @@
-import { reglesPour, type ModeTravail } from "@t3tools/shared/modesTravail";
+import {
+  entreesPosablesParUnMode,
+  MODES_LIVRES,
+  reglesPour,
+  type ModeTravail,
+} from "@t3tools/shared/modesTravail";
+import type { PoseDeMode } from "@t3tools/shared/porteeDuMode";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
@@ -64,12 +70,16 @@ export const lireModeDuHome = Effect.fn("lireModeDuHome")(function* (
   }
   if (permissions === null) return null;
 
-  const enTexte = (valeur: unknown) =>
+  // On ne lit QUE nos propres entrées : depuis qu'un mode fusionne au lieu
+  // d'écraser, les listes contiennent aussi celles de l'utilisateur, et une
+  // comparaison sur la liste entière ne reconnaîtrait plus jamais un mode.
+  const posables = entreesPosablesParUnMode(candidats);
+  const enTexte = (valeur: unknown, notres: ReadonlySet<string>) =>
     Array.isArray(valeur)
-      ? [...valeur].filter((v): v is string => typeof v === "string").sort()
+      ? [...valeur].filter((v): v is string => typeof v === "string" && notres.has(v)).sort()
       : [];
-  const denyLu = enTexte(permissions.deny);
-  const allowLu = enTexte(permissions.allow);
+  const denyLu = enTexte(permissions.deny, posables.deny);
+  const allowLu = enTexte(permissions.allow, posables.allow);
   if (denyLu.length === 0 && allowLu.length === 0) return null;
 
   // On reconnaît le mode par ce qu'il PRODUIT, pas par un marqueur qu'on
@@ -90,10 +100,40 @@ export const lireModeDuHome = Effect.fn("lireModeDuHome")(function* (
   return null;
 });
 
+/**
+ * La liste suivante : ce qui est à l'utilisateur, plus ce que le mode pose.
+ *
+ * L'ordre est stable et l'utilisateur passe d'abord — un fichier qui se
+ * réécrit dans un ordre différent à chaque clic est illisible en revue, et
+ * casse l'idempotence sans rien apporter.
+ */
+function fusionnerListe(
+  existante: unknown,
+  aNous: ReadonlySet<string>,
+  posees: ReadonlyArray<string>,
+): string[] {
+  const brut = Array.isArray(existante)
+    ? existante.filter((v): v is string => typeof v === "string")
+    : [];
+  const deLUtilisateur = brut.filter((entree) => !aNous.has(entree));
+  return [...new Set([...deLUtilisateur, ...posees])];
+}
+
+/**
+ * Pose le périmètre, et RAPPORTE ce que ça a donné.
+ *
+ * La fonction ne peut pas échouer — faire tomber toute la requête parce qu'un
+ * compte sur trois a un fichier abîmé serait pire. Mais « ne pas échouer » ne
+ * veut pas dire « avoir réussi » : c'est cette confusion qui rendait l'écran
+ * menteur, et c'est pourquoi l'issue remonte au lieu de rester un `void`.
+ * Le tri, lui, appartient à `@t3tools/shared/porteeDuMode`.
+ */
 export const appliquerModeAuHome = Effect.fn("appliquerModeAuHome")(function* (
   homePath: string,
   mode: ModeTravail | null,
-): Effect.fn.Return<void, never, Path.Path | FileSystem.FileSystem> {
+  /** Le catalogue, pour savoir quelles entrées sont NÔTRES — donc retirables. */
+  catalogue: ReadonlyArray<ModeTravail> = MODES_LIVRES,
+): Effect.fn.Return<PoseDeMode, never, Path.Path | FileSystem.FileSystem> {
   const path = yield* Path.Path;
   const fs = yield* FileSystem.FileSystem;
   const fichier = path.join(homePath, "settings.json");
@@ -113,31 +153,48 @@ export const appliquerModeAuHome = Effect.fn("appliquerModeAuHome")(function* (
   );
   if (existant === null) {
     yield* Effect.logWarning("mode: settings.json illisible, périmètre non appliqué", { fichier });
-    return;
+    return "settings-illisible" as const;
   }
 
+  const posables = entreesPosablesParUnMode(catalogue);
   const regles = mode === null ? { deny: [], allow: [] } : reglesPour(mode);
   const suivant: Record<string, unknown> = { ...existant };
-  if (regles.deny.length === 0 && regles.allow.length === 0) {
-    // Rien à restreindre : on efface notre trace au lieu d'écrire un objet
-    // vide, pour que le fichier redevienne exactement ce qu'il était.
+  const permissionsExistantes =
+    typeof existant["permissions"] === "object" && existant["permissions"] !== null
+      ? (existant["permissions"] as Record<string, unknown>)
+      : {};
+
+  // ON NE RETIRE QUE CE QU'ON A POSÉ. Avant, poser un mode ÉCRASAIT les deux
+  // listes, et le mode Atelier — qui ne restreint rien — supprimait le bloc
+  // `permissions` en entier : refus personnels, `defaultMode`,
+  // `additionalDirectories`, tout partait. Le mode qui promet de ne rien
+  // restreindre était le plus destructeur du lot.
+  const suivantPermissions: Record<string, unknown> = { ...permissionsExistantes };
+  for (const cle of ["deny", "allow"] as const) {
+    const fusionnee = fusionnerListe(permissionsExistantes[cle], posables[cle], regles[cle]);
+    // Une liste vide et une clé absente veulent dire la même chose ; on écrit
+    // la forme la plus courte pour que le fichier puisse redevenir le sien.
+    if (fusionnee.length > 0) suivantPermissions[cle] = fusionnee;
+    else delete suivantPermissions[cle];
+  }
+  if (Object.keys(suivantPermissions).length === 0) {
+    // Le bloc n'existait que par nous : on l'efface. S'il porte encore la
+    // moindre clé de l'utilisateur, il RESTE — c'est la différence entre
+    // effacer sa trace et effacer son travail.
     delete suivant["permissions"];
   } else {
-    const permissionsExistantes =
-      typeof existant["permissions"] === "object" && existant["permissions"] !== null
-        ? (existant["permissions"] as Record<string, unknown>)
-        : {};
-    suivant["permissions"] = { ...permissionsExistantes, deny: regles.deny, allow: regles.allow };
+    suivant["permissions"] = suivantPermissions;
   }
 
   yield* fs
     .makeDirectory(homePath, { recursive: true })
     .pipe(Effect.orElseSucceed(() => undefined));
-  yield* fs
-    .writeFileString(fichier, `${encodeSettings(suivant)}\n`)
-    .pipe(
-      Effect.catchCause((cause) =>
-        Effect.logWarning("mode: écriture des permissions impossible", { fichier, cause }),
+  return yield* fs.writeFileString(fichier, `${encodeSettings(suivant)}\n`).pipe(
+    Effect.as("applique" as const),
+    Effect.catchCause((cause) =>
+      Effect.logWarning("mode: écriture des permissions impossible", { fichier, cause }).pipe(
+        Effect.as("ecriture-refusee" as const),
       ),
-    );
+    ),
+  );
 });

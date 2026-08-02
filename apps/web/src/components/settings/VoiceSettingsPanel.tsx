@@ -67,6 +67,7 @@ import {
   resolveDisplayedModelTarget,
   resolveModelRegistry,
   selectedQuantization,
+  veilleGouvernee,
 } from "./VoiceSettingsPanel.logic";
 import { SettingsPageContainer, SettingsRow, SettingsSection } from "./settingsLayout";
 
@@ -582,12 +583,17 @@ export function VoiceSettingsPanel() {
             */}
             <SettingsRow
               title="Garder le moteur chaud"
-              description="Après ce nombre de minutes sans dictée, le moteur est arrêté pour libérer la mémoire — et la dictée suivante attend de nouveau son chargement. Augmentez si vous dictez par à-coups."
+              // Le texte DÉPEND du moteur : sur le moteur local, ce délai ne
+              // gouverne rien (cf. veilleGouvernee). Promettre un arrêt qui
+              // n'arrive jamais est un réglage décoratif, et un réglage
+              // décoratif fait douter de tous les autres.
+              description={veilleGouvernee(settings.voice.engine).description}
               control={
                 <Input
                   type="number"
                   min={1}
                   className="w-24"
+                  disabled={!veilleGouvernee(settings.voice.engine).actif}
                   aria-label={t("dictee.arret")}
                   defaultValue={String(settings.voice.idleTimeoutMinutes)}
                   onBlur={(evenement) => {
