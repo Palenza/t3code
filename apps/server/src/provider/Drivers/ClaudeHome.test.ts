@@ -20,7 +20,24 @@ it.layer(NodeServices.layer)("ClaudeHome", (it) => {
         const resolved = path.resolve(NodeOS.homedir());
 
         expect(yield* resolveClaudeHomePath({ homePath: "" })).toBe(resolved);
-        expect(yield* makeClaudeEnvironment({ homePath: "" })).toBe(process.env);
+
+        // GOLDEN RÉÉCRIT SCIEMMENT (03/08). Il exigeait l'IDENTITÉ avec
+        // `process.env` — « pas de dossier propre, on rend l'environnement tel
+        // quel ». C'était vrai tant qu'on n'avait rien à poser. Depuis, le
+        // compte par défaut doit lui aussi recevoir
+        // `CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS` : sans ça, le signal de fin
+        // de tour reste inerte sur LUI seul, et une correction verte sur deux
+        // comptes sur trois est pire qu'aucune.
+        //
+        // Ce que le golden protégeait vraiment — « on ne perd rien de
+        // l'environnement de base » — est donc vérifié autrement : même
+        // contenu, plus le signal.
+        const environnement = yield* makeClaudeEnvironment({ homePath: "" });
+        expect(environnement).not.toBe(process.env);
+        expect(environnement).toEqual({
+          ...process.env,
+          CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS: "1",
+        });
       }),
     );
 
