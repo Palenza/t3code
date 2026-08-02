@@ -8,6 +8,7 @@ import {
   resolveDisplayedModelTarget,
   resolveModelRegistry,
   selectedQuantization,
+  veilleGouvernee,
 } from "./VoiceSettingsPanel.logic";
 
 describe("VoiceSettingsPanel logic", () => {
@@ -196,5 +197,31 @@ describe("les minutes avant l'arrêt du moteur vocal", () => {
     expect(minutesDeVeilleValides("1e3")).toBeNull();
     expect(minutesDeVeilleValides("0x10")).toBeNull();
     expect(minutesDeVeilleValides("+5")).toBeNull();
+  });
+});
+
+/**
+ * LE RÉGLAGE QUI NE FAIT RIEN — et qui le dit maintenant.
+ *
+ * Le champ promettait aux DEUX moteurs un arrêt après N minutes. Sur le
+ * moteur local, `TranscriptionService` pose `idleTimeoutOverride:
+ * Duration.infinity` : le faucheur n'est jamais lancé, le modèle (~600 Mo)
+ * reste chargé pour toujours. La faute d'origine était une généralisation —
+ * on avait cité le faucheur du SIDECAR pour justifier une promesse faite aux
+ * deux branches.
+ */
+describe("le délai de veille dit sur quel moteur il agit", () => {
+  it("gouverne bel et bien le moteur externe", () => {
+    const vu = veilleGouvernee("sidecar");
+    expect(vu.actif).toBe(true);
+    expect(vu.description).toContain("moteur externe est arrêté");
+  });
+
+  it("ne PROMET plus rien sur le moteur local — et le champ y est inerte", () => {
+    const vu = veilleGouvernee("transcribecpp");
+    // Un champ actif sur un réglage inerte est décoratif.
+    expect(vu.actif).toBe(false);
+    expect(vu.description).toContain("Sans effet");
+    expect(vu.description).not.toContain("est arrêté pour libérer la mémoire");
   });
 });

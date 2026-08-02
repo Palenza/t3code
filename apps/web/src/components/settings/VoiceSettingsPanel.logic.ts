@@ -200,3 +200,41 @@ export function minutesDeVeilleValides(saisie: string): number | null {
   if (!Number.isInteger(minutes) || minutes < 1) return null;
   return minutes;
 }
+
+/**
+ * CE QUE LE DÉLAI DE VEILLE GOUVERNE — et sur quel moteur il ne fait RIEN.
+ *
+ * Le champ « Garder le moteur chaud » promettait : « après ce nombre de
+ * minutes sans dictée, le moteur est arrêté pour libérer la mémoire ». Sur le
+ * moteur LOCAL, c'est faux depuis le premier jour : `TranscriptionService`
+ * construit le moteur avec `idleTimeoutOverride: Duration.infinity` (GO
+ * fondateur du 29/07 — recharger sept secondes à chaque reprise coûtait le
+ * premier clip), donc le faucheur n'est jamais lancé et le modèle, ~600 Mo,
+ * reste en mémoire pour toujours.
+ *
+ * La faute d'origine est une GÉNÉRALISATION : en câblant ce champ, on a cité
+ * le faucheur du sidecar (`TranscriptionService.ts:306`) pour justifier une
+ * promesse faite aux DEUX moteurs. Un réglage lu par le serveur n'est pas un
+ * réglage appliqué partout — il faut regarder la branche qu'on emprunte,
+ * pas celle qu'on a sous les yeux.
+ *
+ * On ne touche pas au comportement : le choix de garder le modèle chaud est
+ * une décision, pas un bug. On cesse juste de prétendre l'inverse.
+ */
+export function veilleGouvernee(moteur: "sidecar" | "transcribecpp"): {
+  readonly actif: boolean;
+  readonly description: string;
+} {
+  if (moteur === "transcribecpp") {
+    return {
+      actif: false,
+      description:
+        "Sans effet sur le moteur local : son modèle reste chargé volontairement, pour que la dictée suivante ne repaie pas ses ~7 s de chargement. Ce délai ne gouverne que le moteur externe.",
+    };
+  }
+  return {
+    actif: true,
+    description:
+      "Après ce nombre de minutes sans dictée, le moteur externe est arrêté pour libérer la mémoire — et la dictée suivante attend de nouveau son chargement. Augmentez si vous dictez par à-coups.",
+  };
+}
