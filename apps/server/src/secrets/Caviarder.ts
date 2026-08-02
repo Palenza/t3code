@@ -27,6 +27,9 @@
  * désactiver le caviardage. Un garde trop zélé finit désarmé.
  */
 
+import { bornesDuGroupe, decouper, type BorneSecrete } from "./spansSecrets.ts";
+import { nomDEnvironnement, valeurPlausiblementSecrete } from "./valeurPlausible.ts";
+
 /** Longueur en-dessous de laquelle on masque TOUT. */
 export const SEUIL_MASQUAGE_TOTAL = 18;
 export const TETE_VISIBLE = 6;
@@ -96,6 +99,26 @@ const NOMS_SECRETS = new Set([
   "credential",
   "credentials",
   "bearer",
+  // ── Les composés, ajoutés le 03/08 ────────────────────────────────────
+  // `R2_SECRET_ACCESS_KEY` sortait EN CLAIR : la liste connaissait `api_key`
+  // et `private_key`, mais ni `access_key`, ni `secret_key`, ni la forme à
+  // TROIS segments. C'est la famille des clés d'objet (R2, S3, Supabase) —
+  // celles du data-lake. Trouvé par l'audit adversarial, rejoué ici.
+  "access_key",
+  "secret_key",
+  "secret_access_key",
+  "access_key_id",
+  "encryption_key",
+  "signing_key",
+  "role_key",
+  "service_key",
+  "session_key",
+  "webhook_secret",
+  "auth_token",
+  "session_token",
+  "connection_string",
+  "dsn",
+  "passphrase",
 ]);
 
 const normaliser = (nom: string) => nom.toLowerCase().replaceAll(/[\s-]/gu, "_");
@@ -117,7 +140,9 @@ export function nomSensible(nom: string): boolean {
   const propre = normaliser(nom.trim());
   if (NOMS_SECRETS.has(propre) || NOMS_SECRETS.has(propre.replaceAll("_", ""))) return true;
   const segments = propre.split("_").filter((part) => part.length > 0);
-  for (let taille = 1; taille <= Math.min(2, segments.length - 1); taille += 1) {
+  // TROIS segments, pas deux : `secret_access_key` en fait trois, et c'est
+  // exactement la forme des clés d'objet qui sortaient en clair.
+  for (let taille = 1; taille <= Math.min(3, segments.length - 1); taille += 1) {
     const suffixe = segments.slice(segments.length - taille).join("_");
     if (NOMS_SECRETS.has(suffixe) || NOMS_SECRETS.has(suffixe.replaceAll("_", ""))) return true;
   }
@@ -136,11 +161,11 @@ export function nomSensible(nom: string): boolean {
 
 /** `FOO=valeur`, en shell comme en `.env`. */
 const AFFECTATION_ENV =
-  /\b([A-Za-z_][A-Za-z0-9_-]*)\s*=\s*(?:"([^"\n]*)"|'([^'\n]*)'|([^\s;&|]+))/gu;
+  /\b([A-Za-z_][A-Za-z0-9_-]*)[^\S\r\n]*=[^\S\r\n]*(?:"([^"\n]*)"|'([^'\n]*)'|([^\s;&|]+))/gu;
 
 /** `"clé": "valeur"` en JSON, `clé: valeur` en YAML. */
 const AFFECTATION_OBJET =
-  /(?:"([A-Za-z_][A-Za-z0-9_-]*)"|\b([A-Za-z_][A-Za-z0-9_-]*))\s*:\s*(?:"([^"\n]*)"|([^\s,}\n]+))/gu;
+  /(?:"([A-Za-z_][A-Za-z0-9_-]*)"|\b([A-Za-z_][A-Za-z0-9_-]*))[^\S\r\n]*:[^\S\r\n]*(?:"([^"\n]*)"|([^\s,}\n]+))/gu;
 
 /**
  * Les noms que la passe d'affectation NE doit pas retoucher.
@@ -154,7 +179,16 @@ const AFFECTATION_OBJET =
 const DEJA_TRAITES = new Set(["authorization", "proxy_authorization"]);
 
 /** Un en-tête d'autorisation, quel que soit son schéma. */
-const EN_TETE_AUTH = /\b(authorization|proxy-authorization)\s*:\s*(\S+)(\s+\S+)?/giu;
+/**
+ * ⚠️ `[^\S\r\n]` et JAMAIS `\s` : `\s` traverse les retours à la ligne, donc
+ * `Authorization:` en fin de ligne capturait le premier mot de la ligne
+ * SUIVANTE et le remplacement les fusionnait. Mesuré le 03/08 sur le dépôt :
+ * 459 lignes PERDUES, tout le fichier décalé après le premier en-tête. Un
+ * agent recevait un fichier dont les numéros de ligne ne collaient plus au
+ * disque.
+ */
+const EN_TETE_AUTH =
+  /\b(authorization|proxy-authorization)[^\S\r\n]*:[^\S\r\n]*(\S+)([^\S\r\n]+\S+)?/giu;
 
 /** Les paramètres d'URL sensibles — le nom décide, là encore. */
 const PARAM_URL = /([?&])([A-Za-z_][A-Za-z0-9_-]*)=([^&\s"']+)/gu;
@@ -189,59 +223,129 @@ const CLE_PRIVEE = /-----BEGIN[^-]*PRIVATE KEY-----[\s\S]*?-----END[^-]*PRIVATE 
  */
 export function caviarder(texte: string): string {
   if (texte.length === 0) return texte;
-  let sortie = texte.replaceAll(
-    CLE_PRIVEE,
-    "-----BEGIN PRIVATE KEY----- *** -----END PRIVATE KEY-----",
-  );
 
-  for (const motif of JETONS) {
-    sortie = sortie.replaceAll(motif, (trouve) => masquer(trouve));
+  // ── LE DÉCOUPAGE, ET PLUS JAMAIS LA RECONSTRUCTION ────────────────────────
+  //
+  // Chaque passe ne rend que des BORNES ; le texte hors bornes est recopié à
+  // l'octet près (cf. spansSecrets.ts). Trois conséquences, toutes voulues :
+  // aucune structure ne peut être réécrite, aucun retour à la ligne ne peut
+  // disparaître, et un remplacement contenant « $& » ne peut pas se
+  // ré-injecter puisque le masque passe par un appel de fonction.
+  //
+  // Et LE NOM NE DÉCIDE PLUS SEUL. Une clé nommée `token` dont la valeur est
+  // `none`, `${{ secrets.X }}` ou `mcpSession.authorizationHeader` n'est pas un
+  // secret : `valeurPlausiblementSecrete` la laisse passer. Mesuré avant :
+  // 800 fichiers du dépôt altérés sur 15 255, sans qu'aucun ne contienne le
+  // moindre secret.
+  const bornes: BorneSecrete[] = [];
+
+  // Les blocs PEM en premier : ils contiennent des retours à la ligne et des
+  // « = » qui feraient dérailler tout le reste.
+  for (const trouve of texte.matchAll(CLE_PRIVEE)) {
+    if (trouve.index !== undefined) {
+      bornes.push({ debut: trouve.index, fin: trouve.index + trouve[0].length });
+    }
   }
 
-  // Le mot de passe d'une URL. APRÈS la passe JETONS, et sans jamais la
-  // repasser : un `ghp_…` en position mot de passe a déjà été masqué en
-  // gardant sa tête reconnaissable — la retoucher détruirait précisément ce
-  // qu'elle avait choisi de garder. D'où le refus des valeurs portant `***`.
-  sortie = sortie.replaceAll(MOT_DE_PASSE_URL, (entier, avant: string, motDePasse: string) =>
-    motDePasse.includes("***") ? entier : `${avant}:***@`,
+  // Les jetons à préfixe connu. Ils se reconnaissent SEULS, où qu'ils soient :
+  // aucun test de nom, aucun test de plausibilité — le préfixe EST la preuve.
+  for (const motif of JETONS) {
+    for (const trouve of texte.matchAll(motif)) {
+      if (trouve.index !== undefined) {
+        bornes.push({ debut: trouve.index, fin: trouve.index + trouve[0].length });
+      }
+    }
+  }
+
+  // Le mot de passe d'une URL : seule la position mot de passe tombe.
+  // L'utilisateur et l'hôte restent lisibles — savoir QUEL compte sur QUEL
+  // hôte est ce qui rend une trace utile, et `ssh://git@github.com` (un
+  // utilisateur sans mot de passe) doit traverser intact.
+  // Le `***` refusé ici est ce qui rend l'opération IDEMPOTENTE : sans lui, un
+  // texte déjà caviardé se fait re-caviarder et le masque grossit à chaque
+  // passage. Un caviardage qui n'est pas idempotent finit par tout effacer.
+  bornes.push(
+    ...bornesDuGroupe(
+      texte,
+      MOT_DE_PASSE_URL,
+      2,
+      (valeur) => valeur.length > 0 && !valeur.includes("***"),
+    ),
   );
 
-  // L'en-tête d'autorisation garde son SCHÉMA : savoir que c'est un Bearer
-  // plutôt qu'un Basic est utile pour déboguer, et ne révèle rien.
-  //
-  // `MARQUE` est là parce que la passe des affectations qui suit voit
-  // `Authorization: Bearer` comme un couple clé/valeur et masquait « Bearer »
-  // à son tour — le journal rendait alors « Authorization: *** opaqu***2345 »,
-  // où l'on avait perdu le schéma ET gardé le secret masqué deux fois.
-  sortie = sortie.replaceAll(EN_TETE_AUTH, (entier, nom: string, un: string, deux?: string) =>
-    deux === undefined ? `${nom}: ${masquer(un)}` : `${nom}: ${un} ${masquer(deux.trim())}`,
+  // L'en-tête d'autorisation. Le SCHÉMA reste (« Bearer », « Basic ») : il
+  // aide à déboguer et ne révèle rien. Seule la partie qui suit est masquée,
+  // et seulement si elle est plausible — dans du code source,
+  // `Authorization: mcpSession.authorizationHeader` n'est pas un secret.
+  bornes.push(
+    ...bornesDuGroupe(texte, EN_TETE_AUTH, 3, (valeur) =>
+      valeurPlausiblementSecrete(valeur.trim()),
+    ),
+  );
+  bornes.push(
+    ...bornesDuGroupe(
+      texte,
+      EN_TETE_AUTH,
+      2,
+      (valeur, entier) => entier[3] === undefined && valeurPlausiblementSecrete(valeur),
+    ),
   );
 
-  sortie = sortie.replaceAll(PARAM_URL, (entier, sep: string, nom: string, valeur: string) =>
-    nomSensible(nom) ? `${sep}${nom}=${masquer(valeur)}` : entier,
-  );
-
-  const masquerAffectation = (entier: string, nom: string, valeur: string | undefined) => {
-    if (valeur === undefined || valeur.length === 0) return entier;
-    if (DEJA_TRAITES.has(normaliser(nom))) return entier;
-    if (!nomSensible(nom)) return entier;
-    // Déjà caviardé par une passe précédente : y retoucher détruirait ce
-    // qu'elle avait délibérément gardé (la tête d'une clé reconnaissable).
-    if (valeur.includes("***")) return entier;
-    return entier.replace(valeur, masquer(valeur));
+  // Les paramètres d'URL, puis les affectations : le nom donne l'indice, la
+  // valeur donne le verdict.
+  const nommeEtPlausible = (valeur: string, entier: RegExpExecArray, indexDuNom: number) => {
+    const nom = entier[indexDuNom];
+    return (
+      nom !== undefined &&
+      nomSensible(nom) &&
+      valeurPlausiblementSecrete(valeur, nomDEnvironnement(nom))
+    );
   };
 
-  sortie = sortie.replaceAll(
-    AFFECTATION_ENV,
-    (entier, nom: string, guillemets?: string, apostrophes?: string, nu?: string) =>
-      masquerAffectation(entier, nom, guillemets ?? apostrophes ?? nu),
-  );
+  bornes.push(...bornesDuGroupe(texte, PARAM_URL, 3, (v, e) => nommeEtPlausible(v, e, 2)));
 
-  sortie = sortie.replaceAll(
-    AFFECTATION_OBJET,
-    (entier, cite?: string, nu?: string, valeurCitee?: string, valeurNue?: string) =>
-      masquerAffectation(entier, cite ?? nu ?? "", valeurCitee ?? valeurNue),
-  );
+  for (const groupe of [2, 3, 4]) {
+    bornes.push(
+      ...bornesDuGroupe(texte, AFFECTATION_ENV, groupe, (v, e) => nommeEtPlausible(v, e, 1)),
+    );
+  }
 
-  return sortie;
+  for (const groupe of [3, 4]) {
+    bornes.push(
+      ...bornesDuGroupe(texte, AFFECTATION_OBJET, groupe, (valeur, entier) => {
+        const nom = entier[1] ?? entier[2];
+        if (nom === undefined || DEJA_TRAITES.has(normaliser(nom))) return false;
+        return nomSensible(nom) && valeurPlausiblementSecrete(valeur, nomDEnvironnement(nom));
+      }),
+    );
+  }
+
+  return decouper(texte, bornes, (valeur) =>
+    CLE_PRIVEE_TEST.test(valeur) ? masquerBlocPem(valeur) : masquer(valeur),
+  );
+}
+
+/** Reconnaît un bloc PEM déjà borné, pour lui donner son masque dédié. */
+const CLE_PRIVEE_TEST = /^-----BEGIN[^-]*PRIVATE KEY-----/u;
+
+/**
+ * Masque une clé privée SANS changer le nombre de lignes.
+ *
+ * Un bloc PEM est le seul secret qui s'étend sur plusieurs lignes. L'écraser
+ * en une seule ligne — ce que faisait l'ancienne version — décale tout le
+ * fichier à partir de là. C'est exactement la corruption qu'on vient de
+ * refermer, et elle ne redevient pas acceptable sous prétexte que le secret,
+ * lui, est vrai : un agent qui lit ce fichier doit garder des numéros de ligne
+ * justes.
+ *
+ * On garde donc les bornes du bloc, on remplace CHAQUE ligne du corps par
+ * `***`, et le compte de lignes est inchangé — invariant tenu, secret parti.
+ */
+function masquerBlocPem(bloc: string): string {
+  const lignes = bloc.split("\n");
+  if (lignes.length <= 2) return "-----BEGIN PRIVATE KEY----- *** -----END PRIVATE KEY-----";
+  const premiere = lignes[0] ?? "";
+  const derniere = lignes.at(-1) ?? "";
+  const corps = lignes.slice(1, -1).map(() => "***");
+  return [premiere, ...corps, derniere].join("\n");
 }
