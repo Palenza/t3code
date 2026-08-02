@@ -47,7 +47,12 @@ import * as Arr from "effect/Array";
 import * as Duration from "effect/Duration";
 import * as Equal from "effect/Equal";
 import * as Result from "effect/Result";
-import { APP_VERSION, HOSTED_APP_CHANNEL, HOSTED_APP_CHANNEL_LABEL } from "../../branding";
+import {
+  APP_BUILD_VERSION,
+  APP_COMMIT_HASH,
+  HOSTED_APP_CHANNEL,
+  HOSTED_APP_CHANNEL_LABEL,
+} from "../../branding";
 import {
   canCheckForUpdate,
   getDesktopUpdateButtonTooltip,
@@ -351,9 +356,33 @@ function ProviderLastChecked({ lastCheckedAt }: { lastCheckedAt: string | null }
 
 function AboutVersionTitle() {
   return (
-    <span className="inline-flex items-center gap-2">
+    <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-0.5">
       <span>Version</span>
-      <code className="text-[11px] font-medium text-muted-foreground">{APP_VERSION}</code>
+      {/*
+        `APP_BUILD_VERSION`, et surtout PAS `APP_VERSION`.
+
+        Le second est la version d'`apps/web`, que seule la CI bumpe. La barre
+        latérale portait déjà ce correctif — avec le commentaire qui l'explique
+        — mais l'écran « À propos » était resté sur l'ancien : il annonçait
+        0.0.31 pendant qu'Enzo faisait tourner un DMG 0.0.85. Un numéro faux,
+        et crédible, à l'endroit exact où l'on vient vérifier sa version.
+      */}
+      <code className="text-[11px] font-medium text-muted-foreground">{APP_BUILD_VERSION}</code>
+      {/*
+        Le COMMIT, volé à Hermès. Un numéro de version ne distingue pas notre
+        build de celui de l'amont — nous portons les mêmes, et la synchro fait
+        entrer leurs commits chez nous chaque nuit. Le hash, lui, tranche.
+
+        Absent en développement, où aucun commit ne décrit ce qui tourne.
+      */}
+      {APP_COMMIT_HASH ? (
+        <code
+          className="text-[11px] font-medium text-muted-foreground/70"
+          title="Le commit exact à partir duquel ce build a été produit"
+        >
+          · {APP_COMMIT_HASH}
+        </code>
+      ) : null}
     </span>
   );
 }

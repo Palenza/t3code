@@ -2170,7 +2170,17 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
         // rien à voir avec le DMG installé (0.0.31 pour un DMG 0.0.73,
         // constaté le 02/08). Le seul endroit qui connaît le vrai numéro est
         // ce script : c'est donc lui qui le passe.
-        env: { ...process.env, APP_BUILD_VERSION: desktopPackageJson.version },
+        // Et le COMMIT, pour la même raison. Hermès affiche « Branch main ·
+        // Commit 4be8905 » sous sa version : pour un fork qui vient de se
+        // détacher, c'est LA ligne qui répond à « je tourne sur ma version ou
+        // sur celle de l'amont ? ». Le hash n'existe qu'ici, au moment du
+        // build ; s'il n'est pas gravé maintenant, l'app ne pourra jamais le
+        // retrouver.
+        env: {
+          ...process.env,
+          APP_BUILD_VERSION: desktopPackageJson.version,
+          APP_COMMIT_HASH: commitHash,
+        },
       }),
       { label: "vp run build:desktop", verbose: options.verbose },
     );
