@@ -64,17 +64,19 @@ const MAX_ARC_STOPS = 3;
 const PAGES_UNIES: ReadonlyArray<{ readonly nom: string; readonly tons: ReadonlyArray<string> }> = [
   {
     nom: "Vives",
-    // relevé 07.18.20
+    // relevé ARC.mov 02/08 t=22-30 s — moitié basse des disques, pleine
+    // résolution. La première mesure (07.18.20) prenait la médiane du disque
+    // ENTIER : le reflet clair du haut délavait tout d'un cran.
     tons: [
-      "#f1eae5",
-      "#e69fba",
-      "#9e749b",
-      "#e1686f",
-      "#ef8c62",
-      "#f2d66d",
-      "#73e59c",
-      "#7fb8d6",
-      "#666786",
+      "#ece5dd",
+      "#ec8fb0",
+      "#996490",
+      "#ed525f",
+      "#fc774b",
+      "#f5cc4b",
+      "#2ae289",
+      "#5fb0d1",
+      "#585a7c",
     ],
   },
   {
@@ -94,46 +96,46 @@ const PAGES_UNIES: ReadonlyArray<{ readonly nom: string; readonly tons: Readonly
   },
   {
     nom: "Pastel",
-    // relevé 07.16.06
+    // relevé ARC.mov 02/08 t=46-68 s (même méthode)
     tons: [
-      "#fefbfa",
-      "#fbeaf3",
-      "#ecd2ea",
-      "#f7cdd2",
-      "#fae1d5",
-      "#fef9e7",
-      "#e4fcec",
-      "#e0f2fb",
-      "#c5c6e2",
+      "#f2ecec",
+      "#fce5ee",
+      "#eccae6",
+      "#fec3c9",
+      "#fcdacb",
+      "#fdf6df",
+      "#d6fbe5",
+      "#d4eff9",
+      "#bbbddf",
     ],
   },
   {
     nom: "Profondes",
-    // relevé 07.16.36
+    // relevé ARC.mov 02/08 t=72 s (même méthode)
     tons: [
-      "#4b3b58",
-      "#623856",
-      "#854444",
-      "#a77048",
-      "#d1b46a",
-      "#cdcca8",
-      "#84a885",
-      "#34604b",
-      "#2d4468",
+      "#43314f",
+      "#5a2c4b",
+      "#833537",
+      "#a56036",
+      "#cfa751",
+      "#c4c498",
+      "#6d9e75",
+      "#1c563e",
+      "#203b5d",
     ],
   },
   {
     nom: "Gris",
-    // relevé 07.17.02
+    // relevé ARC.mov 02/08 t=105 s (même méthode ; le blanc de tête gardé pur)
     tons: [
       "#ffffff",
-      "#e5e5e5",
-      "#cccccc",
-      "#b3b3b3",
-      "#808080",
-      "#666666",
-      "#333333",
-      "#191919",
+      "#e0e0e0",
+      "#c3c3c3",
+      "#a7a7a7",
+      "#737373",
+      "#595959",
+      "#2a2a2a",
+      "#161616",
       "#000000",
     ],
   },
@@ -252,6 +254,11 @@ export function SpaceThemePanel({ spaceId }: { readonly spaceId?: string } = {})
   );
 
   const [swatchPage, setSwatchPage] = useState(0);
+  // Nonce de POSE : un clic de pastille/dégradé fait NAÎTRE les ronds sur
+  // place (pop 160 ms) au lieu de les faire glisser depuis leur ancienne
+  // position à travers tout le canevas — mesuré sur ARC.mov : son rond
+  // apparaît là où sa teinte le place, il ne voyage pas.
+  const [poseNonce, setPoseNonce] = useState(0);
 
   // ------------------------------------------------------------- la toile
   const canvasRef = useRef<HTMLDivElement | null>(null);
@@ -361,6 +368,7 @@ export function SpaceThemePanel({ spaceId }: { readonly spaceId?: string } = {})
       // (Reproche fondateur : revenir des gradients aux unis laissait trois
       // ronds ; « si je choisis le jaune, ça me met que le rond jaune ».)
       const position = wheelPositionOf(color);
+      setPoseNonce((n) => n + 1);
       apply({
         ...current,
         stops: stopsAvecCouleurs(poserFigure(position.x, position.y, 1), [color]),
@@ -374,6 +382,7 @@ export function SpaceThemePanel({ spaceId }: { readonly spaceId?: string } = {})
       // Un gradient = TROIS ronds, aux couleurs EXACTES du préréglage —
       // chacun À L'ANGLE DE SA TEINTE (pose d'Arc, mesurée : ses trios font
       // 37/40/283 d'écarts, les écarts de teinte du préréglage).
+      setPoseNonce((n) => n + 1);
       apply({ ...current, stops: stopsAvecCouleurs(poserSelonCouleurs(trio), trio) });
     },
     [apply, current],
@@ -433,13 +442,25 @@ export function SpaceThemePanel({ spaceId }: { readonly spaceId?: string } = {})
         className={cn(
           "relative h-[372px] touch-none rounded-t-2xl bg-[radial-gradient(circle,var(--dot)_1px,transparent_1px)] bg-[size:4px_4px]",
           isDarkCanvas
-            ? "[--dot:color-mix(in_oklab,white_22%,transparent)]"
+            ? "[--dot:color-mix(in_oklab,white_10%,transparent)]"
             : "[--dot:color-mix(in_oklab,black_18%,transparent)]",
         )}
         onPointerMove={(event) => {
           if (draggingRef.current) viser(event.clientX, event.clientY);
         }}
         onPointerUp={finDeGlisse}
+        onClick={(event) => {
+          // Le canevas lui-même prend le clic — « Tap to pick a color for
+          // this space », le libellé d'Arc. Un clic sec (pas un glissé, pas
+          // un rond : eux arrêtent la propagation) déplace la dominante là.
+          if (draggingRef.current || event.target !== event.currentTarget) return;
+          const rect = event.currentTarget.getBoundingClientRect();
+          const x = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
+          const y = Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height));
+          const points = current.stops.map((stop) => ({ x: stop.x, y: stop.y }));
+          const prise = saisirRond(points, 0);
+          apply({ ...current, stops: stopsDepuisPoints(poursuivre(points, prise, x, y, 1)) });
+        }}
       >
         <div className="absolute inset-x-0 top-3 flex items-center justify-center">
           <Tooltip>
@@ -468,7 +489,7 @@ export function SpaceThemePanel({ spaceId }: { readonly spaceId?: string } = {})
               // L'index EST l'identité stable pendant le glissé (une clé
               // couleur/position remonterait le bouton à chaque frame).
               // eslint-disable-next-line react/no-array-index-key
-              key={index}
+              key={`${poseNonce}-${index}`}
               type="button"
               aria-label={`Prendre cette couleur comme dominante`}
               onPointerDown={(event) => {
