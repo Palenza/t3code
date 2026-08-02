@@ -1,6 +1,11 @@
 import type { DesktopWslState } from "@t3tools/contracts";
 import { describe, expect, it, vi } from "vite-plus/test";
-import { applyWslEnableSelection } from "./ConnectionsSettings.logic";
+import {
+  applyWslEnableSelection,
+  decrirePortee,
+  decrirePortees,
+  PORTEES_CONNUES,
+} from "./ConnectionsSettings.logic";
 
 const baseWslState: DesktopWslState = {
   enabled: false,
@@ -71,5 +76,52 @@ describe("applyWslEnableSelection", () => {
     expect(calls).toEqual(["setWslOnly:true", "setWslBackendEnabled:true"]);
     expect(setWslDistro).not.toHaveBeenCalled();
     expect(state).toMatchObject({ enabled: true, wslOnly: true });
+  });
+});
+
+describe("les permissions, lues en clair", () => {
+  it("traduit une permission connue au lieu d'afficher son nom machine", () => {
+    // Ce que l'écran montrait : « orchestration:read ». Ce qu'il montre
+    // désormais : « View environment » + ce que ça autorise. Les libellés
+    // existaient déjà, à trois lignes de là, pour COCHER les permissions.
+    const portee = decrirePortee("orchestration:read");
+
+    expect(portee.titre).toBe("View environment");
+    expect(portee.description).toBe("Read threads, status, diffs, and configuration.");
+    expect(portee.inconnue).toBe(false);
+  });
+
+  it("garde le nom BRUT d'une permission inconnue plutôt que d'en deviner le sens", () => {
+    // Un serveur plus récent peut accorder une permission que ce client ignore.
+    // Lui inventer une jolie phrase serait pire que de ne rien dire : ça
+    // rassurerait à tort sur ce qu'on vient d'accorder.
+    const portee = decrirePortee("quelquechose:denouveau");
+
+    expect(portee.titre).toBe("quelquechose:denouveau");
+    expect(portee.description).toBeNull();
+    expect(portee.inconnue).toBe(true);
+  });
+
+  it("garde l'ordre reçu — on lit les permissions dans l'ordre où elles ont été accordées", () => {
+    const lues = decrirePortees(["access:write", "orchestration:read"]);
+    expect(lues.map((portee) => portee.scope)).toEqual(["access:write", "orchestration:read"]);
+  });
+
+  it("décrit CHAQUE permission du catalogue, sans trou", () => {
+    // Le fil-piège : ajouter une permission au catalogue sans son libellé la
+    // ferait passer pour « inconnue » à l'écran, alors qu'on la connaît.
+    for (const entree of PORTEES_CONNUES) {
+      const portee = decrirePortee(entree.scope);
+      expect(portee.inconnue, `${entree.scope} n'a pas de libellé lisible`).toBe(false);
+      expect(portee.titre.length).toBeGreaterThan(0);
+      expect((portee.description ?? "").length).toBeGreaterThan(0);
+    }
+  });
+
+  it("n'a aucun doublon de permission dans le catalogue", () => {
+    // Deux entrées pour la même permission : la première gagne en silence, et
+    // l'écran affiche un libellé sans qu'on sache lequel.
+    const noms = PORTEES_CONNUES.map((entree) => entree.scope);
+    expect(new Set(noms).size).toBe(noms.length);
   });
 });

@@ -42,7 +42,11 @@ import { useCopyToClipboard } from "../../hooks/useCopyToClipboard";
 import { cn } from "../../lib/utils";
 import { formatElapsedDurationLabel, formatExpiresInLabel } from "../../timestampFormat";
 import { resolveDesktopPairingUrl, resolveHostedPairingUrl } from "./pairingUrls";
-import { applyWslEnableSelection } from "./ConnectionsSettings.logic";
+import {
+  applyWslEnableSelection,
+  decrirePortees,
+  PORTEES_CONNUES,
+} from "./ConnectionsSettings.logic";
 import {
   SettingsPageContainer,
   SettingsRow,
@@ -162,53 +166,6 @@ function formatAccessTimestamp(value: string): string {
   return accessTimestampFormatter.format(parsed);
 }
 
-const PAIRING_SCOPE_OPTIONS: ReadonlyArray<{
-  readonly scope: AuthEnvironmentScope;
-  readonly title: string;
-  readonly description: string;
-}> = [
-  {
-    scope: AuthOrchestrationReadScope,
-    title: "View environment",
-    description: "Read threads, status, diffs, and configuration.",
-  },
-  {
-    scope: AuthOrchestrationOperateScope,
-    title: "Operate tasks",
-    description: "Start tasks and perform changes in the environment.",
-  },
-  {
-    scope: AuthTerminalOperateScope,
-    title: "Use terminals",
-    description: "Create terminals and send input to running shells.",
-  },
-  {
-    scope: AuthReviewWriteScope,
-    title: "Write reviews",
-    description: "Create comments while reviewing changes.",
-  },
-  {
-    scope: AuthAccessReadScope,
-    title: "View access",
-    description: "Inspect pairing links and authorized clients.",
-  },
-  {
-    scope: AuthAccessWriteScope,
-    title: "Manage access",
-    description: "Issue and revoke credentials for other clients.",
-  },
-  {
-    scope: AuthRelayReadScope,
-    title: "View relay",
-    description: "Inspect managed relay connectivity.",
-  },
-  {
-    scope: AuthRelayWriteScope,
-    title: "Manage relay",
-    description: "Change managed tunnel connectivity.",
-  },
-];
-
 function AccessScopeSummary({
   scopes,
   label,
@@ -240,12 +197,28 @@ function AccessScopeSummary({
         tooltipStyle
         className="w-max max-w-80 whitespace-normal"
       >
-        <p className="mb-1 font-medium">Granted scopes</p>
-        <div className="flex flex-col gap-0.5">
-          {scopes.map((scope) => (
-            <code key={scope} className="font-mono text-foreground/85">
-              {scope}
-            </code>
+        <p className="mb-1.5 font-medium">What this client can do</p>
+        <div className="flex flex-col gap-1.5">
+          {decrirePortees(scopes).map((portee) => (
+            <div key={portee.scope} className="flex flex-col">
+              {/*
+                Le nom lisible d'abord, la description en dessous. Une permission
+                inconnue de ce client (serveur plus récent) garde son nom machine
+                en monospace : on ne devine JAMAIS ce qu'une permission autorise.
+              */}
+              <span
+                className={portee.inconnue ? "font-mono text-foreground/85" : "text-foreground/90"}
+              >
+                {portee.titre}
+              </span>
+              {portee.description ? (
+                <span className="text-muted-foreground">{portee.description}</span>
+              ) : (
+                <span className="text-muted-foreground">
+                  Unknown to this client — it may be newer than this app.
+                </span>
+              )}
+            </div>
           ))}
         </div>
       </PopoverPopup>
@@ -907,13 +880,24 @@ const ConnectedClientListRow = memo(function ConnectedClientListRow({
   const nowMs = useRelativeTimeTick(1_000);
   const isLive = clientSession.current || clientSession.connected;
   const lastConnectedAt = clientSession.lastConnectedAt;
-  const statusTooltip = isLive
+  /**
+   * CE QUI DISTINGUE UNE LIGNE D'UNE AUTRE.
+   *
+   * Six sessions du même appareil portent le même nom, la même origine et les
+   * mêmes permissions : sur une capture d'Enzo (02/08) elles étaient
+   * RIGOUREUSEMENT indiscernables, et « Revoke others » demandait de choisir
+   * entre des jumelles. La date était pourtant déjà calculée — elle ne vivait
+   * que dans l'infobulle au survol, donc hors de portée de quiconque compare
+   * six lignes d'un coup d'œil. On la sort à l'écran.
+   */
+  const presenceLabel = isLive
     ? lastConnectedAt
       ? `Connected for ${formatElapsedDurationLabel(lastConnectedAt, nowMs)}`
       : "Connected"
     : lastConnectedAt
-      ? `Last connected at ${formatAccessTimestamp(lastConnectedAt)}`
-      : "Not connected yet.";
+      ? `Last seen ${formatAccessTimestamp(lastConnectedAt)}`
+      : "Never connected";
+  const statusTooltip = presenceLabel;
   const deviceInfoBits = [
     clientSession.client.deviceType !== "unknown"
       ? clientSession.client.deviceType[0]?.toUpperCase() + clientSession.client.deviceType.slice(1)
@@ -945,6 +929,8 @@ const ConnectedClientListRow = memo(function ConnectedClientListRow({
             ) : null}
           </div>
           <p className="text-xs text-muted-foreground">
+            <span className={isLive ? "text-foreground/75" : undefined}>{presenceLabel}</span>
+            <span aria-hidden> · </span>
             {deviceInfoBits.length > 0 ? (
               <>
                 {deviceInfoBits.join(" · ")}
@@ -1016,17 +1002,28 @@ const AuthorizedClientsHeaderAction = memo(function AuthorizedClientsHeaderActio
     );
   }, []);
 
+  /**
+   * Combien de sessions ce bouton va couper.
+   *
+   * « Revoke others » ne disait pas ce qu'il détruisait — bouton rouge, collé au
+   * bouton bleu de création, et six lignes jumelles au-dessus. Un geste
+   * irréversible doit NOMMER son ampleur avant le clic, pas après.
+   */
+  const autresSessions = clientSessions.filter((clientSession) => !clientSession.current).length;
+
   return (
     <div className="flex items-center gap-2">
       <Button
         size="xs"
         variant="destructive-outline"
-        disabled={
-          isRevokingOtherClients || clientSessions.every((clientSession) => clientSession.current)
-        }
+        disabled={isRevokingOtherClients || autresSessions === 0}
         onClick={() => void onRevokeOtherClients()}
       >
-        {isRevokingOtherClients ? "Revoking…" : "Revoke others"}
+        {isRevokingOtherClients
+          ? "Revoking…"
+          : autresSessions === 1
+            ? "Revoke 1 other"
+            : `Revoke ${autresSessions} others`}
       </Button>
       <Dialog
         open={dialogOpen}
@@ -1095,7 +1092,7 @@ const AuthorizedClientsHeaderAction = memo(function AuthorizedClientsHeaderActio
                 </div>
               </div>
               <div className="divide-y divide-border/60 rounded-lg border border-input bg-muted/25">
-                {PAIRING_SCOPE_OPTIONS.map(({ scope, title, description }) => (
+                {PORTEES_CONNUES.map(({ scope, title, description }) => (
                   <label
                     key={scope}
                     className="flex cursor-pointer items-start gap-3 px-3 py-2.5 transition-colors hover:bg-muted/40"

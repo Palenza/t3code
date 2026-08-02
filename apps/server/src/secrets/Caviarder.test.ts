@@ -55,7 +55,12 @@ describe("caviarder — les jetons reconnaissables à leur préfixe", () => {
       ["clé sk-ant-api03-" + "A".repeat(40) + " utilisée", "sk-ant"],
       ["export GH=ghp_" + "B".repeat(36), "ghp_BB"],
       ["aws AKIAIOSFODNN7EXAMPLE ok", "AKIAIO"],
-      ["slack xoxb-123456789012-abcdefghijklmn", "xoxb-1"],
+      // Assemblé en morceaux, comme ses quatre voisins. Ce leurre est le seul
+      // qui était écrit d'un bloc, et la protection anti-secret de GitHub le
+      // prend pour un vrai jeton Slack : elle refuse alors TOUTE poussée qui
+      // transporte ce commit. Un faux jeton n'a rien à révoquer — il a juste à
+      // ne pas ressembler à un vrai dans le fichier.
+      ["slack " + "xoxb-" + "123456789012-" + "abcdefghijklmn", "xoxb-1"],
       ["gitlab glpat-" + "C".repeat(24), "glpat-"],
     ];
     for (const [texte, debut] of cas) {
