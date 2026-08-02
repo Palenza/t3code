@@ -51,26 +51,69 @@ function fichiersDeReglages(racine: string): string[] {
     .map((nom) => NodePath.join(dossier, nom));
 }
 
-/** Les interrupteurs d'un fichier, avec leur ligne et leur texte complet. */
-function interrupteurs(contenu: string): ReadonlyArray<{ ligne: number; texte: string }> {
+/**
+ * Les balises ouvrantes d'un composant, avec leur ligne et leur texte ENTIER.
+ *
+ * ⚠️ Le piège qui rendait la première version fausse : `=>` contient un `>`.
+ * Chercher naïvement le premier `>` tronque la balise au milieu du premier
+ * gestionnaire — donc un `onValueChange={(v) => …}` disparaît de la fenêtre
+ * examinée, et le contrôle est déclaré inerte alors qu'il est câblé. Ça
+ * passait par chance sur les interrupteurs, dont le nom d'attribut précède la
+ * flèche.
+ *
+ * On suit donc la PROFONDEUR d'accolades : la balise se ferme au premier `>`
+ * rencontré à la profondeur zéro, hors chaîne de caractères.
+ */
+function balises(contenu: string, nom: string): ReadonlyArray<{ ligne: number; texte: string }> {
   const trouves: Array<{ ligne: number; texte: string }> = [];
   let depuis = 0;
+
   for (;;) {
-    const debut = contenu.indexOf("<Switch", depuis);
+    const debut = contenu.indexOf(`<${nom}`, depuis);
     if (debut === -1) break;
-    // La balise court jusqu'à sa fermeture. `<Switch` est auto-fermant dans ce
-    // dépôt, mais on accepte les deux formes plutôt que de le supposer.
-    const finAuto = contenu.indexOf("/>", debut);
-    const finSimple = contenu.indexOf(">", debut);
-    const fin = finAuto !== -1 && finAuto <= finSimple ? finAuto + 2 : finSimple + 1;
+
+    // `<Select` ne doit pas attraper `<SelectTrigger` : le caractère qui suit
+    // le nom doit être un blanc, un `>` ou un `/`.
+    const suivant = contenu[debut + nom.length + 1] ?? "";
+    if (/[A-Za-z0-9]/.test(suivant)) {
+      depuis = debut + nom.length + 1;
+      continue;
+    }
+
+    let profondeur = 0;
+    let guillemet: string | null = null;
+    let fin = -1;
+
+    for (let i = debut + 1; i < contenu.length; i += 1) {
+      const c = contenu[i];
+      if (guillemet) {
+        if (c === guillemet && contenu[i - 1] !== "\\") guillemet = null;
+        continue;
+      }
+      if (c === '"' || c === "'" || c === "`") {
+        guillemet = c;
+        continue;
+      }
+      if (c === "{") profondeur += 1;
+      else if (c === "}") profondeur -= 1;
+      else if (c === ">" && profondeur === 0) {
+        fin = i + 1;
+        break;
+      }
+    }
+    if (fin === -1) break;
+
     trouves.push({
       ligne: contenu.slice(0, debut).split("\n").length,
       texte: contenu.slice(debut, fin),
     });
     depuis = fin;
   }
+
   return trouves;
 }
+
+const interrupteurs = (contenu: string) => balises(contenu, "Switch");
 
 /**
  * Le marqueur doit vivre DANS LE COMMENTAIRE ATTACHÉ au contrôle.
@@ -123,12 +166,50 @@ describe("les réglages agissent, ils ne décorent pas", () => {
   const fichiers = fichiersDeReglages(racine);
 
   it("il y a bien des panneaux à inspecter", () => {
-    // Sans ce garde, le test suivant passerait sur une liste vide — un vert
-    // qui ne prouve rien, et qui se cite quand même.
+    // Sans ce garde, les tests suivants passeraient sur une liste vide — un
+    // vert qui ne prouve rien, et qui se cite quand même.
     expect(
       fichiers.length,
       `Aucun panneau trouvé dans ${DOSSIER_REGLAGES} — ce test regarde-t-il au bon endroit ?`,
     ).toBeGreaterThan(5);
+  });
+
+  it("le lecteur de balises TROUVE vraiment les contrôles", () => {
+    // Le mode de panne le plus vicieux d'un fil-piège : un analyseur qui ne
+    // reconnaît plus rien. Tout devient vert, et le vert se cite. On exige
+    // donc un plancher — mesuré le 02/08 : 27 interrupteurs, 18 listes.
+    let vusInterrupteurs = 0;
+    let vusListes = 0;
+    for (const chemin of fichiers) {
+      const contenu = NodeFS.readFileSync(chemin, "utf8");
+      vusInterrupteurs += interrupteurs(contenu).length;
+      vusListes += balises(contenu, "Select").length;
+    }
+
+    expect(
+      vusInterrupteurs,
+      `Le lecteur ne voit plus que ${vusInterrupteurs} interrupteur(s) — il en existait 27. ` +
+        `S'il en reste si peu, c'est l'ANALYSEUR qui est cassé, pas le code.`,
+    ).toBeGreaterThanOrEqual(20);
+    expect(
+      vusListes,
+      `Le lecteur ne voit plus que ${vusListes} liste(s) — il en existait 18.`,
+    ).toBeGreaterThanOrEqual(12);
+
+    // Et il ne doit pas confondre `<Select` avec `<SelectTrigger` : sinon le
+    // compte gonfle et la vérification porte sur des balises sans état.
+    const unExemple = NodeFS.readFileSync(
+      NodePath.join(racine, DOSSIER_REGLAGES, "SettingsPanels.tsx"),
+      "utf8",
+    );
+    for (const { texte } of balises(unExemple, "Select")) {
+      // Le caractère qui suit le nom ne doit pas être alphanumérique — sinon
+      // c'est `<SelectTrigger` ou `<SelectItem`, pas la racine.
+      const apresLeNom = texte.charAt("<Select".length);
+      expect(/[A-Za-z0-9]/.test(apresLeNom), `balise mal reconnue : ${texte.slice(0, 40)}`).toBe(
+        false,
+      );
+    }
   });
 
   it("aucun interrupteur n'est purement décoratif", () => {
@@ -157,6 +238,36 @@ describe("les réglages agissent, ils ne décorent pas", () => {
             `interrupteur mort a été remplacé par un état NOMMÉ.\n` +
             `Si l'inertie est vraiment voulue, écris « ${MARQUEUR_ASSUME} <raison> » sur ` +
             `la ligne ou juste au-dessus.`,
+    ).toEqual([]);
+  });
+
+  it("aucune liste déroulante n'est purement décorative", () => {
+    // Même règle, surface plus large : 18 listes contre 27 interrupteurs, et
+    // ce sont elles qui portent les choix de modèle, de canal, de thème.
+    // Une liste qui s'ouvre, propose, et ne retient rien est le mensonge le
+    // plus coûteux de l'écran — l'utilisateur croit avoir choisi.
+    const mortes: string[] = [];
+
+    for (const chemin of fichiers) {
+      const contenu = NodeFS.readFileSync(chemin, "utf8");
+      const lignes = contenu.split("\n");
+      for (const { ligne, texte } of balises(contenu, "Select")) {
+        if (texte.includes("onValueChange")) continue;
+        if (estAssume(lignes, ligne)) continue;
+        mortes.push(
+          `${chemin.slice(racine.length + 1)}:${ligne} → ${texte.replace(/\s+/g, " ").slice(0, 90)}`,
+        );
+      }
+    }
+
+    expect(
+      mortes,
+      mortes.length === 0
+        ? ""
+        : `Ces listes déroulantes ne retiennent RIEN de ce qu'on y choisit :\n` +
+            `${mortes.join("\n")}\n\n` +
+            `Si la liste ne sert qu'à montrer une valeur, ce n'est pas une liste : ` +
+            `c'est du texte. Sinon, câble « onValueChange ».`,
     ).toEqual([]);
   });
 
