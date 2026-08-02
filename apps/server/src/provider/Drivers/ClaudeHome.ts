@@ -16,12 +16,38 @@ export const resolveClaudeHomePath = Effect.fn("resolveClaudeHomePath")(function
   return path.resolve(homePath.length > 0 ? expandHomePath(homePath) : NodeOS.homedir());
 });
 
+/**
+ * LES SIGNAUX QUE LE MOTEUR N'ÉMET QUE SI ON LES DEMANDE.
+ *
+ * `session_state_changed` est traité depuis longtemps dans `ClaudeAdapter`
+ * (« Authoritative turn-over signal from the CLI »), et il n'est JAMAIS arrivé :
+ * le binaire ne l'émet que derrière une porte, vérifiée dans son code —
+ *
+ *   if (__(process.env.CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS))
+ *     EX({ type: "system", subtype: "session_state_changed", state: H })
+ *
+ * — et `grep -rn EMIT_SESSION_STATE_EVENTS apps/ packages/` rendait ZÉRO.
+ * Un branchement écrit, commenté, qui a l'air vivant et ne l'est pas : ni
+ * rouge, ni exception, juste une pièce inerte. La classe exacte du mode de
+ * panne A5b — la dépendance manquante qui rend le correctif inerte.
+ *
+ * Ce qu'on ne prétend PAS : que le handler fait quelque chose d'utile une fois
+ * réveillé. On lui ouvre la porte ; ce qu'il en fait se juge à l'usage.
+ */
+const SIGNAUX_DE_SESSION = {
+  CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS: "1",
+} as const;
+
 export const makeClaudeEnvironment = Effect.fn("makeClaudeEnvironment")(function* (
   config: Pick<ClaudeSettings, "homePath">,
   baseEnv?: NodeJS.ProcessEnv,
 ): Effect.fn.Return<NodeJS.ProcessEnv, never, Path.Path | FileSystem.FileSystem> {
-  const resolvedBaseEnv = baseEnv ?? process.env;
+  const resolvedBaseEnv = { ...(baseEnv ?? process.env), ...SIGNAUX_DE_SESSION };
   const homePath = config.homePath.trim();
+  // ⚠️ Ce retour anticipé sert le compte PAR DÉFAUT (pas de dossier propre).
+  // Poser un réglage plus bas seulement, c'est le manquer pour lui — et une
+  // correction qui marche sur deux comptes sur trois est pire qu'aucune : elle
+  // se prouve verte sur l'un et ment sur l'autre.
   if (homePath.length === 0) return resolvedBaseEnv;
   const resolvedHomePath = yield* resolveClaudeHomePath(config);
   // Un compte ajouté hérite des serveurs MCP du compte de référence — sinon

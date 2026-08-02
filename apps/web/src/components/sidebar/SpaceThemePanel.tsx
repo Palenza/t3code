@@ -1189,13 +1189,35 @@ function GrainDial(props: {
           EST le remplissage, et la consigne est de faire exactement comme
           Arc. Si le grain doit se voir, il faudra un témoin ailleurs — pas au
           milieu de la molette. */}
+      {/* ── L'APERÇU DE GRAIN, REMIS (03/08, décision d'Enzo) ──────────────
+          Il avait été retiré la veille pour coller à Arc, dont la molette est
+          un anneau vide — et le commentaire d'alors l'assumait : « perte
+          assumée… si le grain doit se voir, il faudra un témoin ailleurs ».
+          Le fondateur a tranché l'inverse : « je préférais la version un, plus
+          on augmente et plus on voit les grains apparaître dans le rond ».
+          Ressemblance à Arc contre lisibilité de NOTRE réglage : la seconde
+          gagne, parce que le grain n'a aucun autre témoin — sans lui, on tourne
+          une molette en aveugle. L'anneau reste fin ; c'est l'intérieur qui
+          reprend la texture, dosée par le cran. */}
       <span
         aria-hidden
         className={cn(
-          "absolute top-1/2 left-1/2 size-10 -translate-x-1/2 -translate-y-1/2 rounded-full ring-1 transition-colors",
+          "absolute top-1/2 left-1/2 size-10 -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-full ring-1 transition-colors",
           props.dark ? "ring-white/15" : "ring-black/15",
         )}
-      />
+      >
+        <span
+          className="block size-full transition-opacity duration-150"
+          style={{
+            backgroundImage: "var(--surface-grain)",
+            // Le cran pilote l'OPACITÉ du grain, comme il pilote celle du
+            // voile : à zéro le disque est vide, au maximum il est franchement
+            // texturé. Le facteur 0,9 garde un cheveu de retenue au bout —
+            // un grain plein masquerait l'anneau qui le contient.
+            opacity: props.value * 0.9,
+          }}
+        />
+      </span>
     </div>
   );
 }
