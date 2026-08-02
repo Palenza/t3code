@@ -1,4 +1,5 @@
 import { reglesPour, type ModeTravail } from "@t3tools/shared/modesTravail";
+import type { PoseDeMode } from "@t3tools/shared/porteeDuMode";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
@@ -90,10 +91,19 @@ export const lireModeDuHome = Effect.fn("lireModeDuHome")(function* (
   return null;
 });
 
+/**
+ * Pose le périmètre, et RAPPORTE ce que ça a donné.
+ *
+ * La fonction ne peut pas échouer — faire tomber toute la requête parce qu'un
+ * compte sur trois a un fichier abîmé serait pire. Mais « ne pas échouer » ne
+ * veut pas dire « avoir réussi » : c'est cette confusion qui rendait l'écran
+ * menteur, et c'est pourquoi l'issue remonte au lieu de rester un `void`.
+ * Le tri, lui, appartient à `@t3tools/shared/porteeDuMode`.
+ */
 export const appliquerModeAuHome = Effect.fn("appliquerModeAuHome")(function* (
   homePath: string,
   mode: ModeTravail | null,
-): Effect.fn.Return<void, never, Path.Path | FileSystem.FileSystem> {
+): Effect.fn.Return<PoseDeMode, never, Path.Path | FileSystem.FileSystem> {
   const path = yield* Path.Path;
   const fs = yield* FileSystem.FileSystem;
   const fichier = path.join(homePath, "settings.json");
@@ -113,7 +123,7 @@ export const appliquerModeAuHome = Effect.fn("appliquerModeAuHome")(function* (
   );
   if (existant === null) {
     yield* Effect.logWarning("mode: settings.json illisible, périmètre non appliqué", { fichier });
-    return;
+    return "settings-illisible" as const;
   }
 
   const regles = mode === null ? { deny: [], allow: [] } : reglesPour(mode);
@@ -133,11 +143,12 @@ export const appliquerModeAuHome = Effect.fn("appliquerModeAuHome")(function* (
   yield* fs
     .makeDirectory(homePath, { recursive: true })
     .pipe(Effect.orElseSucceed(() => undefined));
-  yield* fs
-    .writeFileString(fichier, `${encodeSettings(suivant)}\n`)
-    .pipe(
-      Effect.catchCause((cause) =>
-        Effect.logWarning("mode: écriture des permissions impossible", { fichier, cause }),
+  return yield* fs.writeFileString(fichier, `${encodeSettings(suivant)}\n`).pipe(
+    Effect.as("applique" as const),
+    Effect.catchCause((cause) =>
+      Effect.logWarning("mode: écriture des permissions impossible", { fichier, cause }).pipe(
+        Effect.as("ecriture-refusee" as const),
       ),
-    );
+    ),
+  );
 });

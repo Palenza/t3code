@@ -2,7 +2,10 @@ import { useCallback, useEffect, useState } from "react";
 
 import { ShieldIcon } from "lucide-react";
 
+import { decrirePortee } from "@t3tools/shared/porteeDuMode";
+
 import { resolvePrimaryEnvironmentHttpUrl } from "../../environments/primary";
+
 import { cn } from "../../lib/utils";
 import { Popover, PopoverPopup, PopoverTrigger } from "../ui/popover";
 import { stackedThreadToast, toastManager } from "../ui/toast";
@@ -90,6 +93,7 @@ function useModeTravail() {
         comptes?: number;
         comptesTotal?: number;
         comptesSautes?: number;
+        comptesEnEchec?: number;
         raison?: string;
       };
       if (corps.pose !== true) {
@@ -108,19 +112,18 @@ function useModeTravail() {
       // rien (aucun compte avec dossier propre) ressemblerait à un succès.
       toastManager.add(
         stackedThreadToast({
-          type: corps.comptes === 0 ? "error" : "info",
-          title: corps.comptes === 0 ? "Mode sans effet" : "Mode appliqué",
-          description:
+          // Un ÉCHEC de pose vaut un rouge, pas un « appliqué » nuancé : le
+          // compte visé devait recevoir le périmètre et ne l'a pas reçu.
+          type: corps.comptes === 0 || (corps.comptesEnEchec ?? 0) > 0 ? "error" : "info",
+          title:
             corps.comptes === 0
-              ? "Aucun compte n'a de dossier de configuration propre — rien n'a été restreint."
-              : // La portée EXACTE, comptes sautés compris. On disait « 3 comptes »
-                // sans dire sur combien — or un compte sans dossier propre est
-                // SAUTÉ, et sur cette machine c'est le principal : douze des
-                // quatorze fils actifs continuaient d'écrire malgré la
-                // bannière « partout » (audit 30/07).
-                (corps.comptesSautes ?? 0) > 0
-                ? `${corps.comptes} compte${(corps.comptes ?? 0) > 1 ? "s" : ""} sur ${corps.comptesTotal} — ${corps.comptesSautes} sans dossier propre n'${(corps.comptesSautes ?? 0) > 1 ? "ont" : "a"} PAS été restreint${(corps.comptesSautes ?? 0) > 1 ? "s" : ""}.`
-                : `${corps.comptes} compte${(corps.comptes ?? 0) > 1 ? "s" : ""} sur ${corps.comptesTotal} — tous restreints.`,
+              ? "Mode sans effet"
+              : (corps.comptesEnEchec ?? 0) > 0
+                ? "Mode appliqué EN PARTIE"
+                : "Mode appliqué",
+          // La portée EXACTE : posés, sautés, ET en échec. Voir
+          // @t3tools/shared/porteeDuMode — c'est là que la phrase se prouve.
+          description: decrirePortee(corps),
         }),
       );
     } catch {

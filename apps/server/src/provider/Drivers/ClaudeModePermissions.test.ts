@@ -105,3 +105,61 @@ describe("permissions d'un mode dans le dossier de l'instance", () => {
     ),
   );
 });
+
+/**
+ * LA POSE DIT CE QU'ELLE A FAIT — et surtout ce qu'elle N'A PAS fait.
+ *
+ * Ces trois cas séparent « ne pas échouer » de « avoir réussi ». Avant le
+ * 03/08 la fonction était typée `Effect<void, never>` : les deux chemins de
+ * panne ci-dessous rendaient exactement la même chose qu'un succès, et
+ * l'appelant comptait chaque appel comme une application. La bannière ambre
+ * pouvait donc affirmer « tes agents ne peuvent NI écrire NI lancer de
+ * commande » sur un compte où rien n'avait été écrit.
+ */
+describe("la pose d'un mode rend son résultat réel", () => {
+  it.effect("rend « applique » quand le fichier est bien écrit", () =>
+    dansUnDossierNeuf((home) =>
+      Effect.gen(function* () {
+        const resultat = yield* appliquerModeAuHome(home, modeParSlug("revue"));
+        assert.strictEqual(resultat, "applique");
+      }),
+    ),
+  );
+
+  it.effect("rend « settings-illisible » sur un settings.json abîmé, sans l'écraser", () =>
+    dansUnDossierNeuf((home) =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const fichier = path.join(home, "settings.json");
+        const abime = "{ ceci n'est pas du JSON";
+        yield* fs.writeFileString(fichier, abime);
+
+        const resultat = yield* appliquerModeAuHome(home, modeParSlug("revue"));
+
+        assert.strictEqual(resultat, "settings-illisible");
+        // Le fichier de l'utilisateur est INTACT : renoncer est le bon
+        // remède, écraser ses réglages pour poser un périmètre serait pire
+        // que le mal.
+        assert.strictEqual(yield* lire(fichier), abime);
+      }).pipe(Effect.orDie),
+    ),
+  );
+
+  it.effect("rend « ecriture-refusee » quand le disque refuse d'écrire", () =>
+    dansUnDossierNeuf((home) =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        // Un dossier en lecture seule : c'est le cas réel d'un `~/.claude-*`
+        // monté par un autre utilisateur, ou d'un volume protégé.
+        yield* fs.chmod(home, 0o500);
+        const resultat = yield* appliquerModeAuHome(home, modeParSlug("revue")).pipe(
+          Effect.ensuring(fs.chmod(home, 0o700).pipe(Effect.orElseSucceed(() => undefined))),
+        );
+        assert.strictEqual(resultat, "ecriture-refusee");
+        assert.strictEqual(yield* lire(path.join(home, "settings.json")), "");
+      }).pipe(Effect.orDie),
+    ),
+  );
+});
