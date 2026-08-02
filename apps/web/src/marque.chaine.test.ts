@@ -30,6 +30,8 @@ import * as NodePath from "node:path";
 
 import { describe, expect, it } from "vite-plus/test";
 
+import { racineDuDepot } from "./racineDuDepot.ts";
+
 /** Le nom de l'amont, écrit ici en morceaux pour que ce fichier ne se dénonce pas lui-même. */
 const NOM_AMONT = ["T3", "Code"].join(" ");
 
@@ -116,7 +118,7 @@ function ligneFautive(ligne: string): boolean {
 
 describe("la marque de Raptor", () => {
   it("ne réintroduit nulle part le nom de l'amont", () => {
-    const racine = process.cwd();
+    const racine = racineDuDepot();
     const cibles = [
       ...ARBRES.flatMap((arbre) => fichiersSources(NodePath.join(racine, arbre))),
       ...FICHIERS_ISOLES.map((fichier) => NodePath.join(racine, fichier)),
@@ -154,7 +156,7 @@ describe("la marque de Raptor", () => {
     // forme à tiret lui échappait entièrement. Une seule occurrence existe
     // aujourd'hui — le nom d'artefact — et elle est nommée ci-dessus avec sa
     // raison. Toute AUTRE fait tomber ce test.
-    const racine = process.cwd();
+    const racine = racineDuDepot();
     const cibles = [
       ...ARBRES.flatMap((arbre) => fichiersSources(NodePath.join(racine, arbre))),
       ...FICHIERS_ISOLES.map((fichier) => NodePath.join(racine, fichier)),
@@ -187,7 +189,7 @@ describe("la marque de Raptor", () => {
     // ouvre une porte au nom d'un problème qui n'existe plus. Le jour où le
     // renommage est fait, ce test tombe et la ligne doit disparaître.
     const build = NodeFS.readFileSync(
-      NodePath.join(process.cwd(), "scripts/build-desktop-artifact.ts"),
+      NodePath.join(racineDuDepot(), "scripts/build-desktop-artifact.ts"),
       "utf8",
     );
     expect(
@@ -213,7 +215,7 @@ describe("la marque de Raptor", () => {
       "apps/desktop/src/app/DesktopAppIdentity.test.ts",
     ];
     for (const fichier of aVerifier) {
-      const contenu = NodeFS.readFileSync(NodePath.join(process.cwd(), fichier), "utf8");
+      const contenu = NodeFS.readFileSync(NodePath.join(racineDuDepot(), fichier), "utf8");
       const presents = CHEMINS_HERITES.filter((herite) => contenu.includes(herite));
       expect(
         presents.length,

@@ -3,6 +3,8 @@ import * as NodeFS from "node:fs";
 import * as NodePath from "node:path";
 import { describe, expect, it } from "vite-plus/test";
 
+import { racineDuDepot } from "../../racineDuDepot.ts";
+
 /**
  * LA PASTILLE SUR LE LOGO NE DOIT PAS REVENIR.
  *
@@ -21,7 +23,7 @@ import { describe, expect, it } from "vite-plus/test";
  * n'a relue.
  */
 
-const ICI = NodePath.join(process.cwd(), "apps/web/src/components/chat");
+const ICI = NodePath.join(racineDuDepot(), "apps/web/src/components/chat");
 
 const lire = (fichier: string): string => NodeFS.readFileSync(NodePath.join(ICI, fichier), "utf8");
 

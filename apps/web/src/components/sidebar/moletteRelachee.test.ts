@@ -3,6 +3,8 @@ import * as NodeFS from "node:fs";
 import * as NodePath from "node:path";
 import { describe, expect, it } from "vite-plus/test";
 
+import { racineDuDepot } from "../../racineDuDepot.ts";
+
 /**
  * LA MOLETTE NE TOURNE QUE PENDANT UN GLISSÉ — jamais au survol.
  *
@@ -20,7 +22,7 @@ import { describe, expect, it } from "vite-plus/test";
  */
 
 const SOURCE = NodeFS.readFileSync(
-  NodePath.join(process.cwd(), "apps/web/src/components/sidebar/SpaceThemePanel.tsx"),
+  NodePath.join(racineDuDepot(), "apps/web/src/components/sidebar/SpaceThemePanel.tsx"),
   "utf8",
 );
 
