@@ -547,7 +547,7 @@ export function SpaceThemePanel({ spaceId }: { readonly spaceId?: string } = {})
                         // le jaune doit donner le jaune. Les deux bouts sont
                         // dérivés du ton lui-même (voir `degradeDePastille`),
                         // et le liseré intérieur est celui d'Arc.
-                        className="size-6 cursor-pointer rounded-full shadow-[inset_0_0_0_1px_rgba(0,0,0,0.16)] transition-transform hover:scale-110"
+                        className="size-6 cursor-pointer rounded-full shadow-[inset_0_0_0_2px_rgba(0,0,0,0.2)] transition-transform hover:scale-110"
                         style={{
                           background: `linear-gradient(135deg, ${clair} 0%, ${sombre} 100%)`,
                         }}

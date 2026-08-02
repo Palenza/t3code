@@ -287,8 +287,17 @@ export function wheelColorAt(x: number, y: number): string {
   const dy = y - 0.5;
   const hue = (Math.atan2(dy, dx) * 180) / Math.PI - 5;
   const dist = Math.hypot(dx, dy);
-  const light = Math.min(95, 58 + dist * 90);
-  const sat = Math.max(0, 60 - dist * 10);
+  // Rejugé sur les rafales de 09 h 30 (110 images Raptor 0.0.78, 154 Arc,
+  // même geste) : la CLARTÉ était calée (55 + 68·r contre 61 + 57·r chez
+  // Arc, ≤ 7 points d'écart partout) mais la saturation de la barre
+  // s'effondrait au bord (36 → 13 %) quand Arc tient ~30 CONSTANT. La cause
+  // n'est pas la pente : près du blanc, le mélange écrase la chroma — en
+  // HSL, une couleur à clarté 95 n'a presque plus rien à donner. Donc la
+  // saturation du STOP doit MONTER avec le rayon pour compenser, et la
+  // clarté plafonner à 92 plutôt que 95 : les deux ensemble rendent la
+  // saturation de barre plate, comme la sienne.
+  const light = Math.min(92, 58 + dist * 85);
+  const sat = 55 + dist * 45;
   return hslToHex(hue, sat, light);
 }
 
@@ -321,7 +330,7 @@ export function wheelPositionOf(hex: string): Point {
   const { h, l } = hexToHsl(hex);
   const angle = ((h + 5) * Math.PI) / 180;
   // L'inverse de la clarté ci-dessus — les deux vivent ensemble ou mentent.
-  const distFromLight = (Math.min(95, Math.max(58, l)) - 58) / 90;
+  const distFromLight = (Math.min(92, Math.max(58, l)) - 58) / 85;
   const dist = Math.min(0.44, Math.max(0.06, distFromLight));
   return {
     x: 0.5 + Math.cos(angle) * dist,
