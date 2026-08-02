@@ -50,55 +50,146 @@
 export type PorteeDeMotif = "partout" | "contexte" | "strict";
 
 /**
- * Caractères invisibles — largeur nulle, marques directionnelles, jointeurs.
+ * L'INVISIBLE — deux familles, pas une.
  *
  * Le vecteur le plus vicieux du lot : l'humain qui relit ne voit RIEN, et le
  * modèle lit le texte caché. Aucune regex sur des mots ne l'attrape.
  *
+ * ── Ce que la mesure a montré (03/08) ─────────────────────────────────────
+ *
+ * La liste d'origine était quatorze caractères écrits à la main. Elle ratait
+ * le BLOC TAG (U+E0000–U+E007F) — le canal documenté de contrebande : chaque
+ * lettre ASCII y a un jumeau strictement invisible, donc une consigne entière
+ * se cache dans un titre. Et elle bannissait U+200D sans nuance, alors que ce
+ * même caractère assemble les emoji.
+ *
+ * Reçu, sur les 371 fichiers de skills réellement installés :
+ *
+ *     bloc Tag                        0 occurrence   → gratuit à bannir
+ *     U+FE0F                         26 occurrences  dans 21 fichiers SAINS
+ *     sélecteur collé à de l'ASCII    0 occurrence   → c'est LÀ qu'est l'attaque
+ *     run de sélecteurs consécutifs   1 au maximum   → une emoji en porte UN
+ *
+ * D'où le découpage. Bannir U+FE0F en bloc aurait fait hurler le scanner sur
+ * vingt et une skills honnêtes — et un garde qui crie au loup se fait
+ * débrancher, donc ne protège plus rien.
+ *
+ * ── Les deux familles ─────────────────────────────────────────────────────
+ *
+ * SANS APPEL · aucun usage légitime dans une skill. Leur seule présence est
+ *              une trouvaille. Mesurés à zéro sur le parc réel.
+ * À CONTEXTE · les assembleurs d'emoji. Légitimes collés à un pictogramme,
+ *              et seulement un à la fois. Ailleurs, c'est de la contrebande.
+ *
  * Vit ICI (module pur, zéro import) parce que deux consommateurs en ont
  * besoin pour deux métiers OPPOSÉS : `ScanDeSkill` les cherche dans le texte
- * BRUT — leur présence est une trouvaille critique en soi — et
- * `scannerMenaces` les retire avant de chercher ses motifs. Le déplacer dans
- * l'un des deux créerait un cycle d'imports.
+ * BRUT — leur présence y est une trouvaille — et `scannerMenaces` les retire
+ * avant de chercher ses motifs. Le déplacer dans l'un des deux créerait un
+ * cycle d'imports.
+ */
+const SANS_APPEL = /[​⁠-⁤﻿‪-‮⁦-⁩­᠎ᅟᅠㅤﾠ]|[\u{E0000}-\u{E007F}]/u;
+
+/**
+ * Les SÉLECTEURS de variation : le canal de contrebande par octets.
+ *
+ * Une emoji en porte UN, collé à son pictogramme. Une consigne cachée en
+ * aligne des dizaines — c'est ce qui les sépare, et rien d'autre.
+ */
+const SELECTEURS = /[︀-️]|[\u{E0100}-\u{E01EF}]/u;
+
+/** Les JOINTEURS : ils assemblent les emoji (`👨‍👩‍👧`, `🏳️‍🌈`). */
+const JOINTEURS = /[‌‍]/u;
+
+/** Tout ce qui est invisible, sans distinction — pour le RETRAIT seulement. */
+const TOUT_INVISIBLE = new RegExp(
+  `${SANS_APPEL.source}|${SELECTEURS.source}|${JOINTEURS.source}`,
+  "gu",
+);
+
+/**
+ * La liste historique, gardée pour les appelants qui énumèrent.
+ *
+ * Elle ne peut PAS décrire les plages : c'est justement ce qui lui faisait
+ * rater le bloc Tag. Les vrais juges sont `trouverInvisibleSuspect` et
+ * `normaliserPourScan`.
  */
 export const CARACTERES_INVISIBLES: ReadonlyArray<string> = [
-  "​", // largeur nulle
-  "‌",
-  "‍",
-  "⁠", // jointeur invisible
-  "﻿", // marque d'ordre des octets
-  "‪", // marques directionnelles
+  "​",
+  "⁠",
+  "﻿",
+  "‪",
   "‫",
   "‬",
   "‭",
-  "‮", // renversement droite-à-gauche : cache la vraie fin d'un nom
+  "‮",
   "⁦",
   "⁧",
   "⁨",
   "⁩",
+  "­",
+  "\u{E0001}",
 ];
 
+const estPictogramme = (point: string): boolean =>
+  point.length > 0 && /\p{Extended_Pictographic}|\p{Regional_Indicator}/u.test(point);
+
 /**
- * Retire le MAQUILLAGE avant de chercher — et seulement ici.
+ * Le premier invisible SUSPECT du texte, ou `null` si tout est légitime.
  *
- * Reçu du ratissage 02/08 (superpowers) : quatre déguisements sur six
- * d'« ignore all previous instructions » traversaient le scanner — largeur
- * nulle entre les lettres, jointeur, pleine chasse, gras mathématique. NFKC
- * replie les lettres déguisées vers leur forme simple ; les invisibles
- * tombent ensuite.
+ * Rend le point de code et sa position, parce qu'une trouvaille qui ne dit
+ * pas OÙ oblige l'humain à chercher à l'œil un caractère qui, par définition,
+ * ne se voit pas.
  *
- * ⚠️ NE JAMAIS remonter cette normalisation en amont de l'appelant :
- * `ScanDeSkill` cherche les caractères invisibles dans le texte BRUT, et leur
- * présence y est une trouvaille critique. Normaliser avant lui ferait passer
- * une skill piégée de « refuser » à « installer » — reçu rejoué par la
- * contre-visite.
+ * La subtilité qui a mordu en écrivant ce module : dans `🏳️‍🌈`, le voisin de
+ * gauche du jointeur n'est PAS le drapeau — c'est le sélecteur de variation.
+ * Juger sur le voisin IMMÉDIAT condamne donc une emoji parfaitement normale.
+ * On remonte au caractère de BASE, celui qui se voit.
  */
-export function normaliserPourScan(texte: string): string {
-  let plat = texte.normalize("NFKC");
-  for (const c of CARACTERES_INVISIBLES) {
-    plat = plat.replaceAll(c, "");
+export function trouverInvisibleSuspect(
+  texte: string,
+): { readonly point: number; readonly index: number } | null {
+  const points = [...texte];
+  const estInvisible = (c: string) =>
+    c.length > 0 && (SANS_APPEL.test(c) || SELECTEURS.test(c) || JOINTEURS.test(c));
+  /** Le premier caractère VISIBLE dans une direction — la base réelle. */
+  const base = (depuis: number, pas: -1 | 1): string => {
+    for (let i = depuis; i >= 0 && i < points.length; i += pas) {
+      const c = points[i] ?? "";
+      if (!estInvisible(c)) return c;
+    }
+    return "";
+  };
+
+  for (let i = 0; i < points.length; i += 1) {
+    const caractere = points[i] ?? "";
+    const trouve = { point: caractere.codePointAt(0) ?? 0, index: i };
+
+    if (SANS_APPEL.test(caractere)) return trouve;
+
+    if (SELECTEURS.test(caractere)) {
+      // Deux sélecteurs d'affilée : personne n'écrit ça, une contrebande si.
+      if (SELECTEURS.test(points[i + 1] ?? "")) return trouve;
+      const precedent = points[i - 1] ?? "";
+      // Le pavé numérique (`1️⃣`) est la seule emoji dont la base est ASCII :
+      // chiffre, puis sélecteur, puis l'encadrement U+20E3.
+      const estPave = /[0-9#*]/u.test(precedent) && (points[i + 1] ?? "") === "⃣";
+      if (!estPictogramme(precedent) && !estPave) return trouve;
+      continue;
+    }
+
+    if (JOINTEURS.test(caractere)) {
+      // Un jointeur relie deux pictogrammes. Entre deux lettres, il découpe un
+      // mot pour tromper la relecture — c'est exactement l'attaque.
+      if (!estPictogramme(base(i - 1, -1)) || !estPictogramme(base(i + 1, 1))) return trouve;
+    }
   }
-  return plat;
+  return null;
+}
+
+export function normaliserPourScan(texte: string): string {
+  // Ici on retire TOUT l'invisible, les assembleurs d'emoji compris : pour
+  // comparer des motifs, un sélecteur est un séparateur comme un autre.
+  return texte.normalize("NFKC").replace(TOUT_INVISIBLE, "");
 }
 
 export interface MotifDeMenace {
