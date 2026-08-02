@@ -43,6 +43,7 @@ import * as NodeURL from "node:url";
 
 const RACINE = NodePath.resolve(NodePath.dirname(NodeURL.fileURLToPath(import.meta.url)), "..");
 const BASELINE = NodePath.join(RACINE, "scripts", "garde-orphelins.baseline.json");
+/** Les fichiers qu'on JUGE. */
 const ZONES = [
   "apps/web/src",
   "apps/server/src",
@@ -50,6 +51,21 @@ const ZONES = [
   "packages/client-runtime/src",
   "packages/shared/src",
 ];
+
+/**
+ * Les fichiers où l'on CHERCHE des consommateurs — plus large que ce qu'on juge.
+ *
+ * Corrigé le 03/08, quelques heures après la première version : chercher aussi
+ * étroit qu'on juge fabrique des orphelins IMAGINAIRES. Un module appelé
+ * uniquement depuis `apps/mobile`, `scripts/` ou un fichier de configuration
+ * ressortait accusé à tort. Vécu dans le dépôt jumeau (Palenza), où le premier
+ * jet annonçait 64 orphelins pour 6 réels — et un garde qui accuse dix fois
+ * trop se fait débrancher. C'est l'accusation à tort qui tue un garde, jamais
+ * l'oubli.
+ *
+ * On juge ÉTROIT, on cherche LARGE.
+ */
+const ZONES_CONSOMMATRICES = ["apps", "packages", "scripts", "oxlint-plugin-t3code"];
 
 const EST_TEST = /\.(test|spec)\.tsx?$/;
 
@@ -106,6 +122,13 @@ function resoudre(depuis, specificateur) {
 }
 
 const fichiers = ZONES.flatMap((zone) => [...fichiersTs(NodePath.join(RACINE, zone))]);
+/** Tout ce qui peut consommer : les zones élargies, plus les fichiers de la racine. */
+const consommateursPossibles = new Set([
+  ...ZONES_CONSOMMATRICES.flatMap((zone) => [...fichiersTs(NodePath.join(RACINE, zone))]),
+  ...NodeFS.readdirSync(RACINE)
+    .filter((nom) => /\.(ts|tsx|mts|mjs|js)$/.test(nom))
+    .map((nom) => NodePath.join(RACINE, nom)),
+]);
 if (fichiers.length < 500) {
   console.error(
     `garde-orphelins : seulement ${fichiers.length} fichiers trouvés — les zones ont bougé ?`,
@@ -115,7 +138,7 @@ if (fichiers.length < 500) {
 }
 
 const textes = new Map();
-for (const fichier of fichiers) {
+for (const fichier of consommateursPossibles) {
   try {
     textes.set(fichier, NodeFS.readFileSync(fichier, "utf8"));
   } catch {
