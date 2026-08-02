@@ -42,6 +42,14 @@ interface PromessesState {
    * dérivée de l'état : un historique rechargé ne doit jamais re-noter.
    */
   messagesNotes: string[];
+  /**
+   * Combien de promesses le PLAFOND a jetées, depuis toujours.
+   *
+   * Zéro en usage normal. S'il monte, c'est que le plafond mord — et il vaut
+   * mieux le SAVOIR que le découvrir en cherchant une promesse qui n'existe
+   * plus. Un rappel qui s'efface sans le dire est pire que pas de rappel.
+   */
+  evincees: number;
   /** Lit une réponse d'agent et retient ce qu'elle engage. */
   noterDepuisReponse: (input: {
     reponse: string;
@@ -63,8 +71,24 @@ interface PromessesState {
   tout: () => ReadonlyArray<PromesseOuverte>;
 }
 
-/** Au-delà, ce n'est plus un rappel, c'est du bruit qu'on cesse de lire. */
-export const MAX_PROMESSES_OUVERTES = 20;
+/**
+ * Le plafond de STOCKAGE. Il n'est PAS le plafond d'affichage.
+ *
+ * Il valait 20, et il jetait les promesses les plus ANCIENNES en silence :
+ * les nouvelles entrent en tête, `slice(0, 20)` garde les vingt premières.
+ * L'ironie est totale — cette fonctionnalité existe pour rattraper la
+ * promesse qu'on a OUBLIÉE, et la plus ancienne est précisément celle-là.
+ *
+ * Mesuré sur les réponses réelles : le plafond de 20 était atteint en HUIT
+ * HEURES, puis l'état restait saturé en permanence ; 3 389 promesses évincées
+ * sur 27 jours, sans une trace.
+ *
+ * La raison d'origine était l'AFFICHAGE (« au-delà, c'est du bruit ») — et
+ * elle a été réparée ailleurs depuis : le panneau est replié par défaut,
+ * borné en hauteur et défilant. Le plafond de stockage ne protégeait donc
+ * plus rien ; il ne restait que le broyeur.
+ */
+export const MAX_PROMESSES_OUVERTES = 200;
 
 export const usePromessesStore = create<PromessesState>()(
   persist(
@@ -72,6 +96,7 @@ export const usePromessesStore = create<PromessesState>()(
       ouvertes: [],
       barrees: [],
       messagesNotes: [],
+      evincees: 0,
       noterDepuisReponse: ({ reponse, sourceMessageId, threadKey, maintenant }) =>
         set((state) => {
           if (state.messagesNotes.includes(sourceMessageId)) return state;
@@ -89,10 +114,18 @@ export const usePromessesStore = create<PromessesState>()(
           // coûtera plus une extraction. Plafonné pour ne pas croître à vie.
           const messagesNotes = [sourceMessageId, ...state.messagesNotes].slice(0, 400);
           if (nouvelles.length === 0) return { ...state, messagesNotes };
+          const toutes = [...nouvelles, ...state.ouvertes];
+          const gardees = toutes.slice(0, MAX_PROMESSES_OUVERTES);
+          const evincees = toutes.length - gardees.length;
           return {
             ...state,
             messagesNotes,
-            ouvertes: [...nouvelles, ...state.ouvertes].slice(0, MAX_PROMESSES_OUVERTES),
+            ouvertes: gardees,
+            // FAIL-LOUD : si le plafond mord un jour, ça se COMPTE. Une
+            // promesse qui disparaît sans laisser de trace est exactement la
+            // panne qu'on vient de réparer, et un plafond plus haut ne fait
+            // que la retarder.
+            evincees: state.evincees + evincees,
           };
         }),
       fermerParTravail: (traces) =>
