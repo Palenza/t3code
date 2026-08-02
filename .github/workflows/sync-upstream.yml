@@ -116,7 +116,49 @@ jobs:
         # version exacte qu'on embarque, et l'historique du fork se lit comme
         # une suite de builds identifiés plutôt que de « merge du jour ».
         run: |
-          git merge "${{ steps.cible.outputs.tag }}" --no-edit --no-ff
+          # ⚠️ CE QU'IL NE FAUT PAS FAIRE SUR `main`, ET LA RAISON.
+          #
+          # `main` est la branche qui fusionne AUTOMATIQUEMENT. Tout fichier
+          # qu'on y modifie et que l'amont modifie aussi devient un conflit
+          # quotidien — et un conflit sur `main` arrête la synchro, donc le
+          # fork cesse de suivre l'amont. La tentation est réelle : corriger
+          # le README pour qu'il pointe NOS releases, ou le `repository` du
+          # package.json. Les deux sont des fichiers que l'amont touche.
+          #
+          # Nos divergences vivent sur `travail`, qui passe par une PR relue.
+          # `main` ne porte que ce que l'amont ne touche pas : nos propres
+          # workflows (`raptor-*.yml`, celui-ci).
+          #
+          # LA FUSION PEUT ENTRER EN CONFLIT SUR UN FICHIER QU'ON JETTE JUSTE
+          # APRÈS — et c'est exactement ce qui a tué la synchro.
+          #
+          # Le run du 2026-08-01 est mort ici, sur UN seul fichier :
+          # `.github/workflows/mobile-showcase-screenshots.yml`. Or le bloc
+          # ci-dessous écarte SYSTÉMATIQUEMENT tout changement de workflow
+          # amont. La fusion échouait donc sur un fichier qu'on allait
+          # abandonner trois lignes plus bas, et le fork a cessé de vieillir
+          # avec l'amont pendant deux jours.
+          #
+          # On résout donc ces conflits-là en gardant les NÔTRES. Tout conflit
+          # AILLEURS reste une panne bruyante : c'est le signal qu'un humain
+          # doit trancher, et il ne doit jamais être avalé.
+          if ! git merge "${{ steps.cible.outputs.tag }}" --no-edit --no-ff; then
+            CONFLITS=$(git diff --name-only --diff-filter=U)
+            HORS_WORKFLOWS=$(printf '%s\n' "$CONFLITS" | grep -v '^\.github/workflows/' || true)
+            if [ -n "$HORS_WORKFLOWS" ]; then
+              echo "::error::Conflits hors .github/workflows — un humain doit trancher :"
+              printf '%s\n' "$HORS_WORKFLOWS"
+              git merge --abort
+              exit 1
+            fi
+            echo "::warning::Conflits limités aux workflows amont, résolus en gardant les nôtres : $(printf '%s' "$CONFLITS" | tr '\n' ' ')"
+            printf '%s\n' "$CONFLITS" | while IFS= read -r fichier; do
+              [ -n "$fichier" ] || continue
+              git checkout --ours -- "$fichier" 2>/dev/null || git rm -q -f -- "$fichier"
+              git add -- "$fichier" 2>/dev/null || true
+            done
+            git commit -q --no-edit
+          fi
 
           # GITHUB_TOKEN NE PEUT PAS pousser un commit qui touche
           # `.github/workflows/**`. Ce n'est pas un réglage qu'on a raté :
@@ -253,4 +295,42 @@ jobs:
             echo "::error::Alerte impossible — les issues sont-elles activées sur ce dépôt ?"
             echo "### ❌ L'alerte n'a pas pu être créée" >> "$GITHUB_STEP_SUMMARY"
             exit 1
+          fi
+
+      # AMÉLIORATION 5 — le filet qui manquait, et qui a coûté deux jours.
+      #
+      # L'alerte ci-dessus ne se déclenche QUE sur un conflit de la fusion à
+      # blanc dans `travail`. Si une étape ANTÉRIEURE meurt, le job s'arrête
+      # avant d'y arriver et personne n'apprend rien.
+      #
+      # C'est exactement ce qui s'est produit : le run du 2026-08-01 a échoué à
+      # l'étape 7 (« Fusionner l'amont dans main ») — le pari « main fusionne
+      # toujours proprement » ne tenait plus. Aucune issue, aucun signal. La
+      # synchro était morte depuis deux jours quand on l'a découverte, et
+      # seulement parce qu'on cherchait autre chose.
+      #
+      # `if: failure()` attrape n'importe quelle étape précédente. Une panne de
+      # synchro doit se VOIR : un fork qui ne se synchronise plus ne le dit
+      # jamais de lui-même, il vieillit simplement.
+      - name: Alerter si la synchro a échoué, quelle qu'en soit l'étape
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          JOUR=$(date -u +%Y-%m-%d)
+          TITRE="Sync amont EN PANNE — $JOUR"
+          CORPS=$(printf 'La synchronisation avec l amont a échoué.\n\nRun : %s/%s/actions/runs/%s\n\nTant que ce n est pas réparé, le fork VIEILLIT en silence : aucun commit de l amont n arrive, et rien ne le signale ailleurs.\n' \
+            "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")
+
+          # Une issue par jour au maximum : une panne qui dure ne doit pas
+          # produire une issue par run, sinon on apprend à les ignorer.
+          if gh issue list --repo "$GITHUB_REPOSITORY" --state open \
+               --search "$TITRE in:title" --json number --jq 'length' | grep -qv '^0$'; then
+            echo "→ une alerte du jour existe déjà, on n en rouvre pas une seconde"
+            exit 0
+          fi
+
+          if ! gh issue create --repo "$GITHUB_REPOSITORY" --title "$TITRE" --body "$CORPS"; then
+            echo "::error::Alerte de panne impossible — issues désactivées ?"
+            echo "### ❌ La synchro a échoué ET l alerte n a pas pu être créée" >> "$GITHUB_STEP_SUMMARY"
           fi
