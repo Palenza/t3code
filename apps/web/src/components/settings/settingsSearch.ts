@@ -17,6 +17,15 @@ export interface SettingsSearchItem {
   readonly title: string;
   readonly to: SettingsPath;
   readonly targetId?: string;
+  /**
+   * Ce qu'on tape quand on ne se rappelle PAS du titre exact.
+   *
+   * La recherche ne regardait que les titres. Or on cherche un réglage par le
+   * mot qui nous vient — « micro », « dictée », « couleur » — pas par son
+   * intitulé officiel, qu'on ne connaît justement pas puisqu'on le cherche.
+   * Ces mots ne s'affichent jamais : ils ne servent qu'à retrouver.
+   */
+  readonly keywords?: ReadonlyArray<string>;
 }
 
 /**
@@ -192,6 +201,59 @@ export function searchableSetting(id: SettingsSearchItemId): {
   return { id: anchorId, title };
 }
 
+/**
+ * Les mots qui mènent à une SECTION entière.
+ *
+ * Français ET anglais, parce que l'app mélange les deux et que personne ne se
+ * rappelle dans quelle langue est écrit l'intitulé qu'il cherche.
+ */
+const MOTS_DES_SECTIONS: Readonly<Record<SettingsPath, ReadonlyArray<string>>> = {
+  "/settings/general": ["général", "divers", "démarrage", "mises à jour", "updates"],
+  "/settings/appearance": ["apparence", "couleur", "police", "font", "verre", "glass"],
+  "/settings/keybindings": ["raccourcis", "clavier", "touches", "shortcuts"],
+  "/settings/providers": ["comptes", "claude", "codex", "cursor", "grok", "opencode", "quota"],
+  "/settings/source-control": ["git", "github", "gitlab", "dépôt", "branche", "repo"],
+  "/settings/connections": ["réseau", "network", "appairage", "pairing", "sessions", "accès"],
+  "/settings/voice": ["dictée", "micro", "microphone", "parler", "transcription", "speech"],
+  "/settings/skills": ["compétences", "capacités"],
+  "/settings/beta": ["bêta", "expérimental", "experimental"],
+  "/settings/theme": ["thème", "couleurs", "espace", "space"],
+  "/settings/tableau-local": ["usine", "affiliation", "palenza", "dashboard"],
+  "/settings/archived": ["archive", "archivés", "fils rangés"],
+};
+
+/**
+ * UNE ENTRÉE PAR SECTION, dérivée — jamais recopiée.
+ *
+ * Le 02/08, quatre sections sur douze n'étaient atteignables par AUCUNE
+ * recherche : Voice, Skills, Theme et Tableau local n'avaient pas une seule
+ * entrée. Taper « dictée » ne menait nulle part, alors que la page existe.
+ *
+ * En les DÉRIVANT des libellés de navigation plutôt qu'en les écrivant à la
+ * main, une section ajoutée demain est trouvable le jour même, sans que
+ * personne ait à y penser. C'est le mécanisme qui garde la règle, pas la
+ * vigilance.
+ */
+export const SETTINGS_SECTION_SEARCH_ITEMS: ReadonlyArray<SettingsSearchItem> = (
+  Object.keys(SETTINGS_SECTION_LABELS) as ReadonlyArray<SettingsPath>
+).map((to) => ({
+  // Préfixé : un id de section ne doit jamais heurter un id de réglage.
+  id: `section:${to}`,
+  title: SETTINGS_SECTION_LABELS[to],
+  to,
+  keywords: MOTS_DES_SECTIONS[to],
+}));
+
+/**
+ * Ce que la recherche parcourt : les réglages nommés d'abord, les sections
+ * ensuite. L'ordre compte — chercher « theme » doit tomber sur LE réglage
+ * avant de proposer la section qui le contient.
+ */
+export const SETTINGS_SEARCH_INDEX: ReadonlyArray<SettingsSearchItem> = [
+  ...SETTINGS_SEARCH_ITEMS,
+  ...SETTINGS_SECTION_SEARCH_ITEMS,
+];
+
 function normalizeSearchText(value: string): string {
   return value
     .normalize("NFKD")
@@ -203,10 +265,28 @@ function normalizeSearchText(value: string): string {
 
 export function searchSettings(
   query: string,
-  items: ReadonlyArray<SettingsSearchItem> = SETTINGS_SEARCH_ITEMS,
+  items: ReadonlyArray<SettingsSearchItem> = SETTINGS_SEARCH_INDEX,
 ): ReadonlyArray<SettingsSearchItem> {
   const normalizedQuery = normalizeSearchText(query);
   if (normalizedQuery.length === 0) return [];
 
-  return items.filter((item) => normalizeSearchText(item.title).includes(normalizedQuery));
+  return items.filter((item) => {
+    if (normalizeSearchText(item.title).includes(normalizedQuery)) {
+      return true;
+    }
+    // Les mots-clés ne rattrapent QUE ce que le titre a laissé passer : ils
+    // n'avancent jamais un résultat devant une correspondance de titre, parce
+    // que l'ordre du catalogue est préservé par `filter`.
+    //
+    // Et ils se cherchent par DÉBUT DE MOT, pas par sous-chaîne comme les
+    // titres. Un mot-clé est un nom de rechange, pas un fragment : taper
+    // « work » ne doit pas tomber sur « network », alors que « dict » doit
+    // bien trouver « dictée ». Le test qui exigeait zéro résultat sur « work »
+    // a attrapé exactement ça.
+    return (item.keywords ?? []).some((mot) =>
+      normalizeSearchText(mot)
+        .split(" ")
+        .some((morceau) => morceau.startsWith(normalizedQuery)),
+    );
+  });
 }
