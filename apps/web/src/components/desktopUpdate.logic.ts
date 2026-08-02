@@ -3,7 +3,23 @@ import { isWindowsPlatform } from "../lib/utils";
 
 export type DesktopUpdateButtonAction = "download" | "install" | "none";
 
-const DESKTOP_RELEASE_TAG_URL = "https://github.com/pingdotgg/t3code/releases/tag";
+/**
+ * LES NOTES DE VERSION DE RAPTOR, CHEZ NOUS.
+ *
+ * Ce lien envoyait l'utilisateur chez l'amont. Deux torts en un : ce ne sont
+ * pas nos versions, et depuis le débranding du 02/08 une version de Raptor
+ * n'existe même pas là-bas — le lien tombait sur un 404, ou pire, sur les
+ * notes d'une version homonyme qui n'est pas celle qui tourne.
+ *
+ * Le préfixe de tag doit rester COLLÉ à celui que produit
+ * `.github/workflows/raptor-release.yml` (`raptor-v<version>`). Ce préfixe
+ * n'est pas cosmétique : le dépôt est un fork, la synchro y fait entrer les
+ * tags `v*` de l'amont, et il faut pouvoir distinguer les nôtres des leurs.
+ * Si l'un des deux change, ce lien meurt en silence — d'où le test qui fige
+ * la forme exacte.
+ */
+const DESKTOP_RELEASE_TAG_URL = "https://github.com/Palenza/t3code/releases/tag";
+const DESKTOP_RELEASE_TAG_PREFIX = "raptor-v";
 
 /**
  * The main process fills `downloadedVersion` from the updater's `update-downloaded`
@@ -18,7 +34,7 @@ export function getDesktopUpdateDownloadedVersion(state: DesktopUpdateState): st
 export function getDesktopUpdateReleaseUrl(version: string | null): string | null {
   const normalizedVersion = version?.trim();
   if (!normalizedVersion) return null;
-  return `${DESKTOP_RELEASE_TAG_URL}/v${encodeURIComponent(normalizedVersion)}`;
+  return `${DESKTOP_RELEASE_TAG_URL}/${DESKTOP_RELEASE_TAG_PREFIX}${encodeURIComponent(normalizedVersion)}`;
 }
 
 export function resolveDesktopUpdateButtonAction(
