@@ -90,8 +90,17 @@ describe("promesses ouvertes", () => {
     }
 
     expect(usePromessesStore.getState().ouvertes).toHaveLength(MAX_PROMESSES_OUVERTES);
-    // Les plus récentes restent en tête.
-    expect(usePromessesStore.getState().ouvertes[0]?.phrase).toContain("point 27");
+    // Les plus récentes restent en tête. Le numéro se DÉRIVE du plafond :
+    // écrit en dur, il faisait tomber ce test au premier changement de
+    // constante alors que le comportement, lui, était juste.
+    expect(usePromessesStore.getState().ouvertes[0]?.phrase).toContain(
+      `point ${MAX_PROMESSES_OUVERTES + 7}`,
+    );
+    // Et surtout : ce que le plafond a jeté se COMPTE. Une promesse qui
+    // disparaît sans laisser de trace est la panne que ce compteur existe
+    // pour rendre visible (8 promesses évincées ici, 3 389 mesurées en réel
+    // sur 27 jours quand le plafond valait 20).
+    expect(usePromessesStore.getState().evincees).toBe(8);
   });
 
   it("une réponse sans engagement ne crée rien", () => {

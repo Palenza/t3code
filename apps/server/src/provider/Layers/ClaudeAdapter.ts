@@ -3678,8 +3678,10 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
           PostToolUse: [
             {
               hooks: [
-                (entree: { readonly tool_response?: unknown }) =>
-                  Promise.resolve(garderLaSortie(entree.tool_response) ?? { continue: true }),
+                (entree: { readonly tool_response?: unknown; readonly tool_name?: string }) =>
+                  Promise.resolve(
+                    garderLaSortie(entree.tool_response, entree.tool_name) ?? { continue: true },
+                  ),
               ],
             },
           ],

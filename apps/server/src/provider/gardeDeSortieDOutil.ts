@@ -71,7 +71,28 @@ export interface SortieDeHook {
  * sortie sans raison ; rendre `null` laisse le SDK garder l'originale, à
  * l'octet près.
  */
-export function garderLaSortie(sortie: unknown): SortieDeHook | null {
+/**
+ * LES OUTILS QUI LISENT LE DISQUE LOCAL — on les SCANNE, on ne les RÉÉCRIT pas.
+ *
+ * Décision du 03/08, et c'est la moitié la plus importante du correctif.
+ * Ce garde a été écrit pour les JOURNAUX : empêcher un secret d'atteindre une
+ * trace, un export, une sortie qui part chez un tiers. On l'avait branché sur
+ * TOUT ce qu'un agent reçoit, y compris la lecture de ses propres fichiers.
+ *
+ * Or caviarder un fichier local ne protège de RIEN : le secret est déjà sur la
+ * machine où l'agent tourne, et il peut le relire autrement. En échange, ça
+ * abîme la matière sur laquelle il travaille — mesuré : 800 fichiers du dépôt
+ * altérés sur 15 255, 459 lignes perdues, sans qu'aucun ne contienne le moindre
+ * secret. Un agent recevait du code dont les numéros de ligne ne collaient plus
+ * au disque.
+ *
+ * Aucune expression régulière, si fine soit-elle, ne répare ça : c'est
+ * l'ENDROIT qui était faux. Le scan de menaces, lui, reste actif sur tous les
+ * outils — il ne modifie rien, il alerte.
+ */
+const OUTILS_DE_LECTURE_LOCALE = new Set(["Read", "Grep", "Glob", "NotebookRead"]);
+
+export function garderLaSortie(sortie: unknown, nomDOutil?: string): SortieDeHook | null {
   const transformee = transformerSortie(sortie);
 
   // On se fie aux NOTES, pas à une comparaison de valeurs : `transformerSortie`
@@ -89,12 +110,17 @@ export function garderLaSortie(sortie: unknown): SortieDeHook | null {
 
   // Rien de caviardé et rien à dire : on ne touche pas, et le SDK garde
   // l'originale à l'octet près.
-  if (!aCaviarde && alertes.length === 0) return null;
+  // La lecture d'un fichier LOCAL n'est jamais réécrite : on garde l'alerte,
+  // on rend l'original à l'octet près.
+  const reecritureAutorisee = nomDOutil === undefined || !OUTILS_DE_LECTURE_LOCALE.has(nomDOutil);
+  const reecrit = aCaviarde && reecritureAutorisee;
+
+  if (!reecrit && alertes.length === 0) return null;
 
   return {
     hookSpecificOutput: {
       hookEventName: "PostToolUse",
-      ...(aCaviarde ? { updatedToolOutput: transformee.valeur } : {}),
+      ...(reecrit ? { updatedToolOutput: transformee.valeur } : {}),
       ...(alertes.length > 0 ? { additionalContext: alertes.join(" ") } : {}),
     },
   };
