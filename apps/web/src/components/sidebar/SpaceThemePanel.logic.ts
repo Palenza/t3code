@@ -467,6 +467,74 @@ export function normaliserAuGabarit(points: ReadonlyArray<Point>): Point[] {
   return angles.map((angle) => surLeCercle(angle, rayon));
 }
 
+/**
+ * LA POURSUITE ÉLASTIQUE — la loi du DÉPLACEMENT d'Arc, jugée sur pièces le
+ * 02/08 (.mov de 10 h 15, 11 652 images, chaque rond pisté au plus proche
+ * voisin) après « non, tu as tout faux sur les déplacements » :
+ *
+ *  · le rond SAISI suit le doigt, angle ET rayon libres ;
+ *  · les AUTRES le POURSUIVENT : leur rayon tend vers le sien, leur angle
+ *    vers le sien + leur décalage pris À LA SAISIE — d'où des écarts qui
+ *    RESPIRENT en mouvement (mesuré : 60/60 → 39/39, 40/41 → 45/55, jusqu'à
+ *    24/85 en pointe) puis reconvergent à l'arrêt ;
+ *  · preuves contre ma rotation rigide d'hier : les Δangle d'un même glissé
+ *    font +138,6°/+116,9°/+95,4° (une rotation les aurait ÉGAUX), et dans le
+ *    segment 6826-6998 la dominante voyage de +72° pendant que les
+ *    satellites gardent leur angle (+6°/+8°) mais convergent en rayon
+ *    (157→116, 163→124 quand elle finit à 117).
+ *
+ * Mes « écarts conservés » d'hier étaient un artefact : des glissés RADIAUX,
+ * où les deux modèles coïncident. `k` est la fraction de rattrapage par
+ * image ; à 0,15 et 120 Hz, ~63 % du chemin en 12 images (100 ms) — la
+ * traîne visible des mesures (dispersion de rayons 1-8 % en croisière,
+ * 20 % en pointe).
+ */
+export const POURSUITE_PAR_IMAGE = 0.15;
+
+export interface PriseDeRond {
+  /** Décalage angulaire de chaque rond par rapport au SAISI, à la saisie. */
+  readonly decalages: ReadonlyArray<number>;
+  readonly indexSaisi: number;
+}
+
+export function saisirRond(points: ReadonlyArray<Point>, indexSaisi: number): PriseDeRond {
+  const angleSaisi = angleDe(points[indexSaisi] ?? points[0]!);
+  return {
+    indexSaisi,
+    decalages: points.map((point) => {
+      const brut = angleDe(point) - angleSaisi;
+      return Math.atan2(Math.sin(brut), Math.cos(brut));
+    }),
+  };
+}
+
+export function poursuivre(
+  points: ReadonlyArray<Point>,
+  prise: PriseDeRond,
+  cibleX: number,
+  cibleY: number,
+  k: number = POURSUITE_PAR_IMAGE,
+): Point[] {
+  const dx = cibleX - CENTRE;
+  const dy = cibleY - CENTRE;
+  const viseR = Math.min(RAYON_MAXI, Math.max(RAYON_REFERME, Math.hypot(dx, dy)));
+  const viseA =
+    Math.hypot(dx, dy) < 1e-9
+      ? angleDe(points[prise.indexSaisi] ?? points[0]!)
+      : Math.atan2(dy, dx);
+  return points.map((point, index) => {
+    if (index === prise.indexSaisi) {
+      return surLeCercle(viseA, viseR);
+    }
+    const rayonActuel = Math.hypot(point.x - CENTRE, point.y - CENTRE);
+    const angleActuel = angleDe(point);
+    const angleCible = viseA + (prise.decalages[index] ?? 0);
+    const brut = angleCible - angleActuel;
+    const ecart = Math.atan2(Math.sin(brut), Math.cos(brut));
+    return surLeCercle(angleActuel + ecart * k, rayonActuel + (viseR - rayonActuel) * k);
+  });
+}
+
 /** Retire le dernier rond. Les rescapés gardent leur angle ET leur rayon. */
 export function retirerRond(points: ReadonlyArray<Point>): Point[] {
   if (points.length <= 1) return [...points];

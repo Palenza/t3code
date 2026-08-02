@@ -15,9 +15,11 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import {
   ajouterRond,
   degradeDePastille,
-  deplacerFigure,
   normaliserAuGabarit,
   poserFigure,
+  poursuivre,
+  saisirRond,
+  type PriseDeRond,
   poserSelonCouleurs,
   retirerRond,
   stopsAvecCouleurs,
@@ -254,26 +256,39 @@ export function SpaceThemePanel({ spaceId }: { readonly spaceId?: string } = {})
   // ------------------------------------------------------------- la toile
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const draggingRef = useRef(false);
+  /** Satellite pressé mais pas encore bougé : promotion si relâché sur place. */
+  const enAttenteRef = useRef<{ index: number; x: number; y: number } | null>(null);
   // L'état ne sert que le STYLE : glissé = zéro transition (assemblage
   // rigide mesuré), saut discret = glissade 200 ms.
   const [enGlisse, setEnGlisse] = useState(false);
 
   const dominant = current.stops[0] ?? { color: wheelColorAt(0.62, 0.4), x: 0.62, y: 0.4 };
 
-  const tournerLAnneau = useCallback(
-    (clientX: number, clientY: number) => {
-      const canvas = canvasRef.current;
-      if (canvas === null || !draggingRef.current) return;
-      const rect = canvas.getBoundingClientRect();
-      const x = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-      const y = Math.max(0, Math.min(1, (clientY - rect.top) / rect.height));
-      // Le doigt fixe le RAYON COMMUN et l'orientation de l'anneau — la loi
-      // d'Arc, mesurée sur 972 images le 01/08. Toute la géométrie, et le
-      // pourquoi, vivent dans `SpaceThemePanel.logic.ts`.
-      apply({ ...current, stops: stopsDepuisPoints(deplacerFigure(current.stops, x, y)) });
-    },
-    [apply, current],
-  );
+  /**
+   * LA POURSUITE — la loi du déplacement d'Arc, jugée sur pièces le 02/08
+   * (11 652 images) : le rond SAISI suit le doigt, angle et rayon libres ;
+   * les autres le POURSUIVENT, rayon vers le sien, angle vers le sien plus
+   * leur décalage pris à la saisie. Les écarts respirent en mouvement et
+   * reconvergent à l'arrêt — exactement ce que la vidéo montre, et ce que ma
+   * rotation rigide d'hier ne faisait pas. Le pas de poursuite s'applique par
+   * IMAGE : la boucle rAF tourne en continu pendant la prise, même doigt
+   * immobile — c'est là que la convergence se voit.
+   */
+  const priseRef = useRef<PriseDeRond | null>(null);
+  const currentRef = useRef(current);
+  currentRef.current = current;
+  const pasDePoursuite = useCallback(() => {
+    const canvas = canvasRef.current;
+    const prise = priseRef.current;
+    const cible = cibleRef.current;
+    if (canvas === null || prise === null || cible === null || !draggingRef.current) return;
+    const rect = canvas.getBoundingClientRect();
+    const x = Math.max(0, Math.min(1, (cible.x - rect.left) / rect.width));
+    const y = Math.max(0, Math.min(1, (cible.y - rect.top) / rect.height));
+    const etat = currentRef.current;
+    const points = etat.stops.map((stop) => ({ x: stop.x, y: stop.y }));
+    apply({ ...etat, stops: stopsDepuisPoints(poursuivre(points, prise, x, y)) });
+  }, [apply]);
 
   /**
    * UNE MISE À JOUR PAR IMAGE, pas une par évènement — mesuré le 02/08.
@@ -296,25 +311,36 @@ export function SpaceThemePanel({ spaceId }: { readonly spaceId?: string } = {})
    */
   const cibleRef = useRef<{ x: number; y: number } | null>(null);
   const imageRef = useRef<number | null>(null);
-  const viser = useCallback(
-    (clientX: number, clientY: number) => {
+  const viser = useCallback((clientX: number, clientY: number) => {
+    cibleRef.current = { x: clientX, y: clientY };
+  }, []);
+
+  const demarrerSaisie = useCallback(
+    (index: number, clientX: number, clientY: number) => {
+      draggingRef.current = true;
+      setEnGlisse(true);
       cibleRef.current = { x: clientX, y: clientY };
-      if (imageRef.current !== null) return;
-      imageRef.current = window.requestAnimationFrame(() => {
-        imageRef.current = null;
-        const cible = cibleRef.current;
-        // La position visée est ABSOLUE : même si `current` a une image de
-        // retard, la dominante retombe sur le doigt et les autres gardent
-        // leurs écarts. Un retard d'image ne peut donc pas dériver.
-        if (cible !== null) tournerLAnneau(cible.x, cible.y);
-      });
+      priseRef.current = saisirRond(
+        currentRef.current.stops.map((stop) => ({ x: stop.x, y: stop.y })),
+        index,
+      );
+      const boucle = () => {
+        if (!draggingRef.current) {
+          imageRef.current = null;
+          return;
+        }
+        pasDePoursuite();
+        imageRef.current = window.requestAnimationFrame(boucle);
+      };
+      if (imageRef.current === null) imageRef.current = window.requestAnimationFrame(boucle);
     },
-    [tournerLAnneau],
+    [pasDePoursuite],
   );
 
   const finDeGlisse = useCallback(() => {
     draggingRef.current = false;
     setEnGlisse(false);
+    priseRef.current = null;
     if (imageRef.current !== null) {
       window.cancelAnimationFrame(imageRef.current);
       imageRef.current = null;
@@ -446,14 +472,47 @@ export function SpaceThemePanel({ spaceId }: { readonly spaceId?: string } = {})
               type="button"
               aria-label={`Prendre cette couleur comme dominante`}
               onPointerDown={(event) => {
+                // SAISISSABLE — la vidéo du 02/08 montre Arc déplaçant
+                // n'importe quel rond, pas seulement la dominante. Presser
+                // ARME ; bouger de 4 px engage la poursuite de CE rond ;
+                // relâcher sans bouger PROMEUT (le geste historique).
+                event.preventDefault();
+                event.stopPropagation();
+                enAttenteRef.current = {
+                  index: index + 1,
+                  x: event.clientX,
+                  y: event.clientY,
+                };
+                try {
+                  event.currentTarget.setPointerCapture(event.pointerId);
+                } catch {
+                  // Sans capture, le glissé vit tant que le pointeur survole.
+                }
+              }}
+              onPointerMove={(event) => {
+                const attente = enAttenteRef.current;
+                if (attente !== null && !draggingRef.current) {
+                  if (Math.hypot(event.clientX - attente.x, event.clientY - attente.y) > 4) {
+                    demarrerSaisie(attente.index, event.clientX, event.clientY);
+                  }
+                  return;
+                }
+                if (draggingRef.current) viser(event.clientX, event.clientY);
+              }}
+              onPointerUp={(event) => {
+                const attente = enAttenteRef.current;
+                enAttenteRef.current = null;
+                if (draggingRef.current) {
+                  finDeGlisse();
+                  return;
+                }
+                if (attente === null) return;
                 // Promotion : le satellite DEVIENT la dominante, sur place —
-                // échange de rôles, pas de rotation du trio. Un triangle
-                // équilatéral vu depuis n'importe quel sommet reste
-                // équilatéral : l'invariant survit à la permutation.
+                // échange de rôles, rien ne bouge.
                 event.preventDefault();
                 event.stopPropagation();
                 const stops = [...current.stops];
-                const [promu] = stops.splice(index + 1, 1);
+                const [promu] = stops.splice(attente.index, 1);
                 if (promu === undefined) return;
                 apply({ ...current, stops: [promu, ...stops] });
               }}
@@ -474,8 +533,7 @@ export function SpaceThemePanel({ spaceId }: { readonly spaceId?: string } = {})
           aria-label="Mélanger — loin du centre le thème pâlit et s'écarte, près du centre il devient vif et resserré"
           onPointerDown={(event) => {
             event.preventDefault();
-            draggingRef.current = true;
-            setEnGlisse(true);
+            demarrerSaisie(0, event.clientX, event.clientY);
             try {
               event.currentTarget.setPointerCapture(event.pointerId);
             } catch {

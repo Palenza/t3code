@@ -3,6 +3,9 @@ import { describe, expect, it } from "vite-plus/test";
 import {
   ajouterRond,
   deplacerFigure,
+  POURSUITE_PAR_IMAGE,
+  poursuivre,
+  saisirRond,
   normaliserAuGabarit,
   orientationDe,
   poserFigure,
@@ -356,6 +359,92 @@ describe("la figure de la toile", () => {
     expect(deplacerFigure([], 0.5, 0.5)).toEqual([]);
   });
 });
+
+describe("la poursuite — la loi du déplacement, jugée sur le .mov du 02/08", () => {
+  const iterer = (
+    points: Point[],
+    prise: ReturnType<typeof saisirRond>,
+    x: number,
+    y: number,
+    n: number,
+  ) => {
+    let courants = points;
+    for (let i = 0; i < n; i += 1) courants = poursuivre(courants, prise, x, y);
+    return courants;
+  };
+
+  it("le rond SAISI suit le doigt exactement — angle ET rayon libres", () => {
+    const points = poserFigure(0.7, 0.5, 3);
+    const prise = saisirRond(points, 0);
+    const [tire] = poursuivre(points, prise, 0.31, 0.68);
+    expect(tire!.x).toBeCloseTo(0.31, 6);
+    expect(tire!.y).toBeCloseTo(0.68, 6);
+  });
+
+  it("les autres CONVERGENT vers son rayon et leur décalage — la respiration mesurée", () => {
+    // La vidéo : écarts 60/60 → 39/39 pendant le glissé, rayons qui
+    // convergent (157→116, 163→124 quand la dominante finit à 117).
+    const points = poserFigure(0.7, 0.5, 3);
+    const prise = saisirRond(points, 0);
+    const arrivee = iterer([...points], prise, 0.5 - 0.2, 0.5, 90);
+    const rayons = arrivee.map((p) => Math.hypot(p.x - 0.5, p.y - 0.5));
+    rayons.forEach((r) => expect(Math.abs(r - 0.2)).toBeLessThan(0.005));
+    const anglesFin = arrivee.map(angle);
+    prise.decalages.forEach((d, i) => {
+      if (i === 0) return;
+      const attendu = anglesFin[0]! + d;
+      const brut = anglesFin[i]! - attendu;
+      expect(Math.abs(Math.atan2(Math.sin(brut), Math.cos(brut)))).toBeLessThan(0.01);
+    });
+  });
+
+  it("UNE image de poursuite ne rattrape qu'une fraction — c'est la traîne visible", () => {
+    const points = poserFigure(0.7, 0.5, 2);
+    const prise = saisirRond(points, 0);
+    const [_, autre] = poursuivre(points, prise, 0.5, 0.5 + 0.3, POURSUITE_PAR_IMAGE);
+    const rayonAutre = Math.hypot(autre!.x - 0.5, autre!.y - 0.5);
+    const depart = Math.hypot(points[1]!.x - 0.5, points[1]!.y - 0.5);
+    // parti de `depart`, il doit avoir fait ~15 % du chemin vers 0,3 — ni 0, ni tout
+    expect(Math.abs(rayonAutre - depart)).toBeGreaterThan(0.001);
+    expect(Math.abs(rayonAutre - 0.3)).toBeGreaterThan(Math.abs(depart - 0.3) * 0.7);
+  });
+
+  it("saisir un SATELLITE le libère, et les autres le poursuivent lui", () => {
+    const points = poserFigure(0.7, 0.5, 3);
+    const prise = saisirRond(points, 2);
+    const arrivee = iterer([...points], prise, 0.5 + 0.05, 0.5 - 0.3, 120);
+    expect(arrivee[2]!.x).toBeCloseTo(0.55, 6);
+    expect(arrivee[2]!.y).toBeCloseTo(0.2, 6);
+    const rayons = arrivee.map((p) => Math.hypot(p.x - 0.5, p.y - 0.5));
+    expect(Math.abs(rayons[0]! - rayons[2]!)).toBeLessThan(0.005);
+    expect(Math.abs(rayons[1]! - rayons[2]!)).toBeLessThan(0.005);
+  });
+
+  it("la cible au CENTRE referme tout le monde en un point", () => {
+    const points = poserFigure(0.75, 0.5, 3);
+    const prise = saisirRond(points, 0);
+    const arrivee = iterer([...points], prise, 0.5, 0.5, 200);
+    arrivee.forEach((p) => expect(Math.hypot(p.x - 0.5, p.y - 0.5)).toBeLessThan(0.01));
+  });
+
+  it("le passage de ±180° ne fait pas faire le grand tour", () => {
+    const points = [surtout(179), surtout(171)];
+    const prise = saisirRond(points, 0);
+    const [_, autre] = poursuivre(points, prise, ...versAngle(-179), 0.5);
+    // le satellite doit passer PAR 180°, pas repartir par 0°
+    const a = (angle(autre!) * 180) / Math.PI;
+    expect(Math.abs(a) > 90).toBe(true);
+  });
+});
+
+function surtout(deg: number): Point {
+  const a = (deg * Math.PI) / 180;
+  return { x: 0.5 + Math.cos(a) * 0.3, y: 0.5 + Math.sin(a) * 0.3 };
+}
+function versAngle(deg: number): [number, number] {
+  const a = (deg * Math.PI) / 180;
+  return [0.5 + Math.cos(a) * 0.3, 0.5 + Math.sin(a) * 0.3];
+}
 
 describe("la roue de couleurs", () => {
   it("fait l'aller-retour couleur → position → couleur sans dériver de teinte", () => {
