@@ -743,8 +743,7 @@ function toDerivedWorkLogEntry(activity: OrchestrationThreadActivity): DerivedWo
     isTaskActivity && typeof payload?.lastToolName === "string" && payload.lastToolName.length > 0
       ? payload.lastToolName
       : undefined;
-  const taskId =
-    isTaskActivity && typeof payload?.taskId === "string" ? payload.taskId : undefined;
+  const taskId = isTaskActivity && typeof payload?.taskId === "string" ? payload.taskId : undefined;
 
   const entry: DerivedWorkLogEntry = {
     id: activity.id,

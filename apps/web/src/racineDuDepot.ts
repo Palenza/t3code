@@ -1,3 +1,4 @@
+// @effect-diagnostics nodeBuiltinImport:off - Ce repère doit lire le DISQUE BRUT : il sert aux fils-pièges, qui tournent avant toute couche Effect et n'en ont pas besoin.
 import * as NodeFS from "node:fs";
 import * as NodePath from "node:path";
 

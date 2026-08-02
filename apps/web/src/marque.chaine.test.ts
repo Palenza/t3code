@@ -1,3 +1,4 @@
+// @effect-diagnostics nodeBuiltinImport:off - Ce garde SCANNE l arbre de fichiers pour refuser le retour du nom de l'amont : il lui faut le disque brut, pas une couche Effect.
 /**
  * RAPTOR NE S'ANNONCE PLUS SOUS LE NOM D'UN AUTRE.
  *

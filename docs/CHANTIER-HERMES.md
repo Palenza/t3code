@@ -184,23 +184,25 @@ la raison — un écart sans raison se rouvre tous les mois.
   base en mémoire, avec nos réglages actuels (`unicode61
 remove_diacritics 2`) contre `trigram` :
 
-                                                                                                        requête      unicode61 (le nôtre)   trigram
-                                                                                                        数据  (2)          0                   0
-                                                                                                        数据库 (3)          0                   1
-                                                                                                        東京  (2)          0                   0
-                                                                                                        chat               1                   1
-                                                                                                        dort               1                   1
+  ```
+  requête      unicode61 (le nôtre)   trigram
+  数据  (2)          0                   0
+  数据库 (3)          0                   1
+  東京  (2)          0                   0
+  chat               1                   1
+  dort               1                   1
+  ```
 
-                                                                                                    Donc **notre index ne trouve JAMAIS rien en CJK**, pas même sur trois
-                                                                                                    caractères — ce n'est pas une dégradation, c'est un mur. `trigram` le
-                                                                                                    lève dès 3 caractères sans toucher au français.
-                                                                                                    Reste hors de portée : les termes CJK de **1-2 caractères**, et c'est
-                                                                                                    précisément ce que leur bigramme compilé existe pour couvrir.
-                                                                                                    **On ne bascule PAS aujourd'hui** : produit français d'abord, un index
-                                                                                                    trigramme pèse plus lourd (une entrée par fenêtre de 3), et personne
-                                                                                                    n'attend cette recherche. Mais le jour où un utilisateur CJK arrive, la
-                                                                                                    décision est un MOT dans la migration 036 — plus un chantier natif.
-                                                                                                    `native/fts5_cjk/` **(copie C, désormais optionnelle)**
+  Donc **notre index ne trouve JAMAIS rien en CJK**, pas même sur trois
+  caractères — ce n'est pas une dégradation, c'est un mur. `trigram` le
+  lève dès 3 caractères sans toucher au français.
+  Reste hors de portée : les termes CJK de **1-2 caractères**, et c'est
+  précisément ce que leur bigramme compilé existe pour couvrir.
+  **On ne bascule PAS aujourd'hui** : produit français d'abord, un index
+  trigramme pèse plus lourd (une entrée par fenêtre de 3), et personne
+  n'attend cette recherche. Mais le jour où un utilisateur CJK arrive, la
+  décision est un MOT dans la migration 036 — plus un chantier natif.
+  `native/fts5_cjk/` **(copie C, désormais optionnelle)**
 
 - [–] **7 · ~~PTC — appel d'outils programmatique~~** — **Écarté : le CLI le
   porte déjà.** Troisième ligne fermée le 01/08 en fouillant le binaire du CLI

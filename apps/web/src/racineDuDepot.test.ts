@@ -1,3 +1,4 @@
+// @effect-diagnostics nodeBuiltinImport:off - Ce garde LIT les sources des autres gardes : il lui faut le disque brut, pas une couche Effect.
 /**
  * LE GARDE DES GARDES.
  *

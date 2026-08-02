@@ -78,9 +78,7 @@ export function mergeSectionOrder(
   const previousSet = new Set(previous);
   const replacements = ordered.filter((key) => previousSet.has(key));
   let slot = 0;
-  const merged = previous.map((key) =>
-    orderedSet.has(key) ? (replacements[slot++] ?? key) : key,
-  );
+  const merged = previous.map((key) => (orderedSet.has(key) ? (replacements[slot++] ?? key) : key));
   // Keys arranged just now that the stored order has never ranked: each goes
   // right before the first of its FOLLOWERS (in the new arrangement) already
   // present, so it lands where the user dropped it, not at an edge.

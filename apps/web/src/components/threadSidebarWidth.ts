@@ -14,10 +14,7 @@ export const THREAD_SIDEBAR_MAX_WIDTH = 26 * 16;
 export function resolveThreadSidebarMaximumWidth(viewportWidth: number): number {
   return Math.max(
     THREAD_SIDEBAR_MIN_WIDTH,
-    Math.min(
-      THREAD_SIDEBAR_MAX_WIDTH,
-      Math.floor(viewportWidth) - THREAD_MAIN_CONTENT_MIN_WIDTH,
-    ),
+    Math.min(THREAD_SIDEBAR_MAX_WIDTH, Math.floor(viewportWidth) - THREAD_MAIN_CONTENT_MIN_WIDTH),
   );
 }
 

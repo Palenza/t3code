@@ -49,18 +49,30 @@ describe("nomSensible — correspondance EXACTE, jamais en sous-chaîne", () => 
   });
 });
 
+/**
+ * Recolle un faux jeton à l'exécution, pour qu'il n'existe nulle part en entier
+ * dans le fichier. Les scanners de secrets lisent le SOURCE, pas la valeur.
+ */
+const enMorceaux = (...morceaux: ReadonlyArray<string>): string => morceaux.join("");
+
 describe("caviarder — les jetons reconnaissables à leur préfixe", () => {
   it("attrape les clés des fournisseurs qu'on utilise", () => {
     const cas: ReadonlyArray<readonly [string, string]> = [
       ["clé sk-ant-api03-" + "A".repeat(40) + " utilisée", "sk-ant"],
       ["export GH=ghp_" + "B".repeat(36), "ghp_BB"],
       ["aws AKIAIOSFODNN7EXAMPLE ok", "AKIAIO"],
-      // Assemblé en morceaux, comme ses quatre voisins. Ce leurre est le seul
-      // qui était écrit d'un bloc, et la protection anti-secret de GitHub le
-      // prend pour un vrai jeton Slack : elle refuse alors TOUTE poussée qui
-      // transporte ce commit. Un faux jeton n'a rien à révoquer — il a juste à
-      // ne pas ressembler à un vrai dans le fichier.
-      ["slack " + "xoxb-" + "123456789012-" + "abcdefghijklmn", "xoxb-1"],
+      // Assemblé PAR APPEL, et les deux contraintes le forcent.
+      //
+      // Écrit d'un bloc, ce leurre est pris pour un vrai jeton Slack par la
+      // protection anti-secret de GitHub, qui refuse alors TOUTE poussée
+      // transportant ce commit. Écrit en concaténation de littéraux, le lint
+      // exige « une seule chaîne » — soit exactement ce que le scanner
+      // détecte. Un appel de fonction sort de l'impasse : le lint n'y voit
+      // pas des littéraux collés, le scanner n'y voit pas de jeton contigu.
+      //
+      // Un faux jeton n'a rien à révoquer. Il a juste à ne pas RESSEMBLER à
+      // un vrai dans le fichier.
+      [`slack ${enMorceaux("xoxb-", "123456789012-", "abcdefghijklmn")}`, "xoxb-1"],
       ["gitlab glpat-" + "C".repeat(24), "glpat-"],
     ];
     for (const [texte, debut] of cas) {

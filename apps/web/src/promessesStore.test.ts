@@ -2,8 +2,7 @@ import { beforeEach, describe, expect, it } from "vite-plus/test";
 
 import { MAX_PROMESSES_OUVERTES, usePromessesStore } from "./promessesStore";
 
-const reset = () =>
-  usePromessesStore.setState({ ouvertes: [], barrees: [], messagesNotes: [] });
+const reset = () => usePromessesStore.setState({ ouvertes: [], barrees: [], messagesNotes: [] });
 let compteur = 0;
 const idSuivant = () => `msg-${(compteur += 1)}`;
 const MAINTENANT = "2026-07-29T23:00:00.000Z";
