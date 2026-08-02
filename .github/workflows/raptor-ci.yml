@@ -53,8 +53,22 @@ jobs:
       - name: Typecheck
         run: vpr typecheck
 
+      # Le budget par test vaut 15 s dans `apps/web/vite.config.ts`. C'est
+      # confortable sur un Mac ; ça ne l'est pas sur un runner gratuit.
+      # Mesuré : `imageCompression.test.ts` — de l'encodage d'images, purement
+      # CPU — met 3,5 s pour ses treize cas en local et a dépassé 21 s pour UN
+      # seul cas ici. L'amont ne voit jamais ce mur : sa CI tourne sur des
+      # runners 8 cœurs auxquels ce dépôt n'a pas accès.
+      #
+      # On relève donc le budget ICI, et nulle part ailleurs. Toucher le
+      # `vite.config.ts` d'`apps/web` serait une divergence sur un fichier de
+      # l'amont — exactement ce qui re-casserait la synchro nocturne.
+      #
+      # Le plafond garde son rôle : il attrape un test qui PEND. Il n'a jamais
+      # eu vocation à mesurer la vitesse de la machine — et la racine du dépôt
+      # utilise déjà 60 s.
       - name: Tests
-        run: vp run test
+        run: vp run test -- --testTimeout=60000
 
   # Le garde de marque vit dans la suite de tests, donc il tourne déjà au-dessus.
   # Ce travail-là vérifie l'autre moitié : que l'app se CONSTRUIT. Le typecheck
