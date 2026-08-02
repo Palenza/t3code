@@ -1,0 +1,174 @@
+# LA RELEASE DE RAPTOR — construire le DMG sur GitHub, pas sur le Mac d'Enzo.
+#
+# Aujourd'hui, mettre à jour Raptor veut dire : tirer `travail` dans
+# ~/Documents/t3code, lancer toute la suite de tests, reconstruire le DMG
+# localement, et glisser l'app à la main. Ça marche, mais ça exige un checkout
+# PROPRE — et il suffit d'une fusion en cours pour que le bouton « Update »
+# refuse de partir. Le build est aussi bloqué pendant vingt minutes de Mac.
+#
+# Ici, GitHub construit et publie. Le Mac ne fait plus que télécharger.
+#
+# ── DEUX PIÈGES ÉVITÉS, ET IL FAUT LES DIRE ─────────────────────────────
+#
+# 1. Le déclencheur n'est PAS `v*.*.*`. Ce dépôt est un fork : la synchro
+#    nocturne fait entrer les tags de l'amont, et `release.yml` (le leur)
+#    écoute justement `v*.*.*`. Écouter le même motif ferait publier une
+#    release de Raptor à chaque tag de l'amont. On écoute `raptor-v*`, qui
+#    n'appartient qu'à nous.
+#
+# 2. Le déclenchement est MANUEL. Consigne fondateur, écrite dans
+#    docs/INFRA-ACTIVATIONS.md : « arrête d'empiler les DMG tant que je ne le
+#    dis pas ». Une release à chaque poussée violerait cette consigne — et
+#    des DMG qui s'empilent, personne ne les installe.
+#
+# ── CE QUE CETTE RELEASE NE FAIT PAS ────────────────────────────────────
+#
+# Le DMG n'est PAS signé : décision fondateur du 29/07, pas de compte Apple
+# Developer. Conséquence assumée et écrite dans les notes de version :
+# macOS refuse le double-clic, il faut clic droit → Ouvrir la première fois.
+# Et `electron-updater` ne peut pas installer une mise à jour non signée : ces
+# releases se téléchargent, elles ne s'auto-appliquent pas.
+name: Raptor Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version à publier (vide = celle d'apps/desktop/package.json)"
+        required: false
+        type: string
+      brouillon:
+        description: "Publier en brouillon (à relire avant de rendre visible)"
+        required: false
+        default: true
+        type: boolean
+  push:
+    tags:
+      - "raptor-v*"
+
+concurrency:
+  group: raptor-release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  construire:
+    name: Construire et publier le DMG
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - name: Récupérer le code
+        uses: actions/checkout@v6
+
+      - name: Installer Vite+ et les dépendances
+        uses: voidzero-dev/setup-vp@v1
+        with:
+          node-version-file: package.json
+          cache: true
+          run-install: true
+
+      - name: Poser le runtime Electron
+        run: vp run --filter @t3tools/desktop ensure:electron
+
+      # La version vient de l'entrée manuelle si elle est donnée, du tag s'il y
+      # en a un, sinon du package.json — la même source que le script local.
+      - name: Décider de la version
+        id: version
+        run: |
+          set -euo pipefail
+          SAISIE="${{ inputs.version }}"
+          if [ -n "$SAISIE" ]; then
+            VERSION="$SAISIE"
+            ORIGINE="entrée manuelle"
+          elif [ "${GITHUB_REF_TYPE:-}" = "tag" ]; then
+            VERSION="${GITHUB_REF_NAME#raptor-v}"
+            ORIGINE="tag $GITHUB_REF_NAME"
+          else
+            VERSION="$(node -p "require('./apps/desktop/package.json').version")"
+            ORIGINE="apps/desktop/package.json"
+          fi
+          if [ -z "$VERSION" ]; then
+            echo "::error::Version vide — origine tentée : $ORIGINE"
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "→ version $VERSION (source : $ORIGINE)"
+
+      - name: Construire le DMG arm64
+        env:
+          # C'est CE réglage qui décide vers quel dépôt l'app regardera pour
+          # ses mises à jour. Sans lui, le DMG sort sans aucune source de mise
+          # à jour et la pastille reste muette pour toujours.
+          T3CODE_DESKTOP_UPDATE_REPOSITORY: ${{ github.repository }}
+        run: |
+          node scripts/build-desktop-artifact.ts \
+            --platform mac --target dmg --arch arm64 \
+            --build-version "${{ steps.version.outputs.version }}"
+
+      # Le script de build nomme l'artefact lui-même. On ne devine pas ce nom :
+      # on prend le DMG produit, et on ÉCHOUE s'il n'y en a pas exactement un.
+      # Un glob qui rend zéro fichier et un `set -e` absent, c'est une release
+      # vide publiée avec succès.
+      - name: Retrouver le DMG produit
+        id: dmg
+        # Pas de `mapfile` ici : il n'existe qu'à partir de bash 4, et le bash
+        # de macOS est un 3.2. Un tableau bash 4 sur un runner macOS échoue
+        # avec « command not found » — au milieu d'une release, après vingt
+        # minutes de build.
+        run: |
+          set -eu
+          TROUVES=$(find release -maxdepth 1 -name "*-arm64.dmg" -type f | sort)
+          COMBIEN=$(printf '%s\n' "$TROUVES" | grep -c . || true)
+          if [ "$COMBIEN" -ne 1 ]; then
+            echo "::error::Attendu 1 DMG arm64 dans release/, trouvé $COMBIEN"
+            printf '%s\n' "$TROUVES"
+            exit 1
+          fi
+          echo "chemin=$TROUVES" >> "$GITHUB_OUTPUT"
+          echo "→ $TROUVES ($(du -h "$TROUVES" | cut -f1))"
+
+      - name: Vérifier le DMG avant de le publier
+        run: node scripts/verifier-dmg.ts "${{ steps.dmg.outputs.chemin }}"
+
+      - name: Publier la release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="raptor-v${{ steps.version.outputs.version }}"
+          BROUILLON=""
+          if [ "${{ inputs.brouillon }}" != "false" ]; then BROUILLON="--draft"; fi
+
+          cat > notes.md <<'NOTES'
+          Build de Raptor produit par GitHub Actions.
+
+          **Première ouverture sur macOS** — l'app n'est pas signée (pas de
+          compte Apple Developer). macOS refusera le double-clic la première
+          fois : **clic droit sur l'app → Ouvrir**, puis « Ouvrir » dans la
+          boîte de dialogue. Une seule fois, ensuite c'est un double-clic
+          normal.
+
+          **Cette release ne s'installe pas toute seule.** L'auto-mise-à-jour
+          exige une app signée ; il faut télécharger le DMG et glisser l'app
+          dans Applications.
+
+          **Si tu avais « T3 Code (Raptor).app »** — l'app s'appelle désormais
+          « Raptor.app », donc la nouvelle se pose À CÔTÉ de l'ancienne au lieu
+          de la remplacer. Rien n'est perdu : les deux lisent exactement les
+          mêmes données (`~/Library/Application Support/t3code` et `~/.t3`,
+          inchangés). Mais ouvrir l'ancienne par erreur donne l'impression que
+          tout a disparu — **mets-la à la corbeille une fois la nouvelle
+          installée.**
+          NOTES
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "→ la release $TAG existe, on remplace son fichier"
+            gh release upload "$TAG" "${{ steps.dmg.outputs.chemin }}" --clobber
+          else
+            gh release create "$TAG" "${{ steps.dmg.outputs.chemin }}" \
+              --title "Raptor ${{ steps.version.outputs.version }}" \
+              --notes-file notes.md \
+              $BROUILLON
+          fi
