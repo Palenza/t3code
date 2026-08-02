@@ -71,6 +71,11 @@ import * as Stream from "effect/Stream";
 import { resolveAttachmentPath } from "../../attachmentStore.ts";
 import { ServerConfig } from "../../config.ts";
 import * as McpProviderSession from "../../mcp/McpProviderSession.ts";
+import {
+  consignePourLeProchainTour,
+  noterCompactage,
+  noterUsage,
+} from "../../contexte/GardeDeFalaise.ts";
 import { garderLaSortie } from "../gardeDeSortieDOutil.ts";
 import { resolveClaudeSdkExecutablePath } from "../Drivers/ClaudeExecutable.ts";
 import { makeClaudeEnvironment } from "../Drivers/ClaudeHome.ts";
@@ -1804,6 +1809,14 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
     context.lastKnownTokenUsage = usage;
     context.lastKnownTotalProcessedTokens =
       usage.totalProcessedTokens ?? context.lastKnownTotalProcessedTokens;
+
+    // La garde de falaise suit la part de fenêtre consommée : c'est elle qui
+    // décide de demander un état de reprise AVANT le compactage (cf.
+    // contexte/GardeDeFalaise.ts). Nourrie ici parce que c'est l'unique
+    // endroit où chaque relevé d'usage passe déjà.
+    if (usage.maxTokens !== undefined) {
+      noterUsage(context.session.threadId, usage.usedTokens, usage.maxTokens);
+    }
 
     const turnState = context.turnState;
     const stamp = yield* makeEventStamp();
@@ -3666,6 +3679,40 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
               hooks: [
                 (entree: { readonly tool_response?: unknown }) =>
                   Promise.resolve(garderLaSortie(entree.tool_response) ?? { continue: true }),
+              ],
+            },
+          ],
+          // LE TUYAU D'ÉTAT (levier n°1 du 02/08) : le shell sait des choses
+          // que le modèle ignore — contexte proche de la falaise, compactage
+          // qui vient d'avoir lieu. Ce canal les lui dit, au bon moment,
+          // UNE fois. La décision (parler ou se taire) vit dans
+          // contexte/GardeDeFalaise.ts, sous test ; ici on ne fait que porter.
+          UserPromptSubmit: [
+            {
+              hooks: [
+                () => {
+                  const consigne = consignePourLeProchainTour(threadId);
+                  return Promise.resolve(
+                    consigne === undefined
+                      ? { continue: true }
+                      : {
+                          hookSpecificOutput: {
+                            hookEventName: "UserPromptSubmit",
+                            additionalContext: consigne,
+                          },
+                        },
+                  );
+                },
+              ],
+            },
+          ],
+          PostCompact: [
+            {
+              hooks: [
+                () => {
+                  noterCompactage(threadId);
+                  return Promise.resolve({ continue: true });
+                },
               ],
             },
           ],
