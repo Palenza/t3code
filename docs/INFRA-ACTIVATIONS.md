@@ -48,16 +48,18 @@ toi, et rien n'avance tant qu'elles ne sont pas faites.
 **Le lien :** https://github.com/Palenza/t3code/security/secret-scanning/unblock-secret/3HLUd9kP0AVVdiM3cjZgg7i0ZOc
 
 La protection anti-secret de GitHub refuse TOUTE poussée qui transporte le
-commit `8be2f82c1`, à cause de cette ligne de
-`apps/server/src/secrets/Caviarder.test.ts:58` :
-
-```
-["slack xoxb-123456789012-abcdefghijklmn", "xoxb-1"],
-```
+commit `8be2f82c1`, à cause d'un faux jeton Slack dans
+`apps/server/src/secrets/Caviarder.test.ts:58` — un préfixe `xoxb-` suivi de
+douze chiffres et de quatorze lettres, écrit d'un bloc à l'époque.
 
 C'est un LEURRE de test, dans un test qui vérifie qu'on caviarde bien les
 jetons. Ses quatre voisins sont des leurres identiques (`sk-ant-api03-AAAA…`,
 `ghp_BBBB…`, la clé d'exemple documentée d'AWS). **Il n'y a rien à révoquer.**
+
+> ⚠️ **Ne recopie JAMAIS ce leurre en entier, même pour l'expliquer.** Cette
+> page l'a fait une fois, le 02/08 : le scanner l'a détecté ICI aussi, et le
+> blocage est passé d'un emplacement à deux. Documenter un faux secret en le
+> collant, c'est le propager.
 
 Pourquoi je ne l'ai pas fait moi-même : lever un contrôle de sécurité sur ton
 dépôt est une décision qui t'appartient, même quand la vérification est faite.
