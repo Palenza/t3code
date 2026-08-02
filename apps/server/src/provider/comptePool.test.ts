@@ -150,6 +150,102 @@ describe("classement des échecs", () => {
   });
 });
 
+describe("l'abonnement qui se termine — la panne du 06/08", () => {
+  // Un compte Max du fondateur se termine le 06/08/2026. Sondé sur ce
+  // classifieur AVANT correctif : « Your Claude Pro subscription has
+  // expired » (403) tombait en « notre-faute », la seule nature qui INTERDIT
+  // de basculer. Chaque tour serait reparti sur le compte fini, aurait
+  // échoué, et rien n'aurait basculé vers les comptes encore valides.
+  const messages = [
+    "Your Claude Pro subscription has expired",
+    "This account does not have an active subscription",
+    "Your subscription has ended. Resubscribe to continue.",
+    "No active plan for this account",
+    "Your plan is cancelled",
+    "Please renew your subscription",
+  ];
+
+  for (const message of messages) {
+    it(`reconnaît « ${message.slice(0, 42)} »`, () => {
+      const verdict = classerEchec({ code: 403, message, maintenant: MAINTENANT });
+      assert.strictEqual(verdict.nature, "abonnement-fini");
+      assert.strictEqual(verdict.reconnu, true);
+    });
+  }
+
+  it("écarte le compte, avec le remède qui n'est PAS celui d'un jeton mort", () => {
+    // Les deux exclusions sont identiques ; les deux conseils sont opposés.
+    // « Reconnecte-toi » sur un abonnement fini fait chercher une panne qui
+    // n'existe pas : la reconnexion réussit, et le compte reste inutilisable.
+    const fini = appliquerEchec(
+      { instanceId: id("A"), etat: "ok" },
+      classerEchec({ code: 403, message: "subscription has expired", maintenant: MAINTENANT }),
+      "subscription has expired",
+      MAINTENANT,
+    );
+    assert.strictEqual(fini.etat, "mort");
+    assert.strictEqual(fini.remede, "reabonnement");
+
+    const revoque = appliquerEchec(
+      { instanceId: id("A"), etat: "ok" },
+      classerEchec({ code: 401, message: "token_revoked", maintenant: MAINTENANT }),
+      "token_revoked",
+      MAINTENANT,
+    );
+    assert.strictEqual(revoque.etat, "mort");
+    assert.strictEqual(revoque.remede, "reconnexion");
+  });
+
+  it("l'emporte sur le repli 4xx, qui l'avalait en silence", () => {
+    // Le cas exact qui rendait la panne invisible : le message est reconnu
+    // AVANT que le code 403 ne le range en « notre-faute ».
+    for (const code of [400, 402, 403]) {
+      const verdict = classerEchec({
+        code,
+        message: "Your subscription has expired",
+        maintenant: MAINTENANT,
+      });
+      assert.strictEqual(verdict.nature, "abonnement-fini", `code ${code}`);
+    }
+  });
+});
+
+describe("402 et 403 parlent du COMPTE, jamais de la requête", () => {
+  it("ne prétend plus comprendre un 403 dont le message est inconnu", () => {
+    // AVANT : « notre-faute », reconnu: true — donc aucune bascule, et
+    // personne n'était prévenu qu'on ne comprenait pas. Deux mensonges en un.
+    const verdict = classerEchec({
+      code: 403,
+      message: "Forbidden",
+      maintenant: MAINTENANT,
+    });
+    assert.notStrictEqual(verdict.nature, "notre-faute");
+    assert.strictEqual(verdict.reconnu, false);
+  });
+
+  it("laisse sa place aux autres comptes plutôt que de brûler le tour", () => {
+    const apres = appliquerEchec(
+      { instanceId: id("A"), etat: "ok" },
+      classerEchec({ code: 402, message: "Payment Required", maintenant: MAINTENANT }),
+      "Payment Required",
+      MAINTENANT,
+    );
+    // Écarté au moins temporairement : c'est ce qui permet à la bascule de
+    // choisir un autre compte. Avec « notre-faute », l'état restait « ok » et
+    // le tour repartait indéfiniment sur le compte cassé.
+    assert.strictEqual(apres.etat, "refroidissement");
+  });
+
+  it("laisse les VRAIES mauvaises requêtes en « notre-faute »", () => {
+    // Le fil-piège ne doit pas s'élargir : un 400 ou un 422 quelconque parle
+    // bien de notre requête, et basculer y reproduirait la même erreur.
+    for (const code of [400, 404, 422]) {
+      const verdict = classerEchec({ code, message: "Bad Request", maintenant: MAINTENANT });
+      assert.strictEqual(verdict.nature, "notre-faute", `code ${code}`);
+    }
+  });
+});
+
 describe("santé d'un compte", () => {
   it("un refroidissement expiré redevient utilisable tout seul", () => {
     const sante: SanteCompte = {

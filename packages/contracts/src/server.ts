@@ -225,10 +225,21 @@ export const ServerProviderRotationState = Schema.Literals([
   "ok",
   /** Écarté temporairement ; `resumesAt` dit jusqu'à quand. */
   "cooling",
-  /** Écarté DÉFINITIVEMENT — seule une ré-authentification le ressuscite. */
+  /** Écarté DÉFINITIVEMENT — il faudra un geste humain pour le ressusciter. */
   "dead",
 ]);
 export type ServerProviderRotationState = typeof ServerProviderRotationState.Type;
+
+/**
+ * LE GESTE qui ramène un compte mort — et les deux ne sont PAS le même.
+ *
+ * Un jeton révoqué se répare en se reconnectant. Un abonnement arrivé à terme
+ * ne se répare pas comme ça : le jeton est parfaitement valide, se reconnecter
+ * réussira et ne changera RIEN. Dire « reconnecte-toi » là coûterait une
+ * soirée à chercher une panne qui n'existe pas.
+ */
+export const ServerProviderRotationRemedy = Schema.Literals(["reconnect", "resubscribe"]);
+export type ServerProviderRotationRemedy = typeof ServerProviderRotationRemedy.Type;
 
 export const ServerProviderRotation = Schema.Struct({
   state: ServerProviderRotationState,
@@ -246,6 +257,8 @@ export const ServerProviderRotation = Schema.Struct({
    * Répété, il devient faux — et sans ce compteur on le croyait indéfiniment.
    */
   consecutiveFailures: Schema.optional(NonNegativeInt),
+  /** Présent seulement quand `state` vaut `dead` : ce qu'il faut FAIRE. */
+  remedy: Schema.optional(ServerProviderRotationRemedy),
 });
 export type ServerProviderRotation = typeof ServerProviderRotation.Type;
 

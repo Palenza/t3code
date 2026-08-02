@@ -52,7 +52,19 @@ export interface SanteCompte {
    * — et sans ce compteur, on la croyait indéfiniment.
    */
   readonly echecsDAffilee?: number;
+  /**
+   * Ce qu'il faut FAIRE pour le ranimer — présent seulement sur un compte mort.
+   *
+   * Les deux morts ne se réparent pas pareil, et le mauvais conseil coûte une
+   * soirée : sur un jeton révoqué il faut se reconnecter ; sur un abonnement
+   * arrivé à terme le jeton est parfaitement bon, se reconnecter ne change
+   * RIEN, il faut se réabonner ou retirer le compte.
+   */
+  readonly remede?: RemedeCompte;
 }
+
+/** Le geste qui ramène un compte mort. */
+export type RemedeCompte = "reconnexion" | "reabonnement";
 
 /**
  * Ce qu'on fait d'un échec. Le pilotage se fait sur la NATURE de l'échec, pas
@@ -63,6 +75,7 @@ export interface SanteCompte {
 export type NatureEchec =
   | "quota" // le compte est à sec — écarter, réessayer ailleurs
   | "authentification-morte" // jeton révoqué — écarter DÉFINITIVEMENT
+  | "abonnement-fini" // le jeton est BON, l'abonnement ne l'est plus
   | "transitoire" // hoquet réseau/serveur — réessayer ailleurs
   | "notre-faute" // requête invalide — NE PAS basculer, la faute suivrait
   // ── Les deux suivantes viennent d'Hermès (`agent/error_classifier.py`), et
@@ -109,6 +122,34 @@ const CAUSES_MORTELLES: ReadonlyArray<RegExp> = [
   /oauth session expired/i,
   /session expired and could not be refreshed/i,
   /could not be refreshed/i,
+];
+
+/**
+ * L'ABONNEMENT ARRIVÉ À TERME — la panne que ce classement ne voyait pas.
+ *
+ * Un abonnement qui se termine ne révoque PAS le jeton. Le compte reste
+ * parfaitement authentifié ; l'API refuse pour une autre raison, et cette
+ * raison ne ressemble à aucune cause mortelle. Sondé le 02/08 sur ce
+ * classifieur : « Your Claude Pro subscription has expired » (403) tombait
+ * en `notre-faute` — une nature qui est dans la liste SANS_BASCULE. Donc
+ * chaque tour repartait sur le compte fini, échouait, et RIEN ne basculait
+ * vers les autres comptes. Le classifieur annonçait même `reconnu: true` :
+ * il affirmait comprendre.
+ *
+ * Le cas est certain, pas hypothétique : un compte Max du fondateur se
+ * termine le 06/08/2026.
+ *
+ * Le remède diffère de `authentification-morte`, et c'est toute la raison
+ * d'une nature séparée : ici, se reconnecter ne sert à RIEN.
+ */
+const CAUSES_ABONNEMENT_FINI: ReadonlyArray<RegExp> = [
+  /subscription (?:has )?(?:expired|ended|lapsed)/i,
+  /no active subscription/i,
+  /does not have an active subscription/i,
+  /(?:subscription|plan) (?:is )?(?:inactive|cancell?ed)/i,
+  /no active plan/i,
+  /resubscribe/i,
+  /renew your (?:subscription|plan)/i,
 ];
 
 /**
@@ -279,6 +320,14 @@ export function classerEchec(entree: {
     return { nature: "authentification-morte", reconnu: true };
   }
 
+  // AVANT les 4xx : ces messages arrivent en 402/403, parfois en 400, et
+  // partiraient donc en « notre-faute » — la seule nature qui interdit de
+  // basculer. Un compte fini ferait échouer chaque tour sans jamais laisser
+  // sa place aux comptes qui, eux, marchent encore.
+  if (CAUSES_ABONNEMENT_FINI.some((motif) => motif.test(message))) {
+    return { nature: "abonnement-fini", reconnu: true };
+  }
+
   // AVANT tout le reste : une session cassée n'appartient à aucun compte.
   // Placé ici parce qu'un de ces messages peut arriver avec un code 5xx, qui
   // le classerait « transitoire » plus bas — et relancerait la bascule.
@@ -305,9 +354,30 @@ export function classerEchec(entree: {
     return { nature: "contexte-trop-grand", reconnu: true };
   }
 
-  // 4xx hors 401/408/429 : c'est NOTRE requête qui est mauvaise. Basculer
-  // ne ferait que reproduire la même erreur sur le compte suivant.
   const code = entree.code;
+
+  // ⚠️ 402 et 403 parlent du COMPTE, jamais de la requête.
+  //
+  // « Payment Required » et « Forbidden » disent que ce compte-ci n'a pas le
+  // droit — un autre compte peut parfaitement l'avoir. Les ranger en
+  // « notre-faute » comme les autres 4xx faisait deux dégâts d'un coup : le
+  // tour ne basculait pas, et le verdict s'annonçait `reconnu: true`, donc
+  // personne n'était prévenu qu'on ne comprenait pas.
+  //
+  // On ne prétend PAS savoir ce que c'est : `reconnu: false` le dit tout haut
+  // avec le texte exact, et c'est comme ça que la liste au-dessus apprendra la
+  // vraie formulation d'Anthropic au lieu de nos suppositions.
+  if (code === 402 || code === 403) {
+    return {
+      nature: "transitoire",
+      repriseA:
+        entree.repriseAnnoncee ?? new Date(entree.maintenant + REPRISE_DEFAUT_MS).toISOString(),
+      reconnu: false,
+    };
+  }
+
+  // Les autres 4xx hors 401/408/429 : c'est NOTRE requête qui est mauvaise.
+  // Basculer ne ferait que reproduire la même erreur sur le compte suivant.
   if (code !== undefined && code >= 400 && code < 500) {
     if (code !== 401 && code !== 408 && code !== 429) {
       return { nature: "notre-faute", reconnu: true };
@@ -449,7 +519,14 @@ export function appliquerEchec(
   if (verdict.nature === "notre-faute") return sante;
 
   if (verdict.nature === "authentification-morte") {
-    return { instanceId: sante.instanceId, etat: "mort", raison };
+    return { instanceId: sante.instanceId, etat: "mort", raison, remede: "reconnexion" };
+  }
+
+  // Même exclusion, remède opposé. Un abonnement fini ne guérit pas plus tout
+  // seul qu'un jeton révoqué — mais dire « reconnecte-toi » ferait perdre une
+  // soirée à quelqu'un dont le jeton est parfaitement valide.
+  if (verdict.nature === "abonnement-fini") {
+    return { instanceId: sante.instanceId, etat: "mort", raison, remede: "reabonnement" };
   }
 
   // Le quota porte une reprise MESURÉE : le fournisseur a dit quand il revient.

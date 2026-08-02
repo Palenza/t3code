@@ -75,7 +75,16 @@ export function ligneDeRotation(
   if (rotation.state === "dead") {
     return {
       gravite: "bloque",
-      titre: "Out of rotation — sign in again",
+      // Le remède décide de la phrase. « Sign in again » sur un abonnement
+      // terminé enverrait chercher une panne inexistante : la reconnexion
+      // RÉUSSIT, et le compte reste inutilisable. Sans remède connu, on
+      // n'invente pas de geste — on dit seulement que le compte est écarté.
+      titre:
+        rotation.remedy === "resubscribe"
+          ? "Out of rotation — subscription ended"
+          : rotation.remedy === "reconnect"
+            ? "Out of rotation — sign in again"
+            : "Out of rotation",
       ...(rotation.reason === undefined ? {} : { raison: rotation.reason }),
     };
   }

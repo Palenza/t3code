@@ -28,6 +28,41 @@ describe("l'état de rotation envoyé au client", () => {
     });
   });
 
+  describe("le remède — parce que les deux morts ne se réparent pas pareil", () => {
+    it("distingue le jeton révoqué de l'abonnement terminé", () => {
+      expect(rotationPour(sante({ etat: "mort", remede: "reconnexion" }), INSTANT)).toMatchObject({
+        state: "dead",
+        remedy: "reconnect",
+      });
+      expect(rotationPour(sante({ etat: "mort", remede: "reabonnement" }), INSTANT)).toMatchObject({
+        state: "dead",
+        remedy: "resubscribe",
+      });
+    });
+
+    it("ne propose AUCUN geste sur un compte qui refroidit", () => {
+      // Le geste attendu est d'attendre. Écrire un remède ici inviterait à
+      // agir pour rien — et un conseil inutile use la confiance dans les
+      // conseils utiles.
+      const etat = rotationPour(
+        sante({
+          etat: "refroidissement",
+          repriseA: "2026-08-02T13:00:00.000Z",
+          remede: "reabonnement",
+        }),
+        INSTANT,
+      );
+      expect(etat).toMatchObject({ state: "cooling" });
+      expect(etat).not.toHaveProperty("remedy");
+    });
+
+    it("n'invente pas de remède quand le moteur n'en donne pas", () => {
+      const etat = rotationPour(sante({ etat: "mort", raison: "cause inconnue" }), INSTANT);
+      expect(etat).toMatchObject({ state: "dead" });
+      expect(etat).not.toHaveProperty("remedy");
+    });
+  });
+
   describe("le refroidissement", () => {
     const enCours = sante({
       etat: "refroidissement",

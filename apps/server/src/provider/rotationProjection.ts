@@ -62,7 +62,19 @@ export function rotationPour(
     // expirée, la porter reviendrait à annoncer une attente déjà finie.
     ...(sante.repriseA !== undefined && etat === "cooling" ? { resumesAt: sante.repriseA } : {}),
     ...(echecs > 0 ? { consecutiveFailures: echecs } : {}),
+    // Le remède n'a de sens que sur un compte mort : c'est la seule situation
+    // où l'utilisateur doit faire un geste. Sur un refroidissement, le geste
+    // est d'attendre — et écrire un remède là inviterait à agir pour rien.
+    ...(sante.remede !== undefined && etat === "dead"
+      ? { remedy: remedePourLeClient(sante.remede) }
+      : {}),
   };
+}
+
+function remedePourLeClient(
+  remede: NonNullable<SanteCompte["remede"]>,
+): "reconnect" | "resubscribe" {
+  return remede === "reconnexion" ? "reconnect" : "resubscribe";
 }
 
 /**

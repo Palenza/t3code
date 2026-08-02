@@ -70,7 +70,11 @@ describe("la bande en tête de la section Providers", () => {
       <BandeAttention
         providers={[
           compte("claude-b", { state: "cooling", resumesAt: "2026-08-02T12:30:00.000Z" }),
-          compte("claude-c", { state: "dead", reason: "OAuth token revoked" }),
+          compte("claude-c", {
+            state: "dead",
+            reason: "OAuth token revoked",
+            remedy: "reconnect",
+          }),
         ]}
         nomDuCompte={(id) => (id === "claude-c" ? "Compte perso" : "Compte pro")}
         now={MAINTENANT}
@@ -81,6 +85,26 @@ describe("la bande en tête de la section Providers", () => {
     expect(html.indexOf("Compte perso")).toBeLessThan(html.indexOf("Compte pro"));
     expect(html).toContain("Out of rotation — sign in again");
     expect(html).toContain("resumes in 30 min");
+  });
+
+  it("dit « abonnement terminé » là où « reconnecte-toi » serait un piège", () => {
+    // Le scénario du 06/08 vu depuis la bande : le compte est écarté, et le
+    // geste annoncé est le BON. Une reconnexion réussirait sans rien changer.
+    const html = renderToStaticMarkup(
+      <BandeAttention
+        providers={[
+          compte("claude-a", {
+            state: "dead",
+            reason: "Your Claude Pro subscription has expired",
+            remedy: "resubscribe",
+          }),
+        ]}
+        nomDuCompte={() => "Compte A"}
+        now={MAINTENANT}
+      />,
+    );
+    expect(html).toContain("Out of rotation — subscription ended");
+    expect(html).not.toContain("sign in");
   });
 
   it("emploie L'ANCRE que la carte pose, pas une chaîne écrite deux fois", () => {

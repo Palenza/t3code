@@ -14,11 +14,35 @@ describe("ce que la rotation dit d'un compte", () => {
   });
 
   it("annonce une reconnexion pour un compte écarté définitivement", () => {
-    const ligne = ligneDeRotation({ state: "dead", reason: "jeton révoqué" }, MAINTENANT);
+    const ligne = ligneDeRotation(
+      { state: "dead", reason: "jeton révoqué", remedy: "reconnect" },
+      MAINTENANT,
+    );
     expect(ligne?.gravite).toBe("bloque");
+    expect(ligne?.titre).toBe("Out of rotation — sign in again");
     // La raison du serveur passe TELLE QUELLE. La reformuler, c'est perdre le
     // seul indice qui permet de réparer.
     expect(ligne?.raison).toBe("jeton révoqué");
+  });
+
+  it("ne dit PAS « reconnecte-toi » quand c'est l'abonnement qui a fini", () => {
+    // Le jeton est parfaitement valide : la reconnexion RÉUSSIT et le compte
+    // reste inutilisable. Le mauvais conseil ferait chercher une panne
+    // inexistante — c'est la panne du 06/08 vue depuis l'écran.
+    const ligne = ligneDeRotation(
+      { state: "dead", reason: "subscription has expired", remedy: "resubscribe" },
+      MAINTENANT,
+    );
+    expect(ligne?.titre).toBe("Out of rotation — subscription ended");
+    expect(ligne?.titre).not.toContain("sign in");
+  });
+
+  it("n'invente aucun geste quand le serveur n'en donne pas", () => {
+    // Un compte mort sans remède connu reste écarté et le dit ; proposer un
+    // geste au hasard coûterait une soirée sur la moitié des cas.
+    const ligne = ligneDeRotation({ state: "dead" }, MAINTENANT);
+    expect(ligne?.titre).toBe("Out of rotation");
+    expect(ligne?.gravite).toBe("bloque");
   });
 
   it("dit le délai restant d'un compte mis de côté", () => {
