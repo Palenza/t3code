@@ -261,14 +261,34 @@ export function hexToHsl(hex: string): { h: number; s: number; l: number } {
   return { h, s: s * 100, l: l * 100 };
 }
 
-/** La couleur de la roue à une position de toile. */
+/**
+ * La couleur de la roue à une position de toile.
+ *
+ * RECALIBRÉE le 02/08 sur le duel apparié Raptor/Arc — le même glissé filmé
+ * dans les deux apps (80 images Raptor 0.0.76, 116 Arc), barre latérale
+ * mesurée au même rayon de pastille :
+ *
+ *     barre RAPTOR : clarté 48 + 41·r   saturation 40 − 66·r
+ *     barre ARC    : clarté 60 + 63·r   saturation ~25, quasi PLATE
+ *
+ * Notre barre était ~15 points plus SOMBRE à tout rayon, criarde près du
+ * centre (41 % contre 25) et délavée au bord (16 % contre 22). La cause :
+ * clarté plafonnée à 86 (Arc dépasse 90) et saturation en pente raide
+ * (95 − 55·r) quand celle d'Arc ne bouge presque pas. La teinte, elle, était
+ * JUSTE (33 captures : teinte − angle = −2,3° de médiane, on affirme −5°).
+ *
+ * Les nouvelles pentes visent la courbe d'Arc à travers notre fondu de thème
+ * sombre mesuré (barre ≈ 0,55 × couleur + 25). Réserve honnête : le duel
+ * compare notre thème SOMBRE au thème CLAIR d'Arc — si un jour on filme Arc
+ * en sombre, c'est cette mesure-là qu'il faudra viser.
+ */
 export function wheelColorAt(x: number, y: number): string {
   const dx = x - 0.5;
   const dy = y - 0.5;
   const hue = (Math.atan2(dy, dx) * 180) / Math.PI - 5;
   const dist = Math.hypot(dx, dy);
-  const light = Math.min(86, 42 + dist * 75);
-  const sat = Math.max(55, 95 - dist * 55);
+  const light = Math.min(95, 58 + dist * 90);
+  const sat = Math.max(0, 60 - dist * 10);
   return hslToHex(hue, sat, light);
 }
 
@@ -288,18 +308,20 @@ export function wheelColorAt(x: number, y: number): string {
  * d'une valeur mesurée finirait par passer pour mesurée.
  */
 export function degradeDePastille(hex: string): readonly [string, string] {
+  // MESURÉ le 02/08 sur les deux bouts des disques d'Arc (haut-gauche contre
+  // bas-droit, 8 pastilles) : Δteinte médiane 0,4° — AUCUNE rotation — et
+  // ΔL médiane 7. Mon premier jet inventait ±12° de teinte et ±7 de clarté ;
+  // la rotation ne vient de nulle part, elle saute.
   const { h, s, l } = hexToHsl(hex);
-  return [
-    hslToHex(h - 12, s, Math.min(100, l + 7)),
-    hslToHex(h + 12, s, Math.max(0, l - 7)),
-  ] as const;
+  return [hslToHex(h, s, Math.min(100, l + 4)), hslToHex(h, s, Math.max(0, l - 3))] as const;
 }
 
 /** L'inverse : où poser un rond pour obtenir (au plus près) cette couleur. */
 export function wheelPositionOf(hex: string): Point {
   const { h, l } = hexToHsl(hex);
   const angle = ((h + 5) * Math.PI) / 180;
-  const distFromLight = (Math.min(86, Math.max(42, l)) - 42) / 75;
+  // L'inverse de la clarté ci-dessus — les deux vivent ensemble ou mentent.
+  const distFromLight = (Math.min(95, Math.max(58, l)) - 58) / 90;
   const dist = Math.min(0.44, Math.max(0.06, distFromLight));
   return {
     x: 0.5 + Math.cos(angle) * dist,

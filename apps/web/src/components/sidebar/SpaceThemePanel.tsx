@@ -381,7 +381,7 @@ export function SpaceThemePanel({ spaceId }: { readonly spaceId?: string } = {})
       <div
         ref={canvasRef}
         className={cn(
-          "relative h-[372px] touch-none rounded-t-2xl bg-[radial-gradient(circle,var(--dot)_1px,transparent_1px)] bg-[size:9px_9px]",
+          "relative h-[372px] touch-none rounded-t-2xl bg-[radial-gradient(circle,var(--dot)_1px,transparent_1px)] bg-[size:4px_4px]",
           isDarkCanvas
             ? "[--dot:color-mix(in_oklab,white_22%,transparent)]"
             : "[--dot:color-mix(in_oklab,black_18%,transparent)]",
@@ -515,7 +515,7 @@ export function SpaceThemePanel({ spaceId }: { readonly spaceId?: string } = {})
               grandissent de 10 % au survol (24 → 26,4 css) et l'anneau
               ajoute 1 css ; sans ces 6 css de marge intérieure, le masque
               qui fait glisser les pages leur coupait les bords. */}
-          <div className="relative flex-1 overflow-hidden px-1.5 py-1.5">
+          <div className="relative flex-1 overflow-hidden py-1.5">
             <div
               className="flex transition-transform duration-300 ease-[cubic-bezier(0.25,1,0.5,1)] motion-reduce:transition-none"
               style={{
@@ -526,7 +526,11 @@ export function SpaceThemePanel({ spaceId }: { readonly spaceId?: string } = {})
               {PAGES_UNIES.map((page, index) => (
                 <div
                   key={page.nom}
-                  className="flex items-center justify-between"
+                  // Le rembourrage vit ICI et plus sur le masque : posé sur le
+                  // masque, il ouvrait une gouttière de 6 css où la première
+                  // pastille de la page VOISINE restait visible — la « 10e
+                  // pastille coupée » des captures du 02/08.
+                  className="flex items-center justify-between px-1.5"
                   style={{ width: `${100 / NOMBRE_DE_PAGES}%` }}
                 >
                   {page.tons.map((color) => {
@@ -553,7 +557,7 @@ export function SpaceThemePanel({ spaceId }: { readonly spaceId?: string } = {})
                 </div>
               ))}
               <div
-                className="flex items-center justify-between"
+                className="flex items-center justify-between px-1.5"
                 style={{ width: `${100 / NOMBRE_DE_PAGES}%` }}
               >
                 {GRADIENT_SWATCHES.map((trio) => (
@@ -949,16 +953,20 @@ function GrainDial(props: {
           transform: `translate(-50%, -50%) rotate(${notch * PAS - 90}deg) translateX(30px) rotate(90deg)`,
         }}
       />
-      {/* Le disque central montre TOUJOURS la couleur dominante — elle suit
-          les ronds en direct pendant qu'on les déplace — et le grain par
-          DESSUS, dosé par le cran. Avant, à zéro il n'y avait qu'un crayon :
-          on ne voyait ni la couleur, ni ce que la molette ajoutait (reproche
-          fondateur du 31/07). À zéro le disque est donc lisse ; chaque cran
-          ajoute sa dose, visiblement. */}
+      {/* Le disque central montre le GRAIN, dosé par le cran, sur une surface
+          NEUTRE. Il portait la couleur dominante (réponse au reproche du
+          31/07 : « on ne voyait ni la couleur, ni ce que la molette
+          ajoutait ») — mais la comparaison côte à côte du 02/08 a tranché :
+          chez Arc la molette est un anneau VIDE, et notre disque vert plein
+          était la différence la plus criante des deux panneaux. La couleur se
+          voit déjà partout (les ronds, la barre entière) ; le grain, lui, n'a
+          que cet endroit — on garde donc l'aperçu du grain, sur fond neutre. */}
       <span
         aria-hidden
-        className="absolute top-1/2 left-1/2 size-10 -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-full ring-1 ring-black/15 transition-colors"
-        style={{ backgroundColor: props.couleur }}
+        className={cn(
+          "absolute top-1/2 left-1/2 size-10 -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-full ring-1 transition-colors",
+          props.dark ? "bg-white/10 ring-white/15" : "bg-black/6 ring-black/15",
+        )}
       >
         <span
           className="absolute inset-0 mix-blend-overlay"
