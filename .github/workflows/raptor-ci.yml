@@ -53,22 +53,28 @@ jobs:
       - name: Typecheck
         run: vpr typecheck
 
-      # Le budget par test vaut 15 s dans `apps/web/vite.config.ts`. C'est
-      # confortable sur un Mac ; ça ne l'est pas sur un runner gratuit.
-      # Mesuré : `imageCompression.test.ts` — de l'encodage d'images, purement
-      # CPU — met 3,5 s pour ses treize cas en local et a dépassé 21 s pour UN
-      # seul cas ici. L'amont ne voit jamais ce mur : sa CI tourne sur des
-      # runners 8 cœurs auxquels ce dépôt n'a pas accès.
+      # UNE SEULE INVOCATION, DEPUIS LA RACINE — et ce n'est pas un détail.
       #
-      # On relève donc le budget ICI, et nulle part ailleurs. Toucher le
-      # `vite.config.ts` d'`apps/web` serait une divergence sur un fichier de
-      # l'amont — exactement ce qui re-casserait la synchro nocturne.
+      # `vp run test` lance le script de CHAQUE paquet depuis son dossier, donc
+      # avec la config de ce paquet. Or `apps/web/vite.config.ts` fixe un
+      # budget de 15 s par test : confortable sur un Mac, pas sur un runner
+      # gratuit. Mesuré ici : `imageCompression.test.ts` — de l'encodage
+      # d'images, purement CPU — met 3,5 s pour ses treize cas en local et a
+      # dépassé 21 s pour UN seul cas sur ce runner. L'amont ne voit jamais ce
+      # mur : sa CI tourne sur des runners 8 cœurs inaccessibles ici.
       #
-      # Le plafond garde son rôle : il attrape un test qui PEND. Il n'a jamais
-      # eu vocation à mesurer la vitesse de la machine — et la racine du dépôt
-      # utilise déjà 60 s.
+      # `vp test run` à la racine couvre EXACTEMENT le même périmètre — mesuré
+      # des deux côtés : 853 fichiers, 7 593 tests, au test près — en une seule
+      # invocation, donc avec le budget de la racine (60 s, `vite.config.ts:37`)
+      # et en ~58 s au lieu de plusieurs minutes.
+      #
+      # ⚠️ Ce qui NE marche PAS, éprouvé plutôt que supposé : passer le drapeau
+      # à travers `vp run test -- --testTimeout=60000`. Après `--`, vitest le
+      # prend pour un filtre de fichier et l'IGNORE — le test continuait
+      # d'échouer « in 15000ms » alors que le drapeau apparaissait bien dans la
+      # ligne de commande du log. Un correctif qui a l'air fait et ne l'est pas.
       - name: Tests
-        run: vp run test -- --testTimeout=60000
+        run: vp test run
 
   # Le garde de marque vit dans la suite de tests, donc il tourne déjà au-dessus.
   # Ce travail-là vérifie l'autre moitié : que l'app se CONSTRUIT. Le typecheck
