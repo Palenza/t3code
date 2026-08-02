@@ -1,4 +1,5 @@
 import type { ProviderInstanceId, ServerProviderRateLimits } from "@t3tools/contracts";
+import * as DateTime from "effect/DateTime";
 import { assert, describe, it } from "vite-plus/test";
 
 import {
@@ -405,15 +406,15 @@ describe("choix du compte", () => {
 });
 
 describe("l'attente des transitoires est une PRÉDICTION, pas une constante", () => {
-  /** Combien de temps un compte reste écarté, en heures. */
-  const attenteHeures = (sante: SanteCompte): number =>
-    (Date.parse(sante.repriseA ?? "") - MAINTENANT) / 3_600_000;
-
-  // Des instants LITTÉRAUX, jamais recalculés : un test qui refait le calcul de
-  // l'implémentation dérive avec elle et finit par ne plus rien prouver.
+  // Des ATTENDUS littéraux, jamais recalculés : un test qui refait le calcul
+  // de l'implémentation dérive avec elle et finit par ne plus rien prouver.
+  // Les ENTRÉES, elles, suivent l'horloge : depuis la garde d'échelle du
+  // 02/08 (volée à cliproxy), un échec pendant un refroidissement OUVERT ne
+  // compte pas — cinq fils qui voient le même hoquet sont UN incident. La
+  // rampe ne s'éprouve donc que d'incident en incident, chaque échec partant
+  // une seconde après la reprise du précédent.
   // (MAINTENANT = 2026-07-29T22:00:00Z)
   const DANS_1H = "2026-07-29T23:00:00.000Z";
-  const DANS_6H = "2026-07-30T04:00:00.000Z";
   const DANS_12H = "2026-07-30T10:00:00.000Z";
 
   const transitoire = (repriseA: string) => ({
@@ -422,40 +423,80 @@ describe("l'attente des transitoires est une PRÉDICTION, pas une constante", ()
     reconnu: true,
   });
 
-  it("respecte l'attente MESURÉE aux deux premiers échecs", () => {
+  /** L'attente depuis un instant donné, en heures. */
+  const attenteDepuis = (sante: SanteCompte, quand: number): number =>
+    (Date.parse(sante.repriseA ?? "") - quand) / 3_600_000;
+
+  /** Rejoue `n` incidents DISTINCTS, même attente annoncée à chaque fois. */
+  const incidents = (n: number, annonceMs: number, reconnu = true) => {
+    let sante = sain("A");
+    let quand = MAINTENANT;
+    const attentes: number[] = [];
+    for (let essai = 0; essai < n; essai += 1) {
+      sante = appliquerEchec(
+        sante,
+        {
+          nature: "transitoire" as const,
+          // Pas de `new Date` (règle globalDate) : l'ISO se fabrique par
+          // l'époque, comme partout dans ces tests.
+          repriseA: DateTime.formatIso(DateTime.makeUnsafe(quand + annonceMs)),
+          reconnu,
+        },
+        "hoquet",
+        quand,
+      );
+      attentes.push(attenteDepuis(sante, quand));
+      quand = Date.parse(sante.repriseA ?? "") + 1_000;
+    }
+    return { sante, attentes };
+  };
+
+  it("respecte l'attente MESURÉE aux deux premiers incidents", () => {
     // Le verdict a déduit cette attente d'un signal réel (401 → 5 min,
     // 429 → 1 h). L'escalader d'entrée remplacerait un fait par une supposition.
-    const un = appliquerEchec(sain("A"), transitoire(DANS_1H), "hoquet", MAINTENANT);
-    assert.strictEqual(attenteHeures(un), 1);
-    assert.strictEqual(un.echecsDAffilee, 1);
+    const { attentes, sante } = incidents(2, 3_600_000);
+    assert.deepStrictEqual(attentes, [1, 1]);
+    assert.strictEqual(sante.echecsDAffilee, 2);
+  });
 
-    const deux = appliquerEchec(un, transitoire(DANS_1H), "hoquet", MAINTENANT);
-    assert.strictEqual(attenteHeures(deux), 1);
-    assert.strictEqual(deux.echecsDAffilee, 2);
+  it("un échec PENDANT le refroidissement est le MÊME incident — rien ne bouge", () => {
+    // Reçu cliproxy, rejoué le 02/08 : un hoquet réseau de 30 s est vu par
+    // chaque fil en vol. Sans cette garde, cinq fils infligeaient cinq
+    // punitions — 1 h, 1 h, 4 h, 4 h, 12 h — pour un seul incident.
+    const un = appliquerEchec(sain("A"), transitoire(DANS_1H), "hoquet", MAINTENANT);
+    const rejoue = appliquerEchec(un, transitoire(DANS_1H), "hoquet", MAINTENANT + 30_000);
+    // La MÊME référence : rien écrit, rien signalé, l'échelle n'a pas avancé.
+    assert.strictEqual(rejoue, un);
+  });
+
+  it("un hoquet n'a PAS le droit de ressusciter un compte mort", () => {
+    // Sans la garde, un échec transitoire arrivé APRÈS la mort rétrogradait
+    // « mort » en simple refroidissement — et le compte revenait en rotation
+    // une heure plus tard alors qu'on le SAIT cassé.
+    const mort = appliquerEchec(
+      sain("A"),
+      { nature: "authentification-morte", reconnu: true },
+      "token_revoked",
+      MAINTENANT,
+    );
+    const apres = appliquerEchec(mort, transitoire(DANS_1H), "hoquet", MAINTENANT + 60_000);
+    assert.strictEqual(apres, mort);
   });
 
   it("ESCALADE quand la même panne se répète — « transitoire » devient faux", () => {
-    let sante = sain("A");
-    const attentes: number[] = [];
-    for (let essai = 0; essai < 6; essai += 1) {
-      sante = appliquerEchec(sante, transitoire(DANS_1H), "hoquet", MAINTENANT);
-      attentes.push(attenteHeures(sante));
-    }
-    // Avant ce changement, cette suite valait [1, 1, 1, 1, 1, 1] : un compte
+    // Avant l'escalade, cette suite valait [1, 1, 1, 1, 1, 1] : un compte
     // définitivement cassé dont l'erreur ressemble à un hoquet était retenté
     // toutes les heures, à vie.
+    const { attentes, sante } = incidents(6, 3_600_000);
     assert.deepStrictEqual(attentes, [1, 1, 4, 4, 12, 12]);
     assert.strictEqual(sante.echecsDAffilee, 6);
   });
 
   it("ne dépasse JAMAIS le plafond, même sur une attente de départ énorme", () => {
-    let sante = sain("A");
-    for (let essai = 0; essai < 5; essai += 1) {
-      sante = appliquerEchec(sante, transitoire(DANS_6H), "hoquet", MAINTENANT);
-    }
     // 6 h × 12 = 72 h sans plafond. Un compte écarté trois jours pour un
     // hoquet serait pire que le mal.
-    assert.strictEqual(attenteHeures(sante), 12);
+    const { attentes } = incidents(5, 6 * 3_600_000);
+    assert.strictEqual(attentes.at(-1), 12);
   });
 
   it("n'escalade PAS un quota — le fournisseur a dit quand il revient", () => {
@@ -491,16 +532,8 @@ describe("l'attente des transitoires est une PRÉDICTION, pas une constante", ()
   it("un message INCONNU escalade aussi — c'est là que ça compte le plus", () => {
     // Un message qu'on n'a pas su lire est rangé en « transitoire » par
     // prudence. Sans escalade, cette prudence devenait une boucle infinie.
-    const inconnu = {
-      nature: "transitoire" as const,
-      repriseA: transitoire(DANS_1H).repriseA,
-      reconnu: false,
-    };
-    let sante = sain("A");
-    for (let essai = 0; essai < 5; essai += 1) {
-      sante = appliquerEchec(sante, inconnu, "message jamais vu", MAINTENANT);
-    }
-    assert.strictEqual(attenteHeures(sante), 12);
+    const { attentes } = incidents(5, 3_600_000, false);
+    assert.strictEqual(attentes.at(-1), 12);
   });
 });
 

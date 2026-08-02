@@ -52,6 +52,40 @@ describe("la ligne de rotation sur la carte d'un compte", () => {
   });
 });
 
+describe("le bouton « Put back in rotation »", () => {
+  // Le SEUL chemin de retour d'un compte mort : la reconnexion (ou le
+  // réabonnement) se fait hors de l'app, aucune sonde ne peut la prouver, et
+  // un compte mort ne reçoit plus de tour — rien ne peut le guérir tout seul.
+  it("apparaît sur un compte mort, et seulement là", () => {
+    const mort = renderToStaticMarkup(
+      <LigneDeRotation
+        rotation={{ state: "dead", remedy: "resubscribe" }}
+        instanceId="claude-a"
+        now={MAINTENANT}
+      />,
+    );
+    expect(mort).toContain("Put back in rotation");
+
+    // Un compte qui refroidit revient TOUT SEUL : lui proposer un geste
+    // inviterait à agir pour rien.
+    const refroidit = renderToStaticMarkup(
+      <LigneDeRotation
+        rotation={{ state: "cooling", resumesAt: "2026-08-02T12:30:00.000Z" }}
+        instanceId="claude-a"
+        now={MAINTENANT}
+      />,
+    );
+    expect(refroidit).not.toContain("Put back in rotation");
+  });
+
+  it("ne se rend pas sans identifiant de compte — un clic doit savoir QUI", () => {
+    const sansId = renderToStaticMarkup(
+      <LigneDeRotation rotation={{ state: "dead" }} now={MAINTENANT} />,
+    );
+    expect(sansId).not.toContain("Put back in rotation");
+  });
+});
+
 describe("la bande en tête de la section Providers", () => {
   const sain = [compte("claude-a"), compte("claude-b", { state: "ok", consecutiveFailures: 2 })];
 

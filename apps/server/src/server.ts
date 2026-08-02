@@ -23,6 +23,7 @@ import { tableauLocalProxyRouteLayer } from "./tableauLocalProxy.ts";
 import { favorisEnAttenteRouteLayer, favorisEpinglerRouteLayer } from "./favorisEnAttente.ts";
 import { forkUpdateEtatRouteLayer, forkUpdateLancerRouteLayer } from "./forkUpdate.ts";
 import { memoireRouteLayer } from "./memoireConsignes.ts";
+import { reveilRouteLayer } from "./provider/reveilRoute.ts";
 import { modeEtatRouteLayer, modePoserRouteLayer } from "./modeActif.ts";
 import { websocketRpcRouteLayer } from "./ws.ts";
 import * as ExternalLauncher from "./process/externalLauncher.ts";
@@ -453,6 +454,7 @@ export const makeRoutesLayer = Layer.mergeAll(
     modeEtatRouteLayer,
     modePoserRouteLayer,
     memoireRouteLayer,
+    reveilRouteLayer,
     carnetRouteLayer,
     assetRouteLayer,
     staticAndDevRouteLayer,

@@ -5,6 +5,7 @@ import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 
+import { writeFileStringAtomically } from "./atomicWrite.ts";
 import { resolveClaudeHomePath } from "./provider/Drivers/ClaudeHome.ts";
 import { ServerSettingsService } from "./serverSettings.ts";
 import {
@@ -102,9 +103,15 @@ export const memoireRouteLayer = HttpRouter.add(
       const resolu = yield* resolveClaudeHomePath({ homePath });
       const fichier = path.join(resolu, NOM_FICHIER);
       const existant = yield* fs.readFileString(fichier).pipe(Effect.orElseSucceed(() => ""));
-      yield* fs
-        .writeFileString(fichier, fusionner(existant, memoire))
-        .pipe(Effect.catchCause(() => Effect.void));
+      // Atomique, parce que ce fichier est une MÉMOIRE : un plantage au
+      // milieu d'un `writeFileString` nu laisse un fichier tronqué, et une
+      // mémoire tronquée ne crie pas — elle raconte moins, sans le dire.
+      // (`writeFileStringAtomically` existait déjà dans le dépôt ; ce chemin
+      // ne l'utilisait pas — trouvé par le ratissage du 02/08.)
+      yield* writeFileStringAtomically({
+        filePath: fichier,
+        contents: fusionner(existant, memoire),
+      }).pipe(Effect.catchCause(() => Effect.void));
       ecrit += 1;
     }
     return HttpServerResponse.jsonUnsafe({ ecrit, consignes: corps.consignes.length });

@@ -540,6 +540,20 @@ export function appliquerEchec(
     };
   }
 
+  // L'ÉCHELLE N'AVANCE QU'UNE FOIS PAR FENÊTRE (volé à cliproxy, 02/08).
+  //
+  // Un hoquet réseau de 30 s est vu par CHAQUE fil en vol — cinq fils, cinq
+  // appels ici. Sans cette garde, le compte prenait cinq punitions pour un
+  // seul incident : 1 h, 1 h, 4 h, 4 h, 12 h. Rejoué sur ce module : la même
+  // rafale donne désormais 1 h, point. Un nouvel échec APRÈS la reprise reste
+  // un nouvel incident, et l'échelle reprend sa montée.
+  //
+  // La garde couvre aussi « mort » : un compte écarté définitivement ne doit
+  // pas être RESSUSCITÉ en simple refroidissement par un hoquet arrivé après
+  // sa mort — rétrograder « mort » en « ça repart dans une heure » serait un
+  // mensonge d'écran ET une remise en rotation d'un compte qu'on sait cassé.
+  if (etatA(sante, maintenant) !== "ok") return sante;
+
   const echecsDAffilee = (sante.echecsDAffilee ?? 0) + 1;
   const base =
     verdict.repriseA === undefined

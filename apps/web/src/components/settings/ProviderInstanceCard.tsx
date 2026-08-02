@@ -721,7 +721,7 @@ export function ProviderInstanceCard({
               nulle part — un compte pouvait être écarté depuis une heure, et
               l'écran ne montrait qu'un quota qui ne bougeait plus.
             */}
-            <LigneDeRotation rotation={liveProvider?.rotation} />
+            <LigneDeRotation rotation={liveProvider?.rotation} instanceId={String(instanceId)} />
           </div>
           <div className="flex w-full shrink-0 items-center gap-2 sm:w-auto sm:justify-end">
             <Button

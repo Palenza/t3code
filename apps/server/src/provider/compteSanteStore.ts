@@ -73,13 +73,13 @@ export function noterEchec(
 ): SanteCompte {
   const avant = santeDe(instanceId);
   const apres = appliquerEchec(avant, verdict, raison, maintenant);
-  // Rien n'a bougé DU TOUT (notre-faute) : ni écriture, ni tic.
+  // Rien n'a bougé DU TOUT : ni écriture, ni tic. Deux cas rendent `avant`
+  // tel quel — notre-faute (le compte n'y est pour rien), et un échec
+  // transitoire PENDANT un refroidissement déjà ouvert : cinq fils qui voient
+  // le même hoquet de 30 s sont UN incident, pas cinq (cf. la garde
+  // d'échelle dans `appliquerEchec`). Le compteur ne grandit donc qu'entre
+  // incidents DISTINCTS — après la reprise du précédent.
   if (apres === avant) return avant;
-  // Le compteur, lui, doit être gardé même quand l'état affiché ne change pas :
-  // c'est lui qui fait grandir l'attente au prochain échec. On écrit toujours,
-  // on ne PRÉVIENT que si l'humain verrait une différence — un compte qui échoue
-  // trois fois pendant son refroidissement ne doit pas repeindre l'interface
-  // trois fois.
   const memeEtat = apres.etat === avant.etat && apres.repriseA === avant.repriseA;
   parInstance.set(instanceId, apres);
   if (!memeEtat) prevenir();

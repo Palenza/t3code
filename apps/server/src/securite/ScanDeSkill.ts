@@ -40,7 +40,7 @@
  * Module PUR.
  */
 
-import { scannerMenaces } from "./MotifsDeMenace.ts";
+import { CARACTERES_INVISIBLES, scannerMenaces } from "./MotifsDeMenace.ts";
 
 export type Gravite = "critique" | "haute" | "moyenne";
 export type Verdict = "sain" | "prudence" | "dangereux";
@@ -85,29 +85,12 @@ export const EXTENSIONS_BINAIRES: ReadonlySet<string> = new Set([
   ".rpm",
 ]);
 
-/**
- * Caractères invisibles — largeur nulle, marques directionnelles, jointeurs.
- *
- * Le vecteur le plus vicieux du lot : l'humain qui relit la skill ne voit
- * RIEN, et le modèle lit le texte caché. Aucune regex sur des mots ne
- * l'attrape.
- */
-export const CARACTERES_INVISIBLES: ReadonlyArray<string> = [
-  "​", // largeur nulle
-  "‌",
-  "‍",
-  "⁠", // jointeur invisible
-  "﻿", // marque d'ordre des octets
-  "‪", // marques directionnelles
-  "‫",
-  "‬",
-  "‭",
-  "‮", // renversement droite-à-gauche : cache la vraie fin d'un nom
-  "⁦",
-  "⁧",
-  "⁨",
-  "⁩",
-];
+// Les caractères invisibles vivent dans MotifsDeMenace (module pur) depuis
+// le 02/08 : `scannerMenaces` en a besoin pour les RETIRER avant de chercher,
+// et ce fichier pour les TROUVER dans le texte brut. Ici, leur présence est
+// la trouvaille — c'est pour ça que ce contrôle lit le texte AVANT toute
+// normalisation, et doit continuer à le faire.
+export { CARACTERES_INVISIBLES } from "./MotifsDeMenace.ts";
 
 interface MotifDeSkill {
   readonly id: string;

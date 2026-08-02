@@ -49,6 +49,58 @@
 
 export type PorteeDeMotif = "partout" | "contexte" | "strict";
 
+/**
+ * Caractères invisibles — largeur nulle, marques directionnelles, jointeurs.
+ *
+ * Le vecteur le plus vicieux du lot : l'humain qui relit ne voit RIEN, et le
+ * modèle lit le texte caché. Aucune regex sur des mots ne l'attrape.
+ *
+ * Vit ICI (module pur, zéro import) parce que deux consommateurs en ont
+ * besoin pour deux métiers OPPOSÉS : `ScanDeSkill` les cherche dans le texte
+ * BRUT — leur présence est une trouvaille critique en soi — et
+ * `scannerMenaces` les retire avant de chercher ses motifs. Le déplacer dans
+ * l'un des deux créerait un cycle d'imports.
+ */
+export const CARACTERES_INVISIBLES: ReadonlyArray<string> = [
+  "​", // largeur nulle
+  "‌",
+  "‍",
+  "⁠", // jointeur invisible
+  "﻿", // marque d'ordre des octets
+  "‪", // marques directionnelles
+  "‫",
+  "‬",
+  "‭",
+  "‮", // renversement droite-à-gauche : cache la vraie fin d'un nom
+  "⁦",
+  "⁧",
+  "⁨",
+  "⁩",
+];
+
+/**
+ * Retire le MAQUILLAGE avant de chercher — et seulement ici.
+ *
+ * Reçu du ratissage 02/08 (superpowers) : quatre déguisements sur six
+ * d'« ignore all previous instructions » traversaient le scanner — largeur
+ * nulle entre les lettres, jointeur, pleine chasse, gras mathématique. NFKC
+ * replie les lettres déguisées vers leur forme simple ; les invisibles
+ * tombent ensuite.
+ *
+ * ⚠️ NE JAMAIS remonter cette normalisation en amont de l'appelant :
+ * `ScanDeSkill` cherche les caractères invisibles dans le texte BRUT, et leur
+ * présence y est une trouvaille critique. Normaliser avant lui ferait passer
+ * une skill piégée de « refuser » à « installer » — reçu rejoué par la
+ * contre-visite.
+ */
+export function normaliserPourScan(texte: string): string {
+  let plat = texte.normalize("NFKC");
+  for (const c of CARACTERES_INVISIBLES) {
+    plat = plat.replaceAll(c, "");
+  }
+  return plat;
+}
+
 export interface MotifDeMenace {
   readonly id: string;
   readonly portee: PorteeDeMotif;
@@ -313,7 +365,11 @@ const APPLIQUE: Record<PorteeDeMotif, ReadonlySet<PorteeDeMotif>> = {
  */
 export function scannerMenaces(texte: string, portee: PorteeDeMotif = "contexte"): Menace[] {
   if (texte.length === 0) return [];
-  const borne = texte.length > PLAFOND_DE_SCAN ? texte.slice(0, PLAFOND_DE_SCAN) : texte;
+  // Borner AVANT de normaliser : le plafond protège du ReDoS, et NFKC sur des
+  // mégaoctets serait exactement le coût qu'il borne.
+  const borne = normaliserPourScan(
+    texte.length > PLAFOND_DE_SCAN ? texte.slice(0, PLAFOND_DE_SCAN) : texte,
+  );
   const applicables = APPLIQUE[portee];
   const trouvees: Menace[] = [];
   for (const motif of MOTIFS) {
