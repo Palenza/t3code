@@ -7,14 +7,12 @@ import { useTheme } from "../../hooks/useTheme";
 import { useSidebarSpacesStore } from "../../sidebarSpacesStore";
 import {
   makeSidebarThemeFromColors,
-  SIDEBAR_THEME_GRAIN_URL,
   useSidebarThemeStore,
   type SidebarTheme,
 } from "../../sidebarThemeStore";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import {
   ajouterRond,
-  degradeDePastille,
   deplacerFigure,
   glisserSatellite,
   normaliserAuGabarit,
@@ -262,11 +260,6 @@ export function SpaceThemePanel({ spaceId }: { readonly spaceId?: string } = {})
   );
 
   const [swatchPage, setSwatchPage] = useState(0);
-  // Nonce de POSE : un clic de pastille/dégradé fait NAÎTRE les ronds sur
-  // place (pop 160 ms) au lieu de les faire glisser depuis leur ancienne
-  // position à travers tout le canevas — mesuré sur ARC.mov : son rond
-  // apparaît là où sa teinte le place, il ne voyage pas.
-  const [poseNonce, setPoseNonce] = useState(0);
 
   // ------------------------------------------------------------- la toile
   const canvasRef = useRef<HTMLDivElement | null>(null);
@@ -377,7 +370,6 @@ export function SpaceThemePanel({ spaceId }: { readonly spaceId?: string } = {})
       // (Reproche fondateur : revenir des gradients aux unis laissait trois
       // ronds ; « si je choisis le jaune, ça me met que le rond jaune ».)
       const position = wheelPositionOf(color);
-      setPoseNonce((n) => n + 1);
       apply({
         ...current,
         stops: stopsAvecCouleurs(poserFigure(position.x, position.y, 1), [color]),
@@ -391,7 +383,6 @@ export function SpaceThemePanel({ spaceId }: { readonly spaceId?: string } = {})
       // Un gradient = TROIS ronds, aux couleurs EXACTES du préréglage —
       // chacun À L'ANGLE DE SA TEINTE (pose d'Arc, mesurée : ses trios font
       // 37/40/283 d'écarts, les écarts de teinte du préréglage).
-      setPoseNonce((n) => n + 1);
       apply({ ...current, stops: stopsAvecCouleurs(poserSelonCouleurs(trio), trio) });
     },
     [apply, current],
@@ -428,9 +419,38 @@ export function SpaceThemePanel({ spaceId }: { readonly spaceId?: string } = {})
     : "text-neutral-600 hover:bg-black/8 hover:text-neutral-900";
 
   // Glissé : rigide. Saut discret : glissade. (Mesure : ratio 0,98 en drag.)
+  /**
+   * LE VOYAGE DU ROND — relevé sur ARC.mov, pas supposé.
+   *
+   * Le commentaire que ce code portait jusqu'ici affirmait « mesuré sur
+   * ARC.mov : son rond apparaît là où sa teinte le place, il ne voyage pas »,
+   * et faisait remonter les boutons (clé React) pour obtenir un pop sur place.
+   * C'est faux. Suivi du rond dominant image par image sur ARC.mov autour du
+   * clic de pastille de t=43,475 s (108 images extraites à 120 fps, centroïde
+   * des taches saturées du canevas) :
+   *
+   *   départ      x = 471,6      (immobile jusqu'à 43,483)
+   *   dépassement x = 208,0      à t = 43,667
+   *   arrivée     x = 226,5      à t = 43,817
+   *
+   * soit 245,1 px de trajet net en 334 ms, avec un dépassement de 18,5 px
+   * (7,5 % du trajet) puis un retour. Le profil de vitesse ACCÉLÈRE avant de
+   * décélérer — 1,6 → 22,7 → 39,5 → 45,0 → 66,8 (pointe) → 32,7 → 16,4 → 9,9
+   * → 4,8 px/image. C'est un ressort, pas un ease-out : l'ancien
+   * `cubic-bezier(0.22,1,0.36,1)` part à pleine vitesse et n'a aucun
+   * dépassement.
+   *
+   * La courbe ci-dessous EST la mesure : chaque palier de `linear()` est un
+   * couple (avancement, temps) relevé sur la vidéo, avancement normalisé par
+   * les 245,1 px du trajet. On ne réinvente pas une approximation à la main.
+   */
+  const RESSORT_ARC =
+    "linear(0, 0.099 5.1%, 0.259 10.2%, 0.442 15%, 0.714 20.1%, 0.847 29.9%," +
+    " 0.945 32.6%, 1.011 37.4%, 1.051 42.5%, 1.071 47.6%, 1.076 55.1%," +
+    " 1.059 65%, 1.026 74.9%, 1.008 85%, 1.002 94.9%, 1)";
   const transitionRonds = enGlisse
     ? "none"
-    : "left 200ms cubic-bezier(0.22,1,0.36,1), top 200ms cubic-bezier(0.22,1,0.36,1), background-color 120ms";
+    : `left 334ms ${RESSORT_ARC}, top 334ms ${RESSORT_ARC}, background-color 120ms`;
 
   return (
     // 358 × 510 css MESURÉS (bords à ±1 px sur frame claire et sombre),
@@ -443,171 +463,201 @@ export function SpaceThemePanel({ spaceId }: { readonly spaceId?: string } = {})
       )}
     >
       <VerreLiquideDefs />
-      {/* La toile-palette : pointillée. Panneau total 510 css (mesure bords
-          13→1033 crop) ; la séparation toile/socle mesurée oscille entre 369
-          et 393 selon la frame — 372 tient les deux. */}
-      <div
-        ref={canvasRef}
-        className={cn(
-          "relative h-[372px] touch-none rounded-t-2xl bg-[radial-gradient(circle,var(--dot)_1px,transparent_1px)] bg-[size:4px_4px]",
-          isDarkCanvas
-            ? "[--dot:color-mix(in_oklab,white_10%,transparent)]"
-            : "[--dot:color-mix(in_oklab,black_18%,transparent)]",
-        )}
-        onPointerMove={(event) => {
-          if (draggingRef.current) viser(event.clientX, event.clientY);
-        }}
-        onPointerUp={finDeGlisse}
-        onClick={(event) => {
-          // Le canevas lui-même prend le clic — « Tap to pick a color for
-          // this space », le libellé d'Arc. Un clic sec (pas un glissé, pas
-          // un rond : eux arrêtent la propagation) déplace la dominante là.
-          if (draggingRef.current || event.target !== event.currentTarget) return;
-          const rect = event.currentTarget.getBoundingClientRect();
-          const x = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
-          const y = Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height));
-          const points = current.stops.map((stop) => ({ x: stop.x, y: stop.y }));
-          apply({ ...current, stops: stopsDepuisPoints(deplacerFigure(points, x, y)) });
-        }}
-      >
-        <div className="absolute inset-x-0 top-3 flex items-center justify-center">
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <span
-                  aria-label={`${MODE_TITRE} — ${MODE_EXPLICATION}`}
-                  className={cn(
-                    "t3-etoiles flex size-7 items-center justify-center rounded-lg",
-                    isDarkCanvas ? "text-white/85" : "text-neutral-700",
-                  )}
-                >
-                  <EtoilesScintillantes />
-                </span>
-              }
-            />
-            <TooltipPopup side="top">
-              {MODE_TITRE} — {MODE_EXPLICATION}
-            </TooltipPopup>
-          </Tooltip>
-        </div>
-        {current.stops.slice(1).map((stop, index) => {
-          const size = STOP_SIZES_PX[index + 1] ?? 20;
-          return (
-            <button
-              // L'index EST l'identité stable pendant le glissé (une clé
-              // couleur/position remonterait le bouton à chaque frame).
-              // eslint-disable-next-line react/no-array-index-key
-              key={`${poseNonce}-${index}`}
-              type="button"
-              aria-label={`Prendre cette couleur comme dominante`}
-              onPointerDown={(event) => {
-                // SAISISSABLE — la vidéo du 02/08 montre Arc déplaçant
-                // n'importe quel rond, pas seulement la dominante. Presser
-                // ARME ; bouger de 4 px engage la poursuite de CE rond ;
-                // relâcher sans bouger PROMEUT (le geste historique).
-                event.preventDefault();
-                event.stopPropagation();
-                enAttenteRef.current = {
-                  index: index + 1,
-                  x: event.clientX,
-                  y: event.clientY,
-                };
-                try {
-                  event.currentTarget.setPointerCapture(event.pointerId);
-                } catch {
-                  // Sans capture, le glissé vit tant que le pointeur survole.
-                }
-              }}
-              onPointerMove={(event) => {
-                const attente = enAttenteRef.current;
-                if (attente !== null && !draggingRef.current) {
-                  if (Math.hypot(event.clientX - attente.x, event.clientY - attente.y) > 4) {
-                    demarrerSaisie(attente.index, event.clientX, event.clientY);
-                  }
-                  return;
-                }
-                if (draggingRef.current) viser(event.clientX, event.clientY);
-              }}
-              onPointerUp={(event) => {
-                const attente = enAttenteRef.current;
-                enAttenteRef.current = null;
-                if (draggingRef.current) {
-                  finDeGlisse();
-                  return;
-                }
-                if (attente === null) return;
-                // Promotion : le satellite DEVIENT la dominante, sur place —
-                // échange de rôles, rien ne bouge.
-                event.preventDefault();
-                event.stopPropagation();
-                const stops = [...current.stops];
-                const [promu] = stops.splice(attente.index, 1);
-                if (promu === undefined) return;
-                apply({ ...current, stops: [promu, ...stops] });
-              }}
-              className="absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer rounded-full shadow-sm ring-2 ring-white hover:scale-110"
-              style={{
-                left: `${stop.x * 100}%`,
-                top: `${stop.y * 100}%`,
-                width: size,
-                height: size,
-                backgroundColor: stop.color,
-                transition: transitionRonds,
-              }}
-            />
-          );
-        })}
-        <button
-          type="button"
-          aria-label="Mélanger — loin du centre le thème pâlit et s'écarte, près du centre il devient vif et resserré"
-          onPointerDown={(event) => {
-            event.preventDefault();
-            demarrerSaisie(0, event.clientX, event.clientY);
-            try {
-              event.currentTarget.setPointerCapture(event.pointerId);
-            } catch {
-              // Sans capture, le drag vit tant que le pointeur survole.
-            }
-          }}
+      {/* LA TOILE EST UNE CARTE ENCASTRÉE ET CARRÉE — mesuré sur ARC.mov.
+          Détection de la trame par énergie haute fréquence (la variance brute
+          ne marche pas : le verre laisse passer la page floutée, qui varie
+          partout) sur cmp/panneau/arc-t20.png :
+
+            Arc     trame x 21..694, y 24..695  →  337 × 336 css, donc CARRÉE,
+                    marges 10,5 css à gauche, 9,5 à droite, 12 en haut
+            Raptor  trame x 8..715, y 12..969   →  354 × 479 css, pleine
+                    largeur, pas carrée, marges 4 / 2 / 6
+
+          La toile touchait donc les bords du panneau alors qu'Arc la pose
+          comme une carte, avec de l'air autour et ses propres coins. C'était,
+          avec le disque plein de la molette, l'écart le plus visible des deux
+          panneaux. La hauteur totale de la zone (372 css) ne bouge pas : on
+          répartit 12 en haut, 337 de carte, le reste dessous. */}
+      <div className="px-[10px] pt-3 pb-[23px]">
+        <div
+          ref={canvasRef}
+          className={cn(
+            "relative h-[337px] touch-none overflow-hidden rounded-2xl bg-[radial-gradient(circle,var(--dot)_1px,transparent_1px)] bg-[size:4px_4px]",
+            isDarkCanvas
+              ? "bg-white/[0.03] [--dot:color-mix(in_oklab,white_10%,transparent)]"
+              : "bg-black/[0.03] [--dot:color-mix(in_oklab,black_18%,transparent)]",
+          )}
           onPointerMove={(event) => {
             if (draggingRef.current) viser(event.clientX, event.clientY);
           }}
           onPointerUp={finDeGlisse}
-          className="absolute -translate-x-1/2 -translate-y-1/2 cursor-grab rounded-full shadow-md ring-[3px] ring-white active:cursor-grabbing"
-          style={{
-            left: `${dominant.x * 100}%`,
-            top: `${dominant.y * 100}%`,
-            width: STOP_SIZES_PX[0],
-            height: STOP_SIZES_PX[0],
-            backgroundColor: dominant.color,
-            transition: transitionRonds,
+          onClick={(event) => {
+            // Le canevas lui-même prend le clic — « Tap to pick a color for
+            // this space », le libellé d'Arc. Un clic sec (pas un glissé, pas
+            // un rond : eux arrêtent la propagation) déplace la dominante là.
+            if (draggingRef.current || event.target !== event.currentTarget) return;
+            const rect = event.currentTarget.getBoundingClientRect();
+            const x = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
+            const y = Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height));
+            const points = current.stops.map((stop) => ({ x: stop.x, y: stop.y }));
+            apply({ ...current, stops: stopsDepuisPoints(deplacerFigure(points, x, y)) });
           }}
-        />
-        <div className="absolute inset-x-0 bottom-2.5 flex items-center justify-center gap-4">
+        >
+          <div className="absolute inset-x-0 top-3 flex items-center justify-center">
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <span
+                    aria-label={`${MODE_TITRE} — ${MODE_EXPLICATION}`}
+                    // LE ✨ EST UN BOUTON, avec son fond — mesuré sur ARC.mov.
+                    //
+                    // Chez Arc : carré arrondi PLEIN de 64 × 64 device (32 css),
+                    // rayon 17 device (8,5 css), qui assombrit le fond de 227,8
+                    // à 201,8 de luminance — un lavis d'environ 11 %. Il est là
+                    // EN PERMANENCE (rapport fond-bouton/toile entre 0,881 et
+                    // 0,918 sur 248 images couvrant les 124 s du clip) : c'est
+                    // l'état actif du mode.
+                    //
+                    // Chez Raptor : rien. Ligne de base à 15,07 de luminance sur
+                    // 249 images, c'est-à-dire exactement le fond du panneau. Il
+                    // n'y avait ni surface, ni état actif, ni cible de clic
+                    // dessinée — juste un glyphe posé sur le vide. Le mode étant
+                    // unique ici, le fond est toujours allumé, comme chez Arc.
+                    className={cn(
+                      "t3-etoiles flex size-8 items-center justify-center rounded-[9px]",
+                      isDarkCanvas
+                        ? "bg-white/10 text-white/85"
+                        : "bg-black/[0.11] text-neutral-700",
+                    )}
+                  >
+                    <EtoilesScintillantes />
+                  </span>
+                }
+              />
+              <TooltipPopup side="top">
+                {MODE_TITRE} — {MODE_EXPLICATION}
+              </TooltipPopup>
+            </Tooltip>
+          </div>
+          {current.stops.slice(1).map((stop, index) => {
+            const size = STOP_SIZES_PX[index + 1] ?? 20;
+            return (
+              <button
+                // L'index EST l'identité stable pendant le glissé (une clé
+                // couleur/position remonterait le bouton à chaque frame).
+                // eslint-disable-next-line react/no-array-index-key
+                key={index}
+                type="button"
+                aria-label={`Prendre cette couleur comme dominante`}
+                onPointerDown={(event) => {
+                  // SAISISSABLE — la vidéo du 02/08 montre Arc déplaçant
+                  // n'importe quel rond, pas seulement la dominante. Presser
+                  // ARME ; bouger de 4 px engage la poursuite de CE rond ;
+                  // relâcher sans bouger PROMEUT (le geste historique).
+                  event.preventDefault();
+                  event.stopPropagation();
+                  enAttenteRef.current = {
+                    index: index + 1,
+                    x: event.clientX,
+                    y: event.clientY,
+                  };
+                  try {
+                    event.currentTarget.setPointerCapture(event.pointerId);
+                  } catch {
+                    // Sans capture, le glissé vit tant que le pointeur survole.
+                  }
+                }}
+                onPointerMove={(event) => {
+                  const attente = enAttenteRef.current;
+                  if (attente !== null && !draggingRef.current) {
+                    if (Math.hypot(event.clientX - attente.x, event.clientY - attente.y) > 4) {
+                      demarrerSaisie(attente.index, event.clientX, event.clientY);
+                    }
+                    return;
+                  }
+                  if (draggingRef.current) viser(event.clientX, event.clientY);
+                }}
+                onPointerUp={(event) => {
+                  const attente = enAttenteRef.current;
+                  enAttenteRef.current = null;
+                  if (draggingRef.current) {
+                    finDeGlisse();
+                    return;
+                  }
+                  if (attente === null) return;
+                  // Promotion : le satellite DEVIENT la dominante, sur place —
+                  // échange de rôles, rien ne bouge.
+                  event.preventDefault();
+                  event.stopPropagation();
+                  const stops = [...current.stops];
+                  const [promu] = stops.splice(attente.index, 1);
+                  if (promu === undefined) return;
+                  apply({ ...current, stops: [promu, ...stops] });
+                }}
+                className="absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer rounded-full shadow-sm ring-2 ring-white hover:scale-110"
+                style={{
+                  left: `${stop.x * 100}%`,
+                  top: `${stop.y * 100}%`,
+                  width: size,
+                  height: size,
+                  backgroundColor: stop.color,
+                  transition: transitionRonds,
+                }}
+              />
+            );
+          })}
           <button
             type="button"
-            aria-label="Retirer un rond"
-            disabled={current.stops.length <= 1}
-            onClick={removeStop}
-            className={cn(
-              "flex size-6 cursor-pointer items-center justify-center rounded-md transition-colors disabled:cursor-default disabled:opacity-35 disabled:hover:bg-transparent",
-              mutedControl,
-            )}
-          >
-            <MinusIcon className="size-4" />
-          </button>
-          <button
-            type="button"
-            aria-label="Ajouter un rond"
-            disabled={current.stops.length >= MAX_ARC_STOPS}
-            onClick={addStop}
-            className={cn(
-              "flex size-6 cursor-pointer items-center justify-center rounded-md transition-colors disabled:cursor-default disabled:opacity-35 disabled:hover:bg-transparent",
-              mutedControl,
-            )}
-          >
-            <PlusIcon className="size-4" />
-          </button>
+            aria-label="Mélanger — loin du centre le thème pâlit et s'écarte, près du centre il devient vif et resserré"
+            onPointerDown={(event) => {
+              event.preventDefault();
+              demarrerSaisie(0, event.clientX, event.clientY);
+              try {
+                event.currentTarget.setPointerCapture(event.pointerId);
+              } catch {
+                // Sans capture, le drag vit tant que le pointeur survole.
+              }
+            }}
+            onPointerMove={(event) => {
+              if (draggingRef.current) viser(event.clientX, event.clientY);
+            }}
+            onPointerUp={finDeGlisse}
+            className="absolute -translate-x-1/2 -translate-y-1/2 cursor-grab rounded-full shadow-md ring-[3px] ring-white active:cursor-grabbing"
+            style={{
+              left: `${dominant.x * 100}%`,
+              top: `${dominant.y * 100}%`,
+              width: STOP_SIZES_PX[0],
+              height: STOP_SIZES_PX[0],
+              backgroundColor: dominant.color,
+              transition: transitionRonds,
+            }}
+          />
+          <div className="absolute inset-x-0 bottom-2.5 flex items-center justify-center gap-4">
+            <button
+              type="button"
+              aria-label="Retirer un rond"
+              disabled={current.stops.length <= 1}
+              onClick={removeStop}
+              className={cn(
+                "flex size-6 cursor-pointer items-center justify-center rounded-md transition-colors disabled:cursor-default disabled:opacity-35 disabled:hover:bg-transparent",
+                mutedControl,
+              )}
+            >
+              <MinusIcon className="size-4" />
+            </button>
+            <button
+              type="button"
+              aria-label="Ajouter un rond"
+              disabled={current.stops.length >= MAX_ARC_STOPS}
+              onClick={addStop}
+              className={cn(
+                "flex size-6 cursor-pointer items-center justify-center rounded-md transition-colors disabled:cursor-default disabled:opacity-35 disabled:hover:bg-transparent",
+                mutedControl,
+              )}
+            >
+              <PlusIcon className="size-4" />
+            </button>
+          </div>
         </div>
       </div>
 
@@ -645,7 +695,6 @@ export function SpaceThemePanel({ spaceId }: { readonly spaceId?: string } = {})
                   style={{ width: `${100 / NOMBRE_DE_PAGES}%` }}
                 >
                   {page.tons.map((color) => {
-                    const [clair, sombre] = degradeDePastille(color);
                     return (
                       <button
                         key={color}
@@ -653,15 +702,39 @@ export function SpaceThemePanel({ spaceId }: { readonly spaceId?: string } = {})
                         aria-label={`${page.nom} — ${color}`}
                         tabIndex={swatchPage === index ? 0 : -1}
                         onClick={() => applySolid(color)}
-                        // La pastille montre la couleur qu'elle POSE — un
-                        // dégradé CENTRÉ sur elle, jamais une autre couleur :
-                        // le jaune doit donner le jaune. Les deux bouts sont
-                        // dérivés du ton lui-même (voir `degradeDePastille`),
-                        // et le liseré intérieur est celui d'Arc.
-                        className="size-6 cursor-pointer rounded-full shadow-[inset_0_0_0_2px_rgba(0,0,0,0.2)] transition-transform hover:scale-110"
-                        style={{
-                          background: `linear-gradient(135deg, ${clair} 0%, ${sombre} 100%)`,
-                        }}
+                        // PLATE, et de la couleur EXACTE — mesuré sur ARC.mov.
+                        //
+                        // Traversée verticale de la pastille verte d'Arc
+                        // (cmp/panneau/arc-t20.png, 7e pastille) : #2AE289 de
+                        // y−18 à y+12 sans varier d'un bit, c'est-à-dire très
+                        // exactement le ton déclaré. Le dégradé 135° qu'on
+                        // peignait ici ne passait JAMAIS par ce ton : la même
+                        // traversée chez Raptor donnait #70E298 en haut et
+                        // #67E090 en bas, soit 35 % de saturation en moins et
+                        // 10° de teinte à côté. Une pastille est une référence
+                        // de couleur ; elle doit être la couleur.
+                        //
+                        // Le liseré intérieur d'Arc existe mais il est ténu :
+                        // au bord, #27CA78 contre #2AE289 au centre, soit ~10 %
+                        // d'assombrissement. Le 0,2 d'avant le doublait.
+                        // L'APPUI CREUSE, le survol ne fait RIEN — mesuré sur
+                        // ARC.mov, planche de 16 images à 60 i/s autour d'un
+                        // clic de pastille : le diamètre descend de 35,6 à
+                        // 31,3 px (facteur 0,880) puis remonte, le tout en
+                        // 117 ms — 50 ms de descente, 17 ms de palier au fond,
+                        // 50 ms de remontée. La mise à l'échelle est centrée
+                        // (le centre ne bouge pas d'un vingtième de pixel) et
+                        // la courbe décélère fortement à l'arrivée, sans
+                        // rebond. Sur la même planche, Raptor ne bougeait pas
+                        // d'un pixel : 0,19 px d'amplitude, soit le bruit de
+                        // mesure.
+                        //
+                        // Le `hover:scale-110` d'avant n'existe pas chez Arc :
+                        // à l'image qui précède l'appui, pointeur déjà posé sur
+                        // la pastille, elle mesure 35,55 px — sa taille de
+                        // repos exacte.
+                        className="size-6 cursor-pointer rounded-full shadow-[inset_0_0_0_2px_rgba(0,0,0,0.1)] transition-transform duration-[50ms] ease-[cubic-bezier(0.45,0,0.2,1)] active:scale-[0.88]"
+                        style={{ backgroundColor: color }}
                       />
                     );
                   })}
@@ -818,22 +891,42 @@ function FlecheNuancier(props: {
  */
 function EtoilesScintillantes() {
   return (
-    <svg viewBox="0 0 16 16" className="size-4" aria-hidden>
-      <path
-        className="t3-etoile"
-        d="M6 1.2 7.3 4.2 10.3 5.5 7.3 6.8 6 9.8 4.7 6.8 1.7 5.5 4.7 4.2Z"
-        fill="currentColor"
-      />
-      <path
-        className="t3-etoile t3-etoile-2"
-        d="M11.8 6.6 12.6 8.4 14.4 9.2 12.6 10 11.8 11.8 11 10 9.2 9.2 11 8.4Z"
-        fill="currentColor"
-      />
-      <path
-        className="t3-etoile t3-etoile-3"
-        d="M7.6 10.8 8.2 12.2 9.6 12.8 8.2 13.4 7.6 14.8 7 13.4 5.6 12.8 7 12.2Z"
-        fill="currentColor"
-      />
+    // RETOURNÉ VERTICALEMENT — le dessin d'Arc, relevé au pixel.
+    //
+    // Composantes connexes des trois étoiles (seuil alpha 0,25) sur
+    // cmp/panneau/arc-t8.png contre raptor-t8.png, coordonnées dans le
+    // repère du panneau :
+    //
+    //   Arc     GRANDE y[101,117] · MOYENNE y[94,101] · PETITE y[87,89]
+    //           → grande EN BAS, petite EN HAUT
+    //   Raptor  GRANDE y[49,64]  · MOYENNE y[60,69]  · PETITE y[68,73]
+    //           → grande EN HAUT, petite EN BAS
+    //
+    // L'ordre horizontal est le même des deux côtés (grande à gauche,
+    // moyenne à droite) : seuls les y sont inversés. Chaque étoile étant
+    // symétrique par rapport à son propre axe horizontal, retourner le
+    // GROUPE suffit — les formes ne bougent pas, seules les places changent.
+    //
+    // La taille suit : boîte d'encre d'Arc 12 × 15,5 css contre 9 × 10,5 chez
+    // nous, soit ~1,4× — d'où 22 css au lieu de 16.
+    <svg viewBox="0 0 16 16" className="size-[22px]" aria-hidden>
+      <g transform="translate(0,16) scale(1,-1)">
+        <path
+          className="t3-etoile"
+          d="M6 1.2 7.3 4.2 10.3 5.5 7.3 6.8 6 9.8 4.7 6.8 1.7 5.5 4.7 4.2Z"
+          fill="currentColor"
+        />
+        <path
+          className="t3-etoile t3-etoile-2"
+          d="M11.8 6.6 12.6 8.4 14.4 9.2 12.6 10 11.8 11.8 11 10 9.2 9.2 11 8.4Z"
+          fill="currentColor"
+        />
+        <path
+          className="t3-etoile t3-etoile-3"
+          d="M7.6 10.8 8.2 12.2 9.6 12.8 8.2 13.4 7.6 14.8 7 13.4 5.6 12.8 7 12.2Z"
+          fill="currentColor"
+        />
+      </g>
     </svg>
   );
 }
@@ -1084,26 +1177,25 @@ function GrainDial(props: {
           était la différence la plus criante des deux panneaux. La couleur se
           voit déjà partout (les ronds, la barre entière) ; le grain, lui, n'a
           que cet endroit — on garde donc l'aperçu du grain, sur fond neutre. */}
+      {/* ANNEAU VIDE, pas disque plein — l'intérieur laisse voir le panneau.
+          Vérifié sur les découpes ×3 de la molette (cmp/molette/arc-t20.png
+          contre raptor-t20.png) : chez Arc on lit un simple CERCLE au trait
+          fin, et le fond du panneau transparaît au travers ; chez Raptor un
+          disque gris plein se détachait du fond. C'était, avec le canevas
+          collé aux bords, la différence la plus criante des deux panneaux.
+
+          L'aperçu de grain qui vivait ici disparaît donc. C'est une perte
+          assumée : il était utile (le grain n'a pas d'autre témoin), mais il
+          EST le remplissage, et la consigne est de faire exactement comme
+          Arc. Si le grain doit se voir, il faudra un témoin ailleurs — pas au
+          milieu de la molette. */}
       <span
         aria-hidden
         className={cn(
-          "absolute top-1/2 left-1/2 size-10 -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-full ring-1 transition-colors",
-          props.dark ? "bg-white/10 ring-white/15" : "bg-black/6 ring-black/15",
+          "absolute top-1/2 left-1/2 size-10 -translate-x-1/2 -translate-y-1/2 rounded-full ring-1 transition-colors",
+          props.dark ? "ring-white/15" : "ring-black/15",
         )}
-      >
-        <span
-          className="absolute inset-0 mix-blend-overlay"
-          style={{
-            backgroundImage: `url("${SIDEBAR_THEME_GRAIN_URL}")`,
-            // MÊME COURBE que le voile de la sidebar (puissance 0,75), mais
-            // déployée jusqu'à 1 : sur 40 css, la course du voile (plafond
-            // 0,42) ne se lirait pas. Sans plafonnement — une première
-            // version amplifiée saturait dès le cran 9, et les six derniers
-            // crans se ressemblaient tous (vérifié au rendu).
-            opacity: props.value ** 0.75,
-          }}
-        />
-      </span>
+      />
     </div>
   );
 }
