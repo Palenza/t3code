@@ -14,8 +14,6 @@
     "apps/server/src/passerelle/TenirLaConnexion.ts",
     "apps/server/src/passerelle/telegram/LireUneMiseAJour.ts",
     "apps/server/src/provider/SanteDuCache.ts",
-    "apps/server/src/provider/testUtils/providerAdapterRegistryMock.ts",
-    "apps/server/src/provider/testUtils/providerRegistryMock.ts",
     "apps/server/src/racineDesSources.ts",
     "apps/server/src/reglages/RecuperationPartielle.ts",
     "apps/server/src/sauvegarde/QuoiDesinstaller.ts",
