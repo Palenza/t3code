@@ -38,6 +38,14 @@ import { ProviderService } from "../../provider/Services/ProviderService.ts";
 import { ProjectionTurnRepository } from "../../persistence/Services/ProjectionTurns.ts";
 import { ProjectionTurnRepositoryLive } from "../../persistence/Layers/ProjectionTurns.ts";
 import { isGitRepository } from "../../git/Utils.ts";
+import {
+  appendReasoningDelta,
+  markReasoningFlushed,
+  openReasoningBlock,
+  reasoningActivity,
+  shouldFlushReasoning,
+  type ReasoningBlock,
+} from "../reasoningBlocks.ts";
 import { OrchestrationEngineService } from "../Services/OrchestrationEngine.ts";
 import { ProjectionSnapshotQuery } from "../Services/ProjectionSnapshotQuery.ts";
 import {
@@ -59,6 +67,15 @@ import {
 import { getRateLimits } from "../../provider/rateLimitStore.ts";
 
 const providerTurnKey = (threadId: ThreadId, turnId: TurnId) => `${threadId}:${turnId}`;
+
+/**
+ * La clé du bloc de réflexion. Elle accepte l'absence de tour, contrairement à
+ * `providerTurnKey` : un fournisseur peut émettre une pensée avant que le tour
+ * soit connu, et perdre ce texte plutôt que de l'attacher à un seau « sans
+ * tour » serait un abandon silencieux de plus.
+ */
+const reasoningTurnKey = (threadId: ThreadId, turnId: TurnId | null) =>
+  `${threadId}:${turnId ?? "sans-tour"}`;
 const providerTaskKey = (threadId: ThreadId, taskId: string) => `${threadId}:${taskId}`;
 
 // Fallback when the in-memory description cache no longer has the task name
@@ -110,6 +127,8 @@ const BUFFERED_PROPOSED_PLAN_BY_ID_CACHE_CAPACITY = 10_000;
 const BUFFERED_PROPOSED_PLAN_BY_ID_TTL = Duration.minutes(120);
 const TASK_DESCRIPTION_BY_TASK_CACHE_CAPACITY = 10_000;
 const TASK_DESCRIPTION_BY_TASK_TTL = Duration.minutes(120);
+const REASONING_BLOCK_BY_TURN_CACHE_CAPACITY = 10_000;
+const REASONING_BLOCK_BY_TURN_TTL = Duration.minutes(120);
 const MAX_BUFFERED_ASSISTANT_CHARS = 24_000;
 const STRICT_PROVIDER_LIFECYCLE_GUARD = process.env.T3CODE_STRICT_PROVIDER_LIFECYCLE_GUARD !== "0";
 
@@ -924,6 +943,24 @@ const make = Effect.gen(function* () {
     lookup: () => Effect.succeed({ text: "", createdAt: "" }),
   });
 
+  /**
+   * Le bloc de réflexion EN COURS pour un tour, et le rang du prochain.
+   *
+   * Les deltas de réflexion de Claude n'ont pas d'itemId (l'adaptateur ne le
+   * renseigne que pour un bloc de texte, et une pensée n'en crée pas). Sans
+   * repère, réflexion → outil → réflexion fusionnerait, et la seconde pensée
+   * s'afficherait AU-DESSUS de l'outil qu'elle suit. On tient donc le bloc
+   * ouvert ici et on le ferme dès que quelque chose d'autre sort.
+   */
+  const reasoningBlockByTurnKey = yield* Cache.make<
+    string,
+    { readonly open: ReasoningBlock | null }
+  >({
+    capacity: REASONING_BLOCK_BY_TURN_CACHE_CAPACITY,
+    timeToLive: REASONING_BLOCK_BY_TURN_TTL,
+    lookup: () => Effect.succeed({ open: null }),
+  });
+
   // Task names arrive on task.started/task.progress but not on task.completed,
   // so remember them per task to title the completion activity.
   const taskDescriptionByTaskKey = yield* Cache.make<string, string>({
@@ -1109,6 +1146,107 @@ const make = Effect.gen(function* () {
 
   const clearBufferedAssistantText = (messageId: MessageId) =>
     Cache.invalidate(bufferedAssistantTextByMessageId, messageId);
+
+  const dispatchReasoningActivity = (input: {
+    readonly event: ProviderRuntimeEvent;
+    readonly threadId: ThreadId;
+    readonly turnId: TurnId | null;
+    readonly block: ReasoningBlock;
+    readonly commandTag: string;
+  }) =>
+    Effect.gen(function* () {
+      const activity = reasoningActivity({
+        turnId: input.turnId,
+        block: input.block,
+      });
+      yield* orchestrationEngine.dispatch({
+        type: "thread.activity.append",
+        commandId: yield* providerCommandId(input.event, input.commandTag),
+        threadId: input.threadId,
+        activity,
+        createdAt: activity.createdAt,
+      });
+    });
+
+  /**
+   * Un delta de réflexion arrive : on l'ajoute au bloc ouvert (ou on en ouvre
+   * un), et on ne ré-émet que si le seuil est franchi — chaque émission porte
+   * le texte ENTIER, donc émettre à chaque jeton coûterait le carré de la
+   * longueur sur le fil.
+   */
+  const appendReasoning = (input: {
+    readonly event: ProviderRuntimeEvent;
+    readonly threadId: ThreadId;
+    readonly turnId: TurnId | null;
+    readonly delta: string;
+    readonly createdAt: string;
+    /**
+     * Le réglage `enableAssistantStreaming`. Éteint, l'utilisateur a demandé
+     * du texte posé plutôt que du texte qui tremble : la réflexion accumule
+     * alors en silence et ne paraît qu'à la fermeture du bloc, d'un seul bloc.
+     */
+    readonly streaming: boolean;
+  }) =>
+    Effect.gen(function* () {
+      const turnKey = reasoningTurnKey(input.threadId, input.turnId);
+      const state = yield* Cache.get(reasoningBlockByTurnKey, turnKey);
+      const sequence = (input.event as ProviderRuntimeEvent & { sessionSequence?: number })
+        .sessionSequence;
+      const base =
+        state.open ??
+        openReasoningBlock({
+          openingEventId: input.event.eventId,
+          createdAt: input.createdAt,
+          sequence,
+        });
+      const next = appendReasoningDelta(base, input.delta);
+      if (!input.streaming || !shouldFlushReasoning(next)) {
+        yield* Cache.set(reasoningBlockByTurnKey, turnKey, { open: next });
+        return;
+      }
+
+      yield* dispatchReasoningActivity({
+        event: input.event,
+        threadId: input.threadId,
+        turnId: input.turnId,
+        block: next,
+        commandTag: "reasoning-delta",
+      });
+      yield* Cache.set(reasoningBlockByTurnKey, turnKey, { open: markReasoningFlushed(next) });
+    });
+
+  /**
+   * Quelque chose d'autre sort : le bloc de réflexion se ferme.
+   *
+   * On émet une dernière fois si du texte n'a pas encore été montré, puis le
+   * bloc suivant prendra le rang d'après. C'est ce qui garde l'ordre
+   * réflexion → outil → réflexion à l'écran.
+   */
+  const closeReasoningBlock = (input: {
+    readonly event: ProviderRuntimeEvent;
+    readonly threadId: ThreadId;
+    readonly turnId: TurnId | null;
+    readonly commandTag: string;
+  }) =>
+    Effect.gen(function* () {
+      const turnKey = reasoningTurnKey(input.threadId, input.turnId);
+      const state = yield* Cache.getOption(reasoningBlockByTurnKey, turnKey);
+      if (Option.isNone(state) || state.value.open === null) {
+        return;
+      }
+
+      const open = state.value.open;
+      if (open.text.length > open.emittedLength) {
+        yield* dispatchReasoningActivity({
+          event: input.event,
+          threadId: input.threadId,
+          turnId: input.turnId,
+          block: open,
+          commandTag: input.commandTag,
+        });
+      }
+      yield* Cache.set(reasoningBlockByTurnKey, turnKey, { open: null });
+    });
 
   const appendBufferedProposedPlan = (planId: string, delta: string, createdAt: string) =>
     Cache.getOption(bufferedProposedPlanById, planId).pipe(
@@ -1370,6 +1508,7 @@ const make = Effect.gen(function* () {
       const assistantSegmentKeys = Array.from(yield* Cache.keys(assistantSegmentStateByTurnKey));
       const proposedPlanKeys = Array.from(yield* Cache.keys(bufferedProposedPlanById));
       const taskDescriptionKeys = Array.from(yield* Cache.keys(taskDescriptionByTaskKey));
+      const reasoningKeys = Array.from(yield* Cache.keys(reasoningBlockByTurnKey));
       yield* Effect.forEach(
         turnKeys,
         (key) =>
@@ -1409,6 +1548,16 @@ const make = Effect.gen(function* () {
         taskDescriptionKeys,
         (key) =>
           key.startsWith(prefix) ? Cache.invalidate(taskDescriptionByTaskKey, key) : Effect.void,
+        { concurrency: 1 },
+      ).pipe(Effect.asVoid);
+      // Le bloc de réflexion suit le même sort que les autres états de tour :
+      // une session qui repart ne doit pas hériter du rang de blocs d'une
+      // session morte, sinon le premier bloc du nouveau tour s'écrirait sous
+      // un id déjà pris.
+      yield* Effect.forEach(
+        reasoningKeys,
+        (key) =>
+          key.startsWith(prefix) ? Cache.invalidate(reasoningBlockByTurnKey, key) : Effect.void,
         { concurrency: 1 },
       ).pipe(Effect.asVoid);
     });
@@ -1656,11 +1805,45 @@ const make = Effect.gen(function* () {
         event.type === "content.delta" && event.payload.streamKind === "assistant_text"
           ? event.payload.delta
           : undefined;
+      /**
+       * LA RÉFLEXION DU MODÈLE — ce que cette ligne jetait en silence.
+       *
+       * Les trois fournisseurs l'émettent déjà (ClaudeAdapter.ts:1042,
+       * CodexAdapter.ts:995, OpenCodeAdapter.ts:403). L'ingestion ne gardait
+       * que `assistant_text` : pas de `else`, pas de TODO, juste un abandon.
+       * La capter ici sert les trois d'un coup.
+       */
+      const reasoningDelta =
+        event.type === "content.delta" && event.payload.streamKind === "reasoning_text"
+          ? event.payload.delta
+          : undefined;
       const proposedPlanDelta =
         event.type === "turn.proposed.delta" ? event.payload.delta : undefined;
 
+      if (reasoningDelta && reasoningDelta.length > 0) {
+        yield* appendReasoning({
+          event,
+          threadId: thread.id,
+          turnId: toTurnId(event.turnId) ?? null,
+          delta: reasoningDelta,
+          createdAt: now,
+          streaming: yield* Effect.map(
+            serverSettingsService.getSettings,
+            (settings) => settings.enableAssistantStreaming,
+          ),
+        });
+      }
+
       if (assistantDelta && assistantDelta.length > 0) {
         const turnId = toTurnId(event.turnId);
+        // Le modèle a fini de penser et se met à parler : le bloc se ferme,
+        // pour que la pensée suivante s'ouvre APRÈS ce texte et non dedans.
+        yield* closeReasoningBlock({
+          event,
+          threadId: thread.id,
+          turnId: turnId ?? null,
+          commandTag: "reasoning-close-on-assistant-text",
+        });
         const assistantMessageId = yield* getOrCreateAssistantMessageId({
           threadId: thread.id,
           event,
@@ -2039,6 +2222,18 @@ const make = Effect.gen(function* () {
       }
 
       const activities = runtimeEventToActivities(event, taskTitle);
+      // Une activité visible sort (un outil, une approbation, une erreur) : la
+      // réflexion qui la précédait est terminée. Fermer ICI, avant le dispatch,
+      // fige son rang — sans quoi la pensée suivante viendrait s'y ajouter et
+      // s'afficherait au-dessus de l'outil qu'elle suit pourtant.
+      if (activities.length > 0) {
+        yield* closeReasoningBlock({
+          event,
+          threadId: thread.id,
+          turnId: toTurnId(event.turnId) ?? null,
+          commandTag: "reasoning-close-on-activity",
+        });
+      }
       yield* Effect.forEach(activities, (activity) =>
         providerCommandId(event, "thread-activity-append").pipe(
           Effect.flatMap((commandId) =>

@@ -3657,4 +3657,221 @@ describe("ProviderRuntimeIngestion", () => {
       expect(thread.modelSelection.instanceId).toBe("codex");
     });
   });
+
+  describe("la réflexion du modèle", () => {
+    // Ce que ces tests protègent : jusqu'au 02/08, l'ingestion ne gardait que
+    // `assistant_text` et jetait `reasoning_text` sans un mot — pas de `else`,
+    // pas de TODO. Les trois fournisseurs l'émettaient déjà.
+    const penser = (input: {
+      readonly id: string;
+      readonly turnId: string;
+      readonly delta: string;
+      readonly createdAt?: string;
+    }) =>
+      ({
+        type: "content.delta",
+        eventId: asEventId(input.id),
+        provider: ProviderDriverKind.make("claude"),
+        createdAt: input.createdAt ?? "2026-01-01T00:00:00.000Z",
+        threadId: asThreadId("thread-1"),
+        turnId: asTurnId(input.turnId),
+        payload: {
+          streamKind: "reasoning_text",
+          delta: input.delta,
+        },
+      }) as unknown as ProviderRuntimeEvent;
+
+    const outil = (input: {
+      readonly id: string;
+      readonly turnId: string;
+      readonly createdAt?: string;
+    }) =>
+      ({
+        type: "item.completed",
+        eventId: asEventId(input.id),
+        provider: ProviderDriverKind.make("claude"),
+        createdAt: input.createdAt ?? "2026-01-01T00:00:00.000Z",
+        threadId: asThreadId("thread-1"),
+        turnId: asTurnId(input.turnId),
+        itemId: asItemId(`item-${input.id}`),
+        payload: {
+          itemType: "dynamic_tool_call",
+          status: "completed",
+          title: "Read file",
+        },
+      }) as unknown as ProviderRuntimeEvent;
+
+    const reflexions = (thread: ProviderRuntimeTestThread) =>
+      thread.activities.filter(
+        (activity: ProviderRuntimeTestActivity) => activity.kind === "reasoning.updated",
+      );
+
+    const texteDe = (activity: ProviderRuntimeTestActivity | undefined) =>
+      activity?.payload && typeof activity.payload === "object"
+        ? String((activity.payload as Record<string, unknown>).detail ?? "")
+        : "";
+
+    it("montre la pensée PENDANT qu'elle se forme, sans attendre la fin du tour", async () => {
+      // Le premier caractère passe tout de suite : sans cette sortie anticipée,
+      // une réflexion plus courte que le seuil de débit n'apparaîtrait qu'à la
+      // fermeture du bloc, et les courtes sont fréquentes.
+      const harness = await createHarness({ serverSettings: { enableAssistantStreaming: true } });
+
+      harness.emit(penser({ id: "evt-pense-vive", turnId: "turn-vif", delta: "Je cherche." }));
+
+      const thread = await waitForThread(harness.readModel, (entry) =>
+        entry.activities.some(
+          (activity: ProviderRuntimeTestActivity) => activity.kind === "reasoning.updated",
+        ),
+      );
+
+      expect(texteDe(reflexions(thread)[0])).toBe("Je cherche.");
+      // Ton info, jamais « thinking » : ce dernier est DÉJÀ celui des
+      // sous-agents côté client et pilote l'icône bot.
+      expect(reflexions(thread)[0]?.tone).toBe("info");
+    });
+
+    it("garde UNE ligne qui grandit, et n'en empile pas une par jeton", async () => {
+      // Tout le streaming tient sur ce point : ré-émettre le même id REMPLACE
+      // l'activité. Si l'id bougeait, une réflexion de 2 000 jetons remplirait
+      // le fil de 2 000 lignes.
+      const harness = await createHarness({ serverSettings: { enableAssistantStreaming: true } });
+
+      for (let index = 0; index < 40; index += 1) {
+        harness.emit(
+          penser({
+            id: `evt-pense-flot-${String(index).padStart(3, "0")}`,
+            turnId: "turn-flot",
+            delta: `morceau ${index} `,
+          }),
+        );
+      }
+      // Le reste du texte n'est montré qu'à la fermeture du bloc : entre deux
+      // seuils, la queue attend. C'est le prix assumé de ne pas ré-envoyer le
+      // texte entier à chaque jeton.
+      harness.emit(outil({ id: "evt-flot-ferme", turnId: "turn-flot" }));
+
+      const thread = await waitForThread(harness.readModel, (entry) =>
+        entry.activities.some(
+          (activity: ProviderRuntimeTestActivity) =>
+            activity.kind === "reasoning.updated" && texteDe(activity).includes("morceau 39"),
+        ),
+      );
+
+      expect(reflexions(thread)).toHaveLength(1);
+      expect(texteDe(reflexions(thread)[0]).startsWith("morceau 0 ")).toBe(true);
+    });
+
+    it("ouvre un SECOND bloc après un outil, et l'ordre du fil tient", async () => {
+      // Les deltas de réflexion de Claude ne portent pas d'itemId. Sans
+      // fermeture sur activité, la pensée d'après l'outil se collerait à celle
+      // d'avant — et s'afficherait au-dessus de l'outil qu'elle suit.
+      //
+      // Les horodatages MONTENT, comme dans la vraie vie : c'est `createdAt`
+      // qui ordonne le fil, les ids d'événements étant des UUID aléatoires
+      // (nextEventId = randomUUIDv4) et `sessionSequence` n'étant écrit nulle
+      // part dans ce dépôt.
+      const harness = await createHarness({ serverSettings: { enableAssistantStreaming: true } });
+
+      harness.emit(
+        penser({
+          id: "evt-avant-outil",
+          turnId: "turn-deux",
+          delta: "Avant l'outil.",
+          createdAt: "2026-01-01T00:00:01.000Z",
+        }),
+      );
+      await harness.drain();
+
+      harness.emit(
+        outil({
+          id: "evt-outil-entre-deux",
+          turnId: "turn-deux",
+          createdAt: "2026-01-01T00:00:02.000Z",
+        }),
+      );
+      await harness.drain();
+
+      harness.emit(
+        penser({
+          id: "evt-apres-outil",
+          turnId: "turn-deux",
+          delta: "Après l'outil.",
+          createdAt: "2026-01-01T00:00:03.000Z",
+        }),
+      );
+
+      const thread = await waitForThread(harness.readModel, (entry) =>
+        entry.activities.some(
+          (activity: ProviderRuntimeTestActivity) =>
+            activity.kind === "reasoning.updated" && texteDe(activity).includes("Après"),
+        ),
+      );
+
+      const blocs = reflexions(thread);
+      expect(blocs).toHaveLength(2);
+      // Deux textes distincts : la seconde pensée n'a pas été absorbée.
+      expect(texteDe(blocs[0])).toBe("Avant l'outil.");
+      expect(texteDe(blocs[1])).toBe("Après l'outil.");
+      // Et l'outil se tient BIEN entre les deux dans le fil rendu.
+      const rangs = thread.activities.map((activity: ProviderRuntimeTestActivity) => activity.kind);
+      const premier = rangs.indexOf("reasoning.updated");
+      const dernier = rangs.lastIndexOf("reasoning.updated");
+      expect(rangs.slice(premier + 1, dernier)).toContain("tool.completed");
+    });
+
+    it("date la pensée de son DÉBUT, pas de sa dernière retouche", async () => {
+      // Si l'horodatage suivait chaque ré-émission, la ligne redescendrait
+      // sous les outils déjà affichés à mesure qu'elle grandit.
+      const harness = await createHarness({ serverSettings: { enableAssistantStreaming: true } });
+
+      harness.emit(
+        penser({
+          id: "evt-date-1",
+          turnId: "turn-date",
+          delta: "Début.",
+          createdAt: "2026-01-01T00:00:01.000Z",
+        }),
+      );
+      await harness.drain();
+      harness.emit(
+        penser({
+          id: "evt-date-2",
+          turnId: "turn-date",
+          delta: ` suite ${"x".repeat(200)}`,
+          createdAt: "2026-01-01T00:00:09.000Z",
+        }),
+      );
+
+      const thread = await waitForThread(harness.readModel, (entry) =>
+        entry.activities.some(
+          (activity: ProviderRuntimeTestActivity) =>
+            activity.kind === "reasoning.updated" && texteDe(activity).includes("suite"),
+        ),
+      );
+
+      expect(reflexions(thread)[0]?.createdAt).toBe("2026-01-01T00:00:01.000Z");
+    });
+
+    it("respecte le réglage : streaming éteint, la pensée ne paraît qu'à la fermeture", async () => {
+      const harness = await createHarness({ serverSettings: { enableAssistantStreaming: false } });
+
+      harness.emit(penser({ id: "evt-tampon-1", turnId: "turn-tampon", delta: "Pensée " }));
+      harness.emit(penser({ id: "evt-tampon-2", turnId: "turn-tampon", delta: "tamponnée." }));
+      await harness.drain();
+
+      const avant = await harness.readModel();
+      const filAvant = avant.threads.find((entry) => entry.id === ThreadId.make("thread-1"));
+      expect(reflexions(filAvant as ProviderRuntimeTestThread)).toHaveLength(0);
+
+      harness.emit(outil({ id: "evt-outil-ferme-tampon", turnId: "turn-tampon" }));
+
+      const apres = await waitForThread(harness.readModel, (entry) =>
+        entry.activities.some(
+          (activity: ProviderRuntimeTestActivity) => activity.kind === "reasoning.updated",
+        ),
+      );
+      expect(texteDe(reflexions(apres)[0])).toBe("Pensée tamponnée.");
+    });
+  });
 });

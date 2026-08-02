@@ -1,4 +1,5 @@
 import {
+  REASONING_ACTIVITY_KIND,
   type EnvironmentId,
   type MessageId,
   type ScopedThreadRef,
@@ -51,6 +52,7 @@ import {
   MousePointerClickIcon,
   PaintbrushIcon,
   MinusIcon,
+  SparklesIcon,
   SquarePenIcon,
   TerminalIcon,
   Undo2Icon,
@@ -1824,6 +1826,7 @@ function formatWorkingTimerNow(startIso: string): string {
 
 type WorkEntryIconName =
   | "bot"
+  | "sparkles"
   | "check"
   | "circle-alert"
   | "eye"
@@ -1840,6 +1843,8 @@ function WorkEntryIconSvg({ name, className }: { name: WorkEntryIconName; classN
   switch (name) {
     case "bot":
       return <BotIcon className={className} aria-hidden />;
+    case "sparkles":
+      return <SparklesIcon className={className} aria-hidden />;
     case "check":
       return <CheckIcon className={className} aria-hidden />;
     case "circle-alert":
@@ -1947,6 +1952,12 @@ function buildToolCallExpandedBody(
 }
 
 function workEntryIconName(workEntry: TimelineWorkEntry): WorkEntryIconName {
+  // La réflexion du modèle, reconnue à son `kind` et non à son ton : « info »
+  // est partagé avec d'autres lignes, et « thinking » appartient déjà aux
+  // sous-agents (il porte l'icône bot).
+  if (workEntry.sourceActivityKind === REASONING_ACTIVITY_KIND) {
+    return "sparkles";
+  }
   if (
     workEntry.sourceActivityKind === "user-input.requested" ||
     workEntry.sourceActivityKind === "user-input.resolved"
