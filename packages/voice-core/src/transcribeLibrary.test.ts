@@ -21,8 +21,8 @@ describe("transcribeLibraryFileName", () => {
 
 describe("resolveAsarTranscribeLibrary", () => {
   it("redirects a darwin packaged path to the unpacked sibling dylib", () => {
-    const artifactDir = `/Applications/T3 Code.app/Contents/Resources/${ASAR_DIRECTORY_NAME}/node_modules/@transcribe-cpp/darwin-arm64-metal`;
-    const expected = `/Applications/T3 Code.app/Contents/Resources/${ASAR_UNPACKED_DIRECTORY_NAME}/node_modules/@transcribe-cpp/darwin-arm64-metal/libtranscribe.dylib`;
+    const artifactDir = `/Applications/Raptor.app/Contents/Resources/${ASAR_DIRECTORY_NAME}/node_modules/@transcribe-cpp/darwin-arm64-metal`;
+    const expected = `/Applications/Raptor.app/Contents/Resources/${ASAR_UNPACKED_DIRECTORY_NAME}/node_modules/@transcribe-cpp/darwin-arm64-metal/libtranscribe.dylib`;
 
     expect(
       resolveAsarTranscribeLibrary({
@@ -35,8 +35,8 @@ describe("resolveAsarTranscribeLibrary", () => {
   });
 
   it("preserves win32 backslash separators and uses transcribe.dll", () => {
-    const artifactDir = `C:\\Program Files\\T3 Code\\resources\\${ASAR_DIRECTORY_NAME}\\node_modules\\@transcribe-cpp\\win32-x64-cpu-vulkan`;
-    const expected = `C:\\Program Files\\T3 Code\\resources\\${ASAR_UNPACKED_DIRECTORY_NAME}\\node_modules\\@transcribe-cpp\\win32-x64-cpu-vulkan\\transcribe.dll`;
+    const artifactDir = `C:\\Program Files\\Raptor\\resources\\${ASAR_DIRECTORY_NAME}\\node_modules\\@transcribe-cpp\\win32-x64-cpu-vulkan`;
+    const expected = `C:\\Program Files\\Raptor\\resources\\${ASAR_UNPACKED_DIRECTORY_NAME}\\node_modules\\@transcribe-cpp\\win32-x64-cpu-vulkan\\transcribe.dll`;
 
     expect(
       resolveAsarTranscribeLibrary({
@@ -88,8 +88,8 @@ describe("resolveAsarTranscribeLibrary", () => {
   });
 
   it("returns unpacked-missing when the rewritten file is absent", () => {
-    const artifactDir = `/Applications/T3 Code.app/Contents/Resources/${ASAR_DIRECTORY_NAME}/node_modules/@transcribe-cpp/darwin-arm64-metal`;
-    const unpackedDir = `/Applications/T3 Code.app/Contents/Resources/${ASAR_UNPACKED_DIRECTORY_NAME}/node_modules/@transcribe-cpp/darwin-arm64-metal`;
+    const artifactDir = `/Applications/Raptor.app/Contents/Resources/${ASAR_DIRECTORY_NAME}/node_modules/@transcribe-cpp/darwin-arm64-metal`;
+    const unpackedDir = `/Applications/Raptor.app/Contents/Resources/${ASAR_UNPACKED_DIRECTORY_NAME}/node_modules/@transcribe-cpp/darwin-arm64-metal`;
 
     expect(
       resolveAsarTranscribeLibrary({
@@ -136,8 +136,8 @@ describe("resolveAsarTranscribeLibrary", () => {
   });
 
   it("preserves mixed separators outside the rewritten segment", () => {
-    const artifactDir = `C:\\T3 Code\\resources\\${ASAR_DIRECTORY_NAME}/node_modules/@transcribe-cpp/win32-x64-cpu-vulkan`;
-    const expected = `C:\\T3 Code\\resources\\${ASAR_UNPACKED_DIRECTORY_NAME}/node_modules/@transcribe-cpp/win32-x64-cpu-vulkan/transcribe.dll`;
+    const artifactDir = `C:\\Raptor\\resources\\${ASAR_DIRECTORY_NAME}/node_modules/@transcribe-cpp/win32-x64-cpu-vulkan`;
+    const expected = `C:\\Raptor\\resources\\${ASAR_UNPACKED_DIRECTORY_NAME}/node_modules/@transcribe-cpp/win32-x64-cpu-vulkan/transcribe.dll`;
 
     expect(
       resolveAsarTranscribeLibrary({
@@ -201,8 +201,8 @@ describe("applyAsarTranscribeLibraryOverride", () => {
   });
 
   it("sets TRANSCRIBE_LIBRARY on redirected and is idempotent on a second call", () => {
-    const artifactDir = `/Applications/T3 Code.app/Contents/Resources/${ASAR_DIRECTORY_NAME}/node_modules/@transcribe-cpp/darwin-arm64-metal`;
-    const expected = `/Applications/T3 Code.app/Contents/Resources/${ASAR_UNPACKED_DIRECTORY_NAME}/node_modules/@transcribe-cpp/darwin-arm64-metal/libtranscribe.dylib`;
+    const artifactDir = `/Applications/Raptor.app/Contents/Resources/${ASAR_DIRECTORY_NAME}/node_modules/@transcribe-cpp/darwin-arm64-metal`;
+    const expected = `/Applications/Raptor.app/Contents/Resources/${ASAR_UNPACKED_DIRECTORY_NAME}/node_modules/@transcribe-cpp/darwin-arm64-metal/libtranscribe.dylib`;
     const env: NodeJS.ProcessEnv = {};
     const binding = { artifactDir: () => artifactDir };
     const deps = {
@@ -230,7 +230,7 @@ describe("applyAsarTranscribeLibraryOverride", () => {
       applyAsarTranscribeLibraryOverride(
         {
           artifactDir: () =>
-            `/Applications/T3 Code.app/Contents/Resources/${ASAR_DIRECTORY_NAME}/node_modules/@transcribe-cpp/darwin-arm64-metal`,
+            `/Applications/Raptor.app/Contents/Resources/${ASAR_DIRECTORY_NAME}/node_modules/@transcribe-cpp/darwin-arm64-metal`,
         },
         { env, platform: "darwin", fileExists: () => false },
       );
@@ -246,7 +246,7 @@ describe("applyAsarTranscribeLibraryOverride", () => {
       applyAsarTranscribeLibraryOverride(
         {
           artifactDir: () =>
-            `/Applications/T3 Code.app/Contents/Resources/${ASAR_DIRECTORY_NAME}/node_modules/@transcribe-cpp/darwin-arm64-metal`,
+            `/Applications/Raptor.app/Contents/Resources/${ASAR_DIRECTORY_NAME}/node_modules/@transcribe-cpp/darwin-arm64-metal`,
         },
         { env, platform: "darwin", fileExists: () => true },
       ),

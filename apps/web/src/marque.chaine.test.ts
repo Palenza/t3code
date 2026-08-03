@@ -62,7 +62,7 @@ const CHEMINS_HERITES = [
  * Trouvée le 02/08 en cherchant autre chose : `artifactName` valait
  * « T3-Code-${version}-${arch}.${ext} », donc le DMG s'appelait encore comme
  * l'amont alors que l'app affichait Raptor. Le garde ne voyait rien : il
- * cherchait « T3 Code » avec une espace.
+ * cherchait « Raptor » avec une espace.
  */
 const NOM_AMONT_TIRET = ["T3", "Code"].join("-");
 
@@ -153,7 +153,7 @@ describe("la marque de Raptor", () => {
   });
 
   it("refuse aussi la forme à TIRET, celle des noms de fichiers", () => {
-    // Le premier garde ne cherchait que « T3 Code » avec une espace, et la
+    // Le premier garde ne cherchait que « Raptor » avec une espace, et la
     // forme à tiret lui échappait entièrement. Une seule occurrence existe
     // aujourd'hui — le nom d'artefact — et elle est nommée ci-dessus avec sa
     // raison. Toute AUTRE fait tomber ce test.
@@ -202,7 +202,7 @@ describe("la marque de Raptor", () => {
   it("garde les chemins de données hérités, qui ne sont pas la marque", () => {
     // Le pendant du test ci-dessus, et il a servi DEUX FOIS le jour même.
     //
-    // Un remplacement en masse « T3 Code → Raptor » emporte ces trois noms
+    // Un remplacement en masse « Raptor → Raptor » emporte ces trois noms
     // sans rien casser de visible : le typecheck passe, l'app démarre, et elle
     // ne retrouve simplement plus les données de l'utilisateur. Le 02/08, ça
     // s'est produit deux fois de suite — dans la source, puis dans les tests —

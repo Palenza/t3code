@@ -79,7 +79,7 @@ describe("controlerSkill · l'auteur, et la fuite qu'Hermès documente", () => {
 
   it("laisse passer un nom de projet", () => {
     const m = controlerSkill({
-      texte: skill("name: a-b\ndescription: Fait ceci.\nauthor: T3 Code Raptor"),
+      texte: skill("name: a-b\ndescription: Fait ceci.\nauthor: Raptor Raptor"),
       identiteDeLaMachine: ["enzo"],
     });
     assert.isFalse(m.some((x) => x.regle === "auteur-pris-a-la-machine"));

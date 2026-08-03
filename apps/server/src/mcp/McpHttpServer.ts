@@ -333,7 +333,7 @@ const SuggestionsToolkitRegistrationLive = McpServer.toolkit(SuggestionsToolkit)
 );
 
 const McpTransportLive = McpServer.layerHttp({
-  name: "T3 Code",
+  name: "Raptor",
   version: packageJson.version,
   path: "/mcp",
 }).pipe(Layer.provide(McpAuthMiddlewareLive));

@@ -11,7 +11,7 @@ import {
 
 /** Ce que T3 pose et côtoie sur une vraie machine. */
 const ELEMENTS: Element[] = [
-  { chemin: "/Applications/T3 Code.app", appartenance: "application", quoi: "l'application" },
+  { chemin: "/Applications/Raptor.app", appartenance: "application", quoi: "l'application" },
   {
     chemin: "~/.claude-compte-a/skills/raptor-outillage",
     appartenance: "outillage-depose",
@@ -55,7 +55,7 @@ describe("ce qui ne se touche JAMAIS", () => {
 describe("les trois granularités", () => {
   it("« app seule » ne retire QUE l'application", () => {
     const partants = seulementCeQuiPart(planDeDesinstallation(ELEMENTS, "app-seule"));
-    assert.deepEqual(partants, ["/Applications/T3 Code.app"]);
+    assert.deepEqual(partants, ["/Applications/Raptor.app"]);
   });
 
   it("« app et outillage » emporte ce que T3 a déposé chez l'utilisateur", () => {
@@ -90,7 +90,7 @@ describe("le résumé montré AVANT d'effacer", () => {
 
   it("nomme chaque chemin qui part", () => {
     const texte = resumeAvantDeffacer(planDeDesinstallation(ELEMENTS, "tout"), "tout");
-    assert.include(texte, "/Applications/T3 Code.app");
+    assert.include(texte, "/Applications/Raptor.app");
     assert.include(texte, "~/.t3/userdata");
   });
 });

@@ -266,7 +266,7 @@ export function memoireAReinjecter(consignes: ReadonlyArray<Consigne>): string {
   return [
     "# Ce qui a été dit une fois et vaut toujours",
     "",
-    "Consignes posées par l'humain dans T3 Code lors de sessions précédentes,",
+    "Consignes posées par l'humain dans Raptor lors de sessions précédentes,",
     "TOUS PROJETS CONFONDUS : certaines ont pu être dites en travaillant sur un",
     "autre projet que celui-ci.",
     "",

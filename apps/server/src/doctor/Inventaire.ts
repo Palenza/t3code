@@ -97,7 +97,7 @@ export function rendreInventaire(faits: FaitsDInventaire): string {
   const lignes: string[] = [];
   const dire = (cle: string, valeur: string) => lignes.push(`${cle.padEnd(16)} ${valeur}`);
 
-  dire("T3 Code", faits.versionApp);
+  dire("Raptor", faits.versionApp);
   dire("plateforme", `${faits.plateforme} · node ${faits.versionNode}`);
   dire("état", `${enTaille(faits.etatOctets)} sur disque`);
   dire("skills", String(faits.skills));

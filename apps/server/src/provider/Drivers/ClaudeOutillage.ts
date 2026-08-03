@@ -82,7 +82,7 @@ description: >-
   Ne dépense pas un agent pour une question vérifiable. À charger dès qu'une
   tâche implique de vérifier des dépôts GitHub, de trancher entre « c'est
   mesurable » et « ça demande un jugement », ou de lancer plusieurs
-  sous-agents pour de la collecte. Déposé par T3 Code Raptor.
+  sous-agents pour de la collecte. Déposé par Raptor Raptor.
 ---
 
 # Ne dépense pas un agent pour une question vérifiable
