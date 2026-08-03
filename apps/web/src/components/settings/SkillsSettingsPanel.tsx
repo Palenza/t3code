@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { primaryServerConfigAtom } from "../../state/server";
 import { Input } from "../ui/input";
 import { SettingsPageContainer, SettingsSection } from "./settingsLayout";
-import { filtrerSkills, listerSkillsDesProviders } from "./skillsSettings.logic";
+import { cheminLisible, filtrerSkills, listerSkillsDesProviders } from "./skillsSettings.logic";
 
 /**
  * VOIR SES SKILLS — le manque le plus net face à ZCode (relevé le 01/08).
@@ -40,6 +40,25 @@ export function SkillsSettingsPanel() {
             Les skills chargées par tes providers. Invocables dans le chat avec{" "}
             <code className="rounded bg-muted px-1 py-0.5 text-xs">$nom-de-skill</code>. Cette vue
             est en lecture seule : l&apos;activation par skill viendra ensuite.
+          </p>
+          {/*
+            CE QUE CETTE LISTE COUVRE — dit, parce qu'elle ne couvre pas ce
+            qu'on croit (03/08).
+
+            Les skills viennent de l'instantané du PROVIDER, découvert depuis
+            le dossier de travail du SERVEUR (`ServerConfig.cwd`) — pas depuis
+            le projet affiché à l'écran. Sur la machine du fondateur, ça donnait
+            UNE skill (celle de `~/.claude/skills`) pendant que Palenza en a 18
+            et t3code 4, aucune visible.
+
+            Pire : cette unique skill s'affichait avec la portée « project »,
+            parce que le découvreur l'avait trouvée sous `<cwd>/.claude/skills`
+            — techniquement vrai, faux pour qui lit. Le CHEMIN, lui, ne peut
+            pas mentir : c'est lui qu'on montre désormais.
+          */}
+          <p className="text-muted-foreground text-xs">
+            Découvertes depuis le dossier de travail du serveur, pas depuis le projet affiché — les
+            skills d&apos;un projet n&apos;apparaissent donc que si c&apos;est le même dossier.
           </p>
 
           <Input
@@ -78,8 +97,16 @@ export function SkillsSettingsPanel() {
                       <span className="font-medium text-foreground text-sm">
                         {skill.displayName ?? skill.name}
                       </span>
-                      <span className="shrink-0 text-muted-foreground text-xs">
-                        {skill.scope ?? skill.provider}
+                      {/* La PORTÉE disait « project » pour une skill du dossier
+                          de compte : techniquement le découvreur l'avait bien
+                          trouvée sous `<cwd>/.claude/skills`, mais « project »
+                          se lit « mon projet ». Le chemin ne laisse aucune
+                          place au malentendu. */}
+                      <span
+                        className="shrink-0 truncate text-muted-foreground text-xs"
+                        title={skill.path}
+                      >
+                        {cheminLisible(skill.path)}
                       </span>
                     </div>
                     {skill.description ? (

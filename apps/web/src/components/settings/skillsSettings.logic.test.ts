@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { filtrerSkills, listerSkillsDesProviders } from "./skillsSettings.logic";
+import { cheminLisible, filtrerSkills, listerSkillsDesProviders } from "./skillsSettings.logic";
 
 const skill = (nom: string, extra: Record<string, unknown> = {}) => ({
   name: nom,
@@ -72,5 +72,26 @@ describe("filtrerSkills", () => {
 
   it("rend vide quand rien ne correspond — pas la liste entière", () => {
     expect(filtrerSkills(skills, "zzz")).toEqual([]);
+  });
+});
+
+describe("le chemin remplace une portée à deux sens", () => {
+  it("situe la skill par son LIEU, pas par un mot ambigu", () => {
+    // Le cas réel : cette skill s'affichait « project » alors qu'elle vit
+    // dans le dossier de compte. « project » au sens du code, « mon projet »
+    // au sens du lecteur.
+    expect(cheminLisible("/Users/enzo/.claude/skills/raptor-outillage/SKILL.md")).toBe(
+      "enzo › raptor-outillage",
+    );
+    expect(cheminLisible("/Users/enzo/Documents/Palenza/.claude/skills/usine/SKILL.md")).toBe(
+      "Palenza › usine",
+    );
+  });
+
+  it("ne rend jamais une chaîne vide, même sur un chemin nu", () => {
+    // Un identifiant tronqué au point de disparaître vaut le mensonge qu'il
+    // remplace.
+    expect(cheminLisible("ma-skill")).toBe("ma-skill");
+    expect(cheminLisible("/skills/ma-skill/SKILL.md")).toBe("ma-skill");
   });
 });

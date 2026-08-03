@@ -54,3 +54,28 @@ export function filtrerSkills(
       .some((champ) => champ.toLowerCase().includes(terme)),
   );
 }
+
+/**
+ * LE CHEMIN, RACCOURCI — mais jamais AMBIGU.
+ *
+ * La portée affichée disait « project » pour une skill vivant dans
+ * `~/.claude/skills` : le découvreur l'avait bien trouvée sous
+ * `<cwd>/.claude/skills`, donc « project » au sens du code — et « mon projet »
+ * au sens du lecteur. Deux sens pour un mot, sur le seul repère de l'écran.
+ *
+ * On montre le chemin, qui n'a qu'un sens. Raccourci à ses deux derniers
+ * segments parlants (`<dossier>/skills/<nom>` → `Palenza/…/ma-skill`), le
+ * complet restant dans l'infobulle : un identifiant tronqué qui ne dit pas
+ * qu'il l'est vaut le mensonge qu'il remplace.
+ */
+export function cheminLisible(chemin: string): string {
+  const morceaux = chemin.split("/").filter(Boolean);
+  // Le fichier terminal est toujours SKILL.md — il n'apprend rien, on le coupe.
+  const utiles = morceaux.at(-1) === "SKILL.md" ? morceaux.slice(0, -1) : morceaux;
+  const nom = utiles.at(-1) ?? chemin;
+  // Le segment qui SITUE : le dossier au-dessus de `skills/`, c'est-à-dire
+  // `.claude` → on remonte encore d'un cran pour tomber sur le vrai lieu.
+  const iSkills = utiles.lastIndexOf("skills");
+  const lieu = iSkills > 1 ? utiles[iSkills - 2] : iSkills === 1 ? utiles[0] : undefined;
+  return lieu === undefined ? nom : `${lieu} › ${nom}`;
+}
