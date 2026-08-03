@@ -1,4 +1,22 @@
-# L'indépendance — le droit de couper, et quand l'exercer
+# L'indépendance — COUPÉE le 03/08/2026
+
+> **La coupe a eu lieu.** Décision d'Enzo, mot pour mot : « on ne veut plus
+> être un fork, prenons tout le code et barrons-nous immédiatement ».
+>
+> Les fils-pièges ci-dessous n'avaient pas formellement sonné (deux échecs de
+> synchro consécutifs, pas trois avec conflits sur nos fonctionnalités). La
+> direction du produit appartient au fondateur ; la tension avec la doctrine
+> d'hier lui a été dite, la décision a tenu. Ce paragraphe existe pour que
+> l'histoire ne soit pas réécrite : c'était un choix de cap, pas un fil-piège.
+>
+> · Réf amont gelée à la coupe : `69dfb7f09a47` (pingdotgg/t3code HEAD)
+> · Nouveau foyer : https://github.com/Palenza/raptor (historique complet)
+> · Le miroir local (`~/Documents/t3code-miroir.git`) reste le filet
+> · Étapes 3 (purge des morceaux amont inutilisés) et 4 (chantier
+> protocoles) de la procédure : OUVERTES, pas faites — chaque purge exige
+> la suite verte.
+
+# L'ancien texte — la doctrine d'avant la coupe, conservée telle quelle
 
 > Décision du 02/08/2026 (Enzo : « on doit être indépendant total »). Ce
 > fichier est la réponse : l'indépendance ne s'obtient pas en coupant le
